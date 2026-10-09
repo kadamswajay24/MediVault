@@ -15,6 +15,7 @@ import {
 import { useAuth } from '../context/useAuth';
 import type { UserRole } from '../types';
 import { MEDICAL_SPECIALIZATIONS } from '../constants/medicalSpecializations';
+import { HOSPITAL_AFFILIATIONS } from '../constants/hospitalAffiliations';
 
 type RegistrationPortal = 'patient' | 'organization';
 
@@ -37,6 +38,7 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
   const [specialization, setSpecialization] = useState('');
   const [customSpecialization, setCustomSpecialization] = useState('');
   const [hospitalAffiliation, setHospitalAffiliation] = useState('');
+  const [customHospitalAffiliation, setCustomHospitalAffiliation] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [agentId, setAgentId] = useState('');
 
@@ -93,7 +95,10 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
                 licenseNumber,
                 specialization:
                   specialization === 'Other' ? customSpecialization.trim() : specialization,
-                hospitalAffiliation,
+                hospitalAffiliation:
+                  hospitalAffiliation === 'Other'
+                    ? customHospitalAffiliation.trim()
+                    : hospitalAffiliation,
               }
             : undefined,
         insuranceDetails:
@@ -305,13 +310,27 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
                     className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded text-xs"
                   />
                 )}
-                <input
-                  type="text"
-                  placeholder="Hospital / Clinic Affiliation"
+                <select
+                  aria-label="Hospital or clinic affiliation"
                   value={hospitalAffiliation}
                   onChange={(e) => setHospitalAffiliation(e.target.value)}
                   className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded text-xs"
-                />
+                >
+                  <option value="">Select hospital / clinic</option>
+                  {HOSPITAL_AFFILIATIONS.map((hospital) => (
+                    <option key={hospital} value={hospital}>{hospital}</option>
+                  ))}
+                  <option value="Other">Other</option>
+                </select>
+                {hospitalAffiliation === 'Other' && (
+                  <input
+                    type="text"
+                    placeholder="Enter hospital / clinic name"
+                    value={customHospitalAffiliation}
+                    onChange={(e) => setCustomHospitalAffiliation(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded text-xs"
+                  />
+                )}
               </div>
             )}
 

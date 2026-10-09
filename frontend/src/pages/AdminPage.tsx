@@ -8,6 +8,7 @@ import {
 import { adminAPI } from '../services/api';
 import type { User, UserRole, AdminStatsResponse, AuditLog } from '../types';
 import { MEDICAL_SPECIALIZATIONS } from '../constants/medicalSpecializations';
+import { HOSPITAL_AFFILIATIONS } from '../constants/hospitalAffiliations';
 
 export const AdminPage: React.FC = () => {
   const [stats, setStats] = useState<AdminStatsResponse['stats'] | null>(null);
@@ -27,6 +28,7 @@ export const AdminPage: React.FC = () => {
   const [specialization, setSpecialization] = useState('');
   const [customSpecialization, setCustomSpecialization] = useState('');
   const [hospitalAffiliation, setHospitalAffiliation] = useState('');
+  const [customHospitalAffiliation, setCustomHospitalAffiliation] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [agentId, setAgentId] = useState('');
   const [updatingRole, setUpdatingRole] = useState(false);
@@ -40,18 +42,18 @@ export const AdminPage: React.FC = () => {
           role: roleFilter === 'All' ? undefined : roleFilter,
           search: userSearch.trim() || undefined,
         }),
-        adminAPI.getAuditLogs({ limit: 40 }),
+        activeTab === 'audit' ? adminAPI.getAuditLogs({ limit: 10 }) : Promise.resolve(null),
       ]);
 
       if (statsRes.success) setStats(statsRes.stats);
       if (usersRes.success) setUsers(usersRes.users);
-      if (logsRes.success) setAuditLogs(logsRes.logs);
+      if (logsRes?.success) setAuditLogs(logsRes.logs);
     } catch (err: any) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, [roleFilter, userSearch]);
+  }, [activeTab, roleFilter, userSearch]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -118,7 +120,12 @@ export const AdminPage: React.FC = () => {
     setCustomSpecialization(
       existingSpecialization && !isStandardSpecialization ? existingSpecialization : ''
     );
-    setHospitalAffiliation(u.medicalStaffDetails?.hospitalAffiliation || '');
+    const existingHospital = u.medicalStaffDetails?.hospitalAffiliation || '';
+    const isKnownHospital = HOSPITAL_AFFILIATIONS.includes(
+      existingHospital as (typeof HOSPITAL_AFFILIATIONS)[number]
+    );
+    setHospitalAffiliation(existingHospital && !isKnownHospital ? 'Other' : existingHospital);
+    setCustomHospitalAffiliation(existingHospital && !isKnownHospital ? existingHospital : '');
     setCompanyName(u.insuranceDetails?.companyName || '');
     setAgentId(u.insuranceDetails?.agentId || '');
   };
@@ -138,7 +145,10 @@ export const AdminPage: React.FC = () => {
         medicalStaffDetails: {
           licenseNumber,
           specialization: specialization === 'Other' ? customSpecialization.trim() : specialization,
-          hospitalAffiliation,
+          hospitalAffiliation:
+            hospitalAffiliation === 'Other'
+              ? customHospitalAffiliation.trim()
+              : hospitalAffiliation,
         },
         insuranceDetails: { companyName, agentId, licenseNumber },
       });
@@ -240,7 +250,7 @@ export const AdminPage: React.FC = () => {
               : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
           }`}
         >
-          Global Audit Trail ({auditLogs.length})
+          Global Audit Trail
         </button>
       </div>
 
@@ -539,14 +549,33 @@ export const AdminPage: React.FC = () => {
                   )}
                   <div>
                     <label className="block text-[11px] text-slate-600 dark:text-slate-400">Hospital Affiliation</label>
-                    <input
-                      type="text"
+                    <select
+                      aria-label="Hospital or clinic affiliation"
                       value={hospitalAffiliation}
                       onChange={(e) => setHospitalAffiliation(e.target.value)}
-                      placeholder="e.g. Apollo Hospital"
                       className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded mt-0.5"
-                    />
+                    >
+                      <option value="">Select hospital / clinic</option>
+                      {HOSPITAL_AFFILIATIONS.map((hospital) => (
+                        <option key={hospital} value={hospital}>{hospital}</option>
+                      ))}
+                      <option value="Other">Other</option>
+                    </select>
                   </div>
+                  {hospitalAffiliation === 'Other' && (
+                    <div>
+                      <label className="block text-[11px] text-slate-600 dark:text-slate-400">
+                        Enter Hospital / Clinic
+                      </label>
+                      <input
+                        type="text"
+                        value={customHospitalAffiliation}
+                        onChange={(e) => setCustomHospitalAffiliation(e.target.value)}
+                        placeholder="Enter hospital / clinic name"
+                        className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded mt-0.5"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
