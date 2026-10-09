@@ -1,6 +1,11 @@
 export const MEDICAL_SPECIALIZATIONS = [
   'General Medicine',
   'General Surgery',
+  'Nursing',
+  'Critical Care Nursing',
+  'Pediatric Nursing',
+  'Emergency Nursing',
+  'Community Health Nursing',
   'Cardiology',
   'Cardiologist',
   'Dermatology',

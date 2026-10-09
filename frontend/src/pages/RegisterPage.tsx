@@ -26,6 +26,7 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
   const [confirmPassword, setConfirmPassword] = useState('');
   const [phone, setPhone] = useState('');
   const [role, setRole] = useState<UserRole>(portal === 'patient' ? 'patient' : 'medical_staff');
+  const [staffType, setStaffType] = useState<'doctor' | 'nurse'>('doctor');
   const isPatientPortal = portal === 'patient';
   const signInPath = isPatientPortal
     ? '/patient/login'
@@ -181,12 +182,16 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
                 Stakeholder Role
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
-                  onClick={() => setRole('medical_staff')}
+                  onClick={() => {
+                    setRole('medical_staff');
+                    setStaffType('doctor');
+                    if (specialization === 'Nursing') setSpecialization('');
+                  }}
                   className={`p-2.5 rounded-lg border text-left text-xs transition-all ${
-                    role === 'medical_staff'
+                    role === 'medical_staff' && staffType === 'doctor'
                       ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/30 text-blue-900 dark:text-blue-200 font-bold'
                       : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
                   }`}
@@ -198,7 +203,28 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
 
                 <button
                   type="button"
-                  onClick={() => setRole('insurance_agent')}
+                  onClick={() => {
+                    setRole('medical_staff');
+                    setStaffType('nurse');
+                    setSpecialization('Nursing');
+                  }}
+                  className={`p-2.5 rounded-lg border text-left text-xs transition-all ${
+                    role === 'medical_staff' && staffType === 'nurse'
+                      ? 'border-teal-600 bg-teal-50 dark:bg-teal-950/30 text-teal-900 dark:text-teal-200 font-bold'
+                      : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  <Stethoscope className="w-4 h-4 mb-1 text-teal-600" />
+                  <div>Nurse</div>
+                  <div className="text-[10px] text-slate-400 font-normal">Nursing staff</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRole('insurance_agent');
+                    setStaffType('doctor');
+                  }}
                   className={`p-2.5 rounded-lg border text-left text-xs transition-all ${
                     role === 'insurance_agent'
                       ? 'border-amber-600 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 font-bold'
