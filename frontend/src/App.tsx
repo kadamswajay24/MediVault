@@ -71,10 +71,7 @@ const AppLayout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen relative flex flex-col bg-slate-50 dark:bg-[#0b0f19] text-slate-900 dark:text-slate-100 transition-colors duration-200">
-      {/* Clean enterprise background grid */}
-      <div className="fixed inset-0 pointer-events-none z-0 enterprise-grid opacity-70" />
-
+    <div className="app-shell min-h-screen relative flex flex-col text-slate-900 dark:text-slate-100 transition-colors duration-200">
       {/* Main Content */}
       <div className="relative z-10 flex-1 flex flex-col">
         <Navbar onOpenUpload={() => setGlobalUploadOpen(true)} />
@@ -90,21 +87,18 @@ const AppLayout: React.FC = () => {
           onUploadSuccess={handleUploadSuccess}
         />
 
-        {/* Crisp Enterprise Healthcare Footer */}
-        <footer className="border-t border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/80 py-5 text-xs text-slate-500 transition-colors duration-200">
+        <footer className="app-footer border-t py-5 text-xs text-slate-500 transition-colors duration-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-700 dark:text-slate-300">MediVault Enterprise</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300">MediVault</span>
               <span>•</span>
-              <span>Role-Based Health Records &amp; Insurance Adjudication System</span>
+              <span>Your health records, on your terms.</span>
             </div>
             <div className="flex items-center gap-4 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
               <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                RBAC Active
+                Access controls active
               </span>
-              <span>Dual-Context Proxy</span>
-              <span>HIPAA Compliant</span>
             </div>
           </div>
         </footer>

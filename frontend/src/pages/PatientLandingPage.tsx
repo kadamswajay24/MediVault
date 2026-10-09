@@ -34,17 +34,17 @@ export const PatientLandingPage: React.FC = () => (
         </div>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2" aria-label="Patient portal features">
-        <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <section className="grid items-stretch gap-4 sm:grid-cols-2" aria-label="Patient portal features">
+        <article className="surface-card flex min-h-44 flex-col p-6">
           <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
             <FileText className="h-5 w-5" />
           </div>
           <h2 className="font-semibold text-slate-900 dark:text-white">One organized record</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-400">
+          <p className="mt-2 flex-1 text-sm leading-6 text-slate-600 dark:text-slate-400">
             Store and find your reports, prescriptions, and medical history.
           </p>
         </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:mt-12">
+        <article className="surface-card flex min-h-44 flex-col p-6">
           <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
             <UserRound className="h-5 w-5" />
           </div>

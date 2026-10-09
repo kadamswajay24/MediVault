@@ -18,8 +18,8 @@ export const OrganizationPortalPage: React.FC = () => (
         </p>
       </div>
 
-      <div className="grid gap-5 md:grid-cols-2">
-        <section className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="grid items-stretch gap-5 md:grid-cols-2">
+        <section className="surface-card flex h-full flex-col p-6">
           <div className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
             <Stethoscope className="h-5 w-5" />
           </div>
@@ -37,7 +37,7 @@ export const OrganizationPortalPage: React.FC = () => (
           </Link>
         </section>
 
-        <section className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <section className="surface-card flex h-full flex-col p-6">
           <div className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
             <FileCheck2 className="h-5 w-5" />
           </div>

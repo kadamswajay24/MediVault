@@ -94,7 +94,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
   const roleBadge = getRoleBadge(user?.role);
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md">
+    <header className="app-header sticky top-0 z-40 w-full border-b backdrop-blur-md">
       {/* Top dependent switcher alert bar if proxy is active */}
       {activeDependent && (
         <div className="bg-teal-600 text-white px-4 py-1.5 text-xs flex items-center justify-between font-medium">

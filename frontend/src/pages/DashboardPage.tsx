@@ -93,7 +93,7 @@ export const DashboardPage: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Patient Header Banner */}
-      <div className="p-6 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="surface-card p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-mono uppercase font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
@@ -143,7 +143,7 @@ export const DashboardPage: React.FC = () => {
       {/* Top 4 Key Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Records */}
-        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="surface-card min-h-36 p-4 flex flex-col">
           <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
             <span className="font-semibold uppercase tracking-wider">Vault Records</span>
             <FileText className="w-4 h-4 text-emerald-500" />
@@ -157,7 +157,7 @@ export const DashboardPage: React.FC = () => {
         {/* Insurance Claims */}
         <Link
           to="/claims"
-          className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:border-amber-500/50 transition-colors"
+          className="surface-card min-h-36 p-4 flex flex-col hover:border-amber-500/50 transition-colors"
         >
           <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
             <span className="font-semibold uppercase tracking-wider">Insurance Claims</span>
@@ -170,7 +170,7 @@ export const DashboardPage: React.FC = () => {
         </Link>
 
         {/* Blood Group */}
-        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="surface-card min-h-36 p-4 flex flex-col">
           <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
             <span className="font-semibold uppercase tracking-wider">Blood Group</span>
             <Heart className="w-4 h-4 text-rose-500" />
@@ -185,7 +185,7 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         {/* Emergency Contact */}
-        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="surface-card min-h-36 p-4 flex flex-col">
           <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
             <span className="font-semibold uppercase tracking-wider">Emergency Contact</span>
             <Phone className="w-4 h-4 text-blue-500" />
@@ -211,7 +211,7 @@ export const DashboardPage: React.FC = () => {
       </div>
 
       {/* Category Breakdown */}
-      <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="surface-card p-4">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
           Records by Clinical Category
         </h3>
@@ -233,7 +233,7 @@ export const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Clinical Highlights */}
         <div className="space-y-4">
-          <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+          <div className="surface-card p-4 space-y-3">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
@@ -302,7 +302,7 @@ export const DashboardPage: React.FC = () => {
 
         {/* Right Column: Recent Records & Timeline */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+          <div className="surface-card p-4 space-y-3">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                 <FileText className="w-3.5 h-3.5 text-emerald-500" />
