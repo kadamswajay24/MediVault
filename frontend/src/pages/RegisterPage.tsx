@@ -41,6 +41,7 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [registrationPending, setRegistrationPending] = useState(false);
+  const [issuedMediVaultId, setIssuedMediVaultId] = useState<string | null>(null);
 
   const { register } = useAuth();
   const navigate = useNavigate();
@@ -95,6 +96,7 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
       });
 
       if (result.pendingApproval) {
+        setIssuedMediVaultId(result.user.mediVaultId);
         setRegistrationPending(true);
         return;
       }
@@ -138,6 +140,11 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
               Your staff account will be available after an administrator approves your
               application. You can sign in once your access is approved.
             </p>
+            {issuedMediVaultId && (
+              <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-950 dark:text-slate-300">
+                Your MediVault ID: <span className="font-mono font-semibold">{issuedMediVaultId}</span>
+              </p>
+            )}
             <Link
               to={signInPath}
               className="inline-flex items-center gap-2 mt-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"

@@ -151,12 +151,12 @@ export const AccessRequestsPage: React.FC = () => {
                         {status}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500">
-                      {isStaff ? request.patient.email : request.medicalStaff.email}
+                    <p className="text-xs font-mono text-slate-500">
+                      {isStaff ? request.patient.mediVaultId : request.medicalStaff.mediVaultId}
                     </p>
                     {!isStaff && (
                       <p className="text-xs text-slate-500">
-                        Patient: {request.patient.name}
+                        Patient: {request.patient.name} ({request.patient.mediVaultId})
                       </p>
                     )}
                     <p className="text-sm text-slate-700 dark:text-slate-300">{request.reason}</p>

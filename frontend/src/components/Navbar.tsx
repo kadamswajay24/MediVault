@@ -201,8 +201,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
                       {roleBadge.label}
                     </span>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-mono truncate max-w-[140px]">
-                    {user?.email}
+                  <span className="text-[10px] text-slate-500 font-mono truncate max-w-[140px]" title="Your MediVault ID">
+                    ID: {user?.mediVaultId}
                   </span>
                 </div>
               </div>
@@ -246,6 +246,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
       {/* Mobile Drawer */}
       {mobileMenuOpen && isAuthenticated && (
         <div className="lg:hidden border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 py-3 space-y-1">
+          <p className="px-3 py-2 text-xs font-mono text-slate-500">
+            Your MediVault ID: <span className="font-semibold text-slate-700 dark:text-slate-300">{user?.mediVaultId}</span>
+          </p>
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;

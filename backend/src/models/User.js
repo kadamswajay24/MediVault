@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import { randomBytes } from 'crypto';
 
 const userSchema = new mongoose.Schema(
   {
@@ -19,6 +20,15 @@ const userSchema = new mongoose.Schema(
         /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,})+$/,
         'Please provide a valid email address',
       ],
+    },
+    mediVaultId: {
+      type: String,
+      required: true,
+      unique: true,
+      sparse: true,
+      immutable: true,
+      default: () => `MV-${randomBytes(8).toString('hex').toUpperCase()}`,
+      match: /^MV-[A-F0-9]{16}$/,
     },
     password: {
       type: String,

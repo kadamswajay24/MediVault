@@ -16,7 +16,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [activeDependent, setActiveDependentState] = useState<ActiveDependentInfo | null>(() => {
     const saved = localStorage.getItem('medivault_active_dependent');
-    return saved ? JSON.parse(saved) : null;
+    if (!saved) return null;
+
+    const dependent = JSON.parse(saved) as ActiveDependentInfo;
+    if (/^MV-[A-F0-9]{16}$/i.test(dependent.mediVaultId)) return dependent;
+
+    localStorage.removeItem('medivault_active_dependent');
+    return null;
   });
 
   const setActiveDependent = (dependent: ActiveDependentInfo | null) => {

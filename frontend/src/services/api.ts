@@ -36,8 +36,8 @@ api.interceptors.request.use(
     if (activeDependent) {
       try {
         const dep = JSON.parse(activeDependent);
-        if (dep && dep.id) {
-          config.headers['x-patient-context'] = dep.id;
+        if (dep && dep.mediVaultId) {
+          config.headers['x-patient-context'] = dep.mediVaultId;
         }
       } catch (error) {
         console.warn('[API] Clearing invalid active patient context:', error);
@@ -165,7 +165,7 @@ export const auditAPI = {
 
 export const proxyAPI = {
   delegateAccess: async (data: {
-    proxyEmail: string;
+    proxyMediVaultId: string;
     relationship: string;
     accessLevel?: 'read_only' | 'full';
     notes?: string;
@@ -223,7 +223,7 @@ export const clinicalAccessAPI = {
   },
 
   createRequest: async (data: {
-    patientId: string;
+    patientMediVaultId: string;
     reason: string;
     requestedUntil: string;
   }): Promise<{ success: boolean; message: string; request: ClinicalAccessRequest }> => {
@@ -310,7 +310,7 @@ export const medicalStaffAPI = {
   },
 
   addClinicalNote: async (data: {
-    patientId: string;
+    patientMediVaultId: string;
     noteType?: string;
     title: string;
     diagnosis?: string;

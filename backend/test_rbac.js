@@ -85,6 +85,9 @@ async function runRBACTests() {
     phone: '+91 9876543210',
   };
   const patient = await registerUser(patientData);
+  if (!/^MV-[A-F0-9]{16}$/.test(patient.user.mediVaultId)) {
+    throw new Error('Patient registration must issue a public MediVault ID');
+  }
   console.log('✓ Patient registered:', patient.user.name, `(${patient.user.role})`);
 
   // B. Caregiver / Proxy
@@ -96,6 +99,12 @@ async function runRBACTests() {
     phone: '+91 9876543211',
   };
   const caregiver = await registerUser(caregiverData);
+  if (
+    !/^MV-[A-F0-9]{16}$/.test(caregiver.user.mediVaultId) ||
+    caregiver.user.mediVaultId === patient.user.mediVaultId
+  ) {
+    throw new Error('Every account must receive its own unique MediVault ID');
+  }
   console.log('✓ Caregiver registered:', caregiver.user.name);
 
   // C. Medical Staff (Doctor)
@@ -112,6 +121,9 @@ async function runRBACTests() {
     },
   };
   const doctor = await registerStaffUser(doctorData);
+  if (!/^MV-[A-F0-9]{16}$/.test(doctor.user.mediVaultId)) {
+    throw new Error('Staff registration must issue a public MediVault ID');
+  }
   console.log('✓ Medical Staff registered:', doctor.user.name, `(${doctor.user.role})`);
 
   // D. Insurance Agent
@@ -128,9 +140,36 @@ async function runRBACTests() {
     },
   };
   const agent = await registerStaffUser(agentData);
+  if (!/^MV-[A-F0-9]{16}$/.test(agent.user.mediVaultId)) {
+    throw new Error('Insurance registration must issue a public MediVault ID');
+  }
   console.log('✓ Insurance Agent registered:', agent.user.name, `(${agent.user.role})`);
 
   console.log('✓ Existing administrator authenticated:', admin.user.email, '\n');
+
+  const missingProxyIdRes = await fetch(`${BASE_URL}/proxy/delegate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + doctor.token,
+    },
+    body: JSON.stringify({ relationship: 'Child' }),
+  });
+  if (missingProxyIdRes.status !== 400) {
+    throw new Error('Proxy delegation without a MediVault ID must be rejected');
+  }
+
+  const patientSearchRes = await fetch(BASE_URL + '/medical-staff/patients/search?search=' + encodeURIComponent(patient.user.mediVaultId), {
+    headers: { Authorization: 'Bearer ' + doctor.token },
+  });
+  const patientSearchData = await patientSearchRes.json();
+  if (
+    !patientSearchData.success ||
+    patientSearchData.patients.length !== 1 ||
+    patientSearchData.patients[0].mediVaultId !== patient.user.mediVaultId
+  ) {
+    throw new Error('Staff patient lookup must resolve the exact MediVault ID');
+  }
 
   console.log('[TEST 1A] Testing patient-specific, time-limited clinical access...');
   const accessRequestRes = await fetch(`${BASE_URL}/clinical-access`, {
@@ -140,7 +179,7 @@ async function runRBACTests() {
       Authorization: `Bearer ${doctor.token}`,
     },
     body: JSON.stringify({
-      patientId: patient.user.id,
+      patientMediVaultId: patient.user.mediVaultId,
       reason: 'Evaluate current cardiac symptoms',
       requestedUntil: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
     }),
@@ -151,7 +190,7 @@ async function runRBACTests() {
   }
 
   const deniedOverviewRes = await fetch(
-    `${BASE_URL}/medical-staff/patients/${patient.user.id}/overview`,
+    `${BASE_URL}/medical-staff/patients/${patient.user.mediVaultId}/overview`,
     { headers: { Authorization: `Bearer ${doctor.token}` } }
   );
   if (deniedOverviewRes.status !== 403) {
@@ -213,7 +252,7 @@ async function runRBACTests() {
       Authorization: `Bearer ${patient.token}`,
     },
     body: JSON.stringify({
-      proxyEmail: caregiverData.email,
+      proxyMediVaultId: caregiver.user.mediVaultId,
       relationship: 'Child',
       accessLevel: 'full',
       notes: 'Authorized daughter to manage medical documents and insurance claims',
@@ -241,7 +280,7 @@ async function runRBACTests() {
       Authorization: `Bearer ${doctor.token}`,
     },
     body: JSON.stringify({
-      patientId: patient.user.id,
+      patientMediVaultId: patient.user.mediVaultId,
       reason: 'Follow-up cardiac evaluation',
       requestedUntil: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
     }),
@@ -271,7 +310,7 @@ async function runRBACTests() {
   console.log('✓ Authorized proxy approved staff access with an expiration\n');
 
   const staffRecordsRes = await fetch(
-    `${BASE_URL}/records?patientId=${encodeURIComponent(patient.user.id)}`,
+    `${BASE_URL}/records?patientId=${encodeURIComponent(patient.user.mediVaultId)}`,
     { headers: { Authorization: `Bearer ${doctor.token}` } }
   );
   const staffRecordsData = await staffRecordsRes.json();
@@ -308,7 +347,7 @@ async function runRBACTests() {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${caregiver.token}`,
-      'x-patient-context': patient.user.id,
+      'x-patient-context': patient.user.mediVaultId,
     },
     body: caregiverUploadForm,
   });
@@ -321,7 +360,7 @@ async function runRBACTests() {
   const proxyRecordsRes = await fetch(`${BASE_URL}/records`, {
     headers: {
       Authorization: `Bearer ${caregiver.token}`,
-      'x-patient-context': patient.user.id,
+      'x-patient-context': patient.user.mediVaultId,
     },
   });
   const proxyRecordsData = await proxyRecordsRes.json();
@@ -406,7 +445,7 @@ async function runRBACTests() {
   console.log('[TEST 5] Testing Medical Staff Clinical Consultation...');
   // Doctor looks up patient clinical overview
   const doctorOverviewRes = await fetch(
-    `${BASE_URL}/medical-staff/patients/${patient.user.id}/overview`,
+    `${BASE_URL}/medical-staff/patients/${patient.user.mediVaultId}/overview`,
     {
       headers: { Authorization: `Bearer ${doctor.token}` },
     }
@@ -418,7 +457,7 @@ async function runRBACTests() {
 
   // Doctor issues a clinical note & digital prescription
   const notePayload = {
-    patientId: patient.user.id,
+    patientMediVaultId: patient.user.mediVaultId,
     noteType: 'Prescription',
     title: 'Post-Angioplasty Medication & Lifestyle Plan',
     diagnosis: 'Coronary artery disease, post stent placement',
@@ -456,7 +495,7 @@ async function runRBACTests() {
 
   // Patient views notes
   const patientNotesRes = await fetch(
-    `${BASE_URL}/medical-staff/patients/${patient.user.id}/notes`,
+    `${BASE_URL}/medical-staff/patients/${patient.user.mediVaultId}/notes`,
     {
       headers: { Authorization: `Bearer ${patient.token}` },
     }

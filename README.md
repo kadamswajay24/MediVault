@@ -18,6 +18,7 @@ MediVault is a secure, personal health management platform designed for patients
 
 1. **User Registration & Login**:
    - Secure sign-up with email validation and encrypted password hashing (bcrypt).
+   - Every account receives a unique 19-character MediVault ID at creation; share that ID to identify an account for caregiver delegation and patient-specific clinical access. Sign-in continues to use email and password.
    - Patients can register and access their accounts immediately.
    - Medical staff and insurance agents require administrator approval before signing in.
    - Administrator accounts are provisioned by an existing system operator, never through public registration.
@@ -320,7 +321,7 @@ The sign-in forms accept only the account roles assigned to their portal. Backen
 ### 3. Dual-Context Caregiver & Proxy Delegation
 | Method | Endpoint | Description | Roles |
 |---|---|---|---|
-| `POST` | `/api/proxy/delegate` | Grant caregiver proxy access (`proxyEmail`, `relationship`, `accessLevel`) | Patient / Admin |
+| `POST` | `/api/proxy/delegate` | Grant caregiver proxy access to an existing patient account (`proxyMediVaultId`, `relationship`, `accessLevel`) | Patient / Admin |
 | `GET` | `/api/proxy/my-proxies` | List active caregivers authorized for the patient | Patient |
 | `GET` | `/api/proxy/my-dependents` | List active dependents managed by the caregiver | Caregiver / User |
 | `DELETE` | `/api/proxy/:id` | Revoke proxy delegation | Patient / Caregiver / Admin |
@@ -337,16 +338,16 @@ The sign-in forms accept only the account roles assigned to their portal. Backen
 ### 5. Medical Staff & Clinical Consultations
 | Method | Endpoint | Description | Roles |
 |---|---|---|---|
-| `GET` | `/api/medical-staff/patients/search` | Search active patient accounts by name or email (no clinical data returned) | Approved Medical Staff |
-| `POST` | `/api/medical-staff/notes` | Add a clinical consultation note & digital prescription for a patient with an active access grant | Medical Staff |
-| `GET` | `/api/medical-staff/patients/:patientId/notes` | Get clinical notes and prescriptions for an authorized patient | Patient / Medical Staff with active grant |
-| `GET` | `/api/medical-staff/patients/:patientId/overview` | View patient clinical profile and record history with an active access grant | Medical Staff |
+| `GET` | `/api/medical-staff/patients/search` | Find an active patient by exact MediVault ID (no clinical data returned) | Approved Medical Staff |
+| `POST` | `/api/medical-staff/notes` | Add a clinical consultation note & digital prescription using `patientMediVaultId` and an active access grant | Medical Staff |
+| `GET` | `/api/medical-staff/patients/:patientId/notes` | Get clinical notes and prescriptions using the patient's MediVault ID | Patient / Medical Staff with active grant |
+| `GET` | `/api/medical-staff/patients/:patientId/overview` | View clinical profile and record history using the patient's MediVault ID and an active access grant | Medical Staff |
 | `GET` | `/api/medical-staff/my-consultations` | Get all consultations authored by the logged-in doctor | Medical Staff |
 
 ### 6. Patient-Specific Clinical Access
 | Method | Endpoint | Description | Roles |
 |---|---|---|---|
-| `POST` | `/api/clinical-access` | Request access to one patient with a clinical purpose and requested end time | Approved Medical Staff |
+| `POST` | `/api/clinical-access` | Request access using `patientMediVaultId`, a clinical purpose, and requested end time | Approved Medical Staff |
 | `GET` | `/api/clinical-access` | List requests and grants visible to the authenticated user | Patient / Authorized Proxy / Medical Staff / Admin |
 | `PUT` | `/api/clinical-access/:id/decision` | Approve with a chosen future expiration or deny a pending request | Patient / Authorized Full Proxy / Admin |
 | `PUT` | `/api/clinical-access/:id/revoke` | Revoke an active grant immediately | Patient / Authorized Full Proxy / Requesting Medical Staff / Admin |
@@ -366,7 +367,7 @@ The sign-in forms accept only the account roles assigned to their portal. Backen
 ## 🔒 Security & Privacy Features
 
 - **Multi-Stakeholder RBAC**: Strict role enforcement (`patient`, `medical_staff`, `insurance_agent`, `admin`) with route guards.
-- **Dual-Context Caregiver Delegation**: Authorized proxies can switch context using `x-patient-context` header with granular `read_only` or `full` privileges.
+- **Dual-Context Caregiver Delegation**: Authorized proxies can switch context using the patient's MediVault ID in the `x-patient-context` header with granular `read_only` or `full` privileges.
 - **Privacy-Preserving Insurance Verification**: Insurance agents can only inspect records explicitly attached to an active claim.
 - **MIME Validation & Sanitization**: Restricts uploads strictly to `application/pdf`, `image/jpeg`, `image/png` with random timestamp hashed filenames.
 - **Immutable Cross-Stakeholder Audit Trail**: Captures logins, proxy delegations, caregiver actions, claim submissions, claim reviews, and administrative changes with IP and user agent.

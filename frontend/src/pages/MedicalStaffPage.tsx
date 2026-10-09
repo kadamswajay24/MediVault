@@ -56,7 +56,7 @@ export const MedicalStaffPage: React.FC = () => {
         if (res.success) setNotes(res.notes);
       } else if (user?.id) {
         // Patient viewing doctor prescriptions issued to them
-        const res = await medicalStaffAPI.getPatientNotes(user.id);
+        const res = await medicalStaffAPI.getPatientNotes(user.mediVaultId);
         if (res.success) setNotes(res.notes);
       }
     } catch (err: any) {
@@ -95,13 +95,13 @@ export const MedicalStaffPage: React.FC = () => {
   const handleSelectPatient = async (p: UserType) => {
     setSelectedPatient(p);
     setMatchedPatients([]);
-    setPatientSearch(p.name);
+    setPatientSearch(p.mediVaultId);
     setPatientOverview(null);
     setOverviewLoading(true);
     setAccessRequestMessage(null);
 
     try {
-      const res = await medicalStaffAPI.getPatientClinicalOverview(p.id);
+      const res = await medicalStaffAPI.getPatientClinicalOverview(p.mediVaultId);
       if (res.success) {
         setPatientOverview(res);
       }
@@ -123,7 +123,7 @@ export const MedicalStaffPage: React.FC = () => {
     setAccessRequestMessage(null);
     try {
       const response = await clinicalAccessAPI.createRequest({
-        patientId: selectedPatient.id,
+        patientMediVaultId: selectedPatient.mediVaultId,
         reason: requestReason.trim(),
         requestedUntil: new Date(requestedUntil).toISOString(),
       });
@@ -170,7 +170,7 @@ export const MedicalStaffPage: React.FC = () => {
     try {
       const validPrescriptions = prescriptionRows.filter((r) => r.medicineName.trim().length > 0);
       const res = await medicalStaffAPI.addClinicalNote({
-        patientId: selectedPatient.id,
+        patientMediVaultId: selectedPatient.mediVaultId,
         noteType,
         title: noteTitle.trim(),
         diagnosis: diagnosis.trim(),
@@ -211,6 +211,11 @@ export const MedicalStaffPage: React.FC = () => {
               Medical Provider Hub
             </span>
           </div>
+          {isDoctor && user?.mediVaultId && (
+          <p className="mt-1 text-xs font-mono text-slate-500">
+            Your MediVault ID: <span className="font-semibold text-slate-700 dark:text-slate-300">{user.mediVaultId}</span>
+          </p>
+          )}
           {isDoctor && user?.medicalStaffDetails && (
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 mt-1">
               <span className="flex items-center gap-1 font-mono">
@@ -260,8 +265,9 @@ export const MedicalStaffPage: React.FC = () => {
             <input
               type="text"
               value={patientSearch}
-              onChange={(e) => handleSearchPatient(e.target.value)}
-              placeholder="Search patient by full name or email address..."
+              onChange={(e) => handleSearchPatient(e.target.value.toUpperCase())}
+              maxLength={19}
+              placeholder="Enter the patient's MediVault ID (e.g. MV-1A2B3C4D5E6F7A8B)..."
               className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white"
             />
 
@@ -277,7 +283,7 @@ export const MedicalStaffPage: React.FC = () => {
                   >
                     <div>
                       <span className="font-bold text-slate-900 dark:text-white">{p.name}</span>
-                      <span className="text-slate-400 ml-2 font-mono">{p.email}</span>
+                      <span className="text-slate-500 ml-2 font-mono">{p.mediVaultId}</span>
                     </div>
                     <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-600">
                       Select
@@ -303,7 +309,7 @@ export const MedicalStaffPage: React.FC = () => {
                     <h3 className="font-bold text-sm text-slate-900 dark:text-white">
                       {selectedPatient.name}
                     </h3>
-                    <p className="text-xs text-slate-500 font-mono">{selectedPatient.email}</p>
+                    <p className="text-xs text-slate-500 font-mono">MediVault ID: {selectedPatient.mediVaultId}</p>
                   </div>
                 </div>
 
@@ -504,7 +510,7 @@ export const MedicalStaffPage: React.FC = () => {
                   Issue Digital Prescription &amp; Clinical Note
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Patient: {selectedPatient?.name} ({selectedPatient?.email})
+                  Patient: {selectedPatient?.name} ({selectedPatient?.mediVaultId})
                 </p>
               </div>
               <button

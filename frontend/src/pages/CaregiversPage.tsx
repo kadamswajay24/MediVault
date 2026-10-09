@@ -23,7 +23,7 @@ export const CaregiversPage: React.FC = () => {
 
   // Delegate Modal
   const [isDelegateModalOpen, setIsDelegateModalOpen] = useState(false);
-  const [proxyEmail, setProxyEmail] = useState('');
+  const [proxyMediVaultId, setProxyMediVaultId] = useState('');
   const [relationship, setRelationship] = useState('Caregiver');
   const [accessLevel, setAccessLevel] = useState<'full' | 'read_only'>('full');
   const [notes, setNotes] = useState('');
@@ -56,8 +56,8 @@ export const CaregiversPage: React.FC = () => {
 
   const handleDelegateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!proxyEmail) {
-      setModalError('Caregiver email address is required.');
+    if (!proxyMediVaultId.trim()) {
+      setModalError('Caregiver MediVault ID is required.');
       return;
     }
 
@@ -66,7 +66,7 @@ export const CaregiversPage: React.FC = () => {
 
     try {
       const res = await proxyAPI.delegateAccess({
-        proxyEmail: proxyEmail.trim(),
+        proxyMediVaultId: proxyMediVaultId.trim(),
         relationship,
         accessLevel,
         notes: notes.trim(),
@@ -74,7 +74,7 @@ export const CaregiversPage: React.FC = () => {
 
       if (res.success) {
         setIsDelegateModalOpen(false);
-        setProxyEmail('');
+        setProxyMediVaultId('');
         setNotes('');
         fetchData();
       }
@@ -98,7 +98,7 @@ export const CaregiversPage: React.FC = () => {
 
   const handleSwitchToDependent = (dep: any) => {
     setActiveDependent({
-      id: dep.patient._id,
+      mediVaultId: dep.patient.mediVaultId,
       name: dep.patient.name,
       relationship: dep.relationship,
       accessLevel: dep.accessLevel,
@@ -191,7 +191,7 @@ export const CaregiversPage: React.FC = () => {
             ) : (
               <div className="space-y-3">
                 {dependents.map((dep) => {
-                  const isActive = activeDependent?.id === dep.patient._id;
+                  const isActive = activeDependent?.mediVaultId === dep.patient.mediVaultId;
                   return (
                     <div
                       key={dep.delegationId}
@@ -212,7 +212,7 @@ export const CaregiversPage: React.FC = () => {
                             </span>
                           </div>
                           <p className="text-xs text-slate-500 mt-0.5 font-mono">
-                            {dep.patient.email}
+                            MediVault ID: {dep.patient.mediVaultId}
                           </p>
 
                           {dep.profile && (
@@ -290,7 +290,7 @@ export const CaregiversPage: React.FC = () => {
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5 font-mono">
-                        {del.proxyUser.email}
+                        MediVault ID: {del.proxyUser.mediVaultId}
                       </p>
                       <p className="text-[11px] text-slate-400 mt-1">
                         Granted {new Date(del.grantedAt).toLocaleDateString()}
@@ -337,18 +337,21 @@ export const CaregiversPage: React.FC = () => {
             <form onSubmit={handleDelegateSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
-                  Caregiver Email Address *
+                  Caregiver MediVault ID *
                 </label>
                 <input
-                  type="email"
+                  type="text"
                   required
-                  value={proxyEmail}
-                  onChange={(e) => setProxyEmail(e.target.value)}
-                  placeholder="caregiver@example.com"
+                  maxLength={19}
+                  pattern="MV-[A-F0-9]{16}"
+                  title="Enter the caregiver's 19-character MediVault ID."
+                  value={proxyMediVaultId}
+                  onChange={(e) => setProxyMediVaultId(e.target.value.toUpperCase())}
+                  placeholder="MV-1A2B3C4D5E6F7A8B"
                   className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  The caregiver must already have a registered MediVault account.
+                  The caregiver must already have a MediVault account and use their MediVault ID.
                 </p>
               </div>
 

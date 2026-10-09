@@ -14,6 +14,7 @@ export interface InsuranceDetails {
 
 export interface User {
   id: string;
+  mediVaultId: string;
   name: string;
   email: string;
   role: UserRole;

@@ -78,7 +78,9 @@ export const authorize = (...roles) => {
  */
 export const resolvePatientContext = async (req, res, next) => {
   try {
-    const requestedPatientId = req.headers['x-patient-context'] || req.query.patientId;
+    const requestedMediVaultId = String(
+      req.headers['x-patient-context'] || req.query.patientId || ''
+    ).trim().toUpperCase();
 
     if (req.user.role === 'medical_staff' && !['GET', 'HEAD'].includes(req.method)) {
       return res.status(403).json({
@@ -88,11 +90,26 @@ export const resolvePatientContext = async (req, res, next) => {
     }
 
     // Direct personal access
-    if (!requestedPatientId || requestedPatientId === req.user._id.toString()) {
+    if (!requestedMediVaultId || requestedMediVaultId === req.user.mediVaultId) {
       req.effectivePatientId = req.user._id;
       req.isProxyActing = false;
       return next();
     }
+
+    const requestedPatient = await User.findOne({
+      mediVaultId: String(requestedMediVaultId).trim().toUpperCase(),
+      role: 'patient',
+      isActive: true,
+    }).select('_id');
+
+    if (!requestedPatient) {
+      return res.status(404).json({
+        success: false,
+        message: 'No active patient account was found for that MediVault ID.',
+      });
+    }
+
+    const requestedPatientId = requestedPatient._id;
 
     // Medical staff may access only a patient-specific, unexpired approved grant.
     if (req.user.role === 'medical_staff') {
@@ -126,7 +143,7 @@ export const resolvePatientContext = async (req, res, next) => {
       patient: requestedPatientId,
       proxyUser: req.user._id,
       status: 'active',
-    }).populate('patient', 'name email');
+    }).populate('patient', 'name email mediVaultId');
 
     if (!delegation) {
       return res.status(403).json({

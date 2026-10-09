@@ -2,7 +2,7 @@ import { createContext } from 'react';
 import type { User, UserRole, MedicalStaffDetails, InsuranceDetails, AuthResponse } from '../types';
 
 export interface ActiveDependentInfo {
-  id: string;
+  mediVaultId: string;
   name: string;
   relationship: string;
   accessLevel: 'read_only' | 'full';

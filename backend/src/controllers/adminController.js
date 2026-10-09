@@ -319,7 +319,7 @@ export const getGlobalAuditLogs = async (req, res, next) => {
     }
 
     const logs = await AuditLog.find(query)
-      .populate('user', 'name email role')
+      .populate('user', 'name email mediVaultId role')
       .populate('performedBy', 'name email role')
       .sort({ timestamp: -1 })
       .limit(parseInt(limit, 10));

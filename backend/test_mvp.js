@@ -109,6 +109,7 @@ async function runTests() {
   if (
     !regData.success ||
     !regData.token ||
+    !/^MV-[A-F0-9]{16}$/.test(regData.user?.mediVaultId) ||
     regData.user?.role !== 'patient' ||
     regData.user?.approvalStatus !== 'approved' ||
     regData.user?.phone !== '+919876543215'
@@ -126,7 +127,11 @@ async function runTests() {
     body: JSON.stringify({ email: testUser.email, password: testUser.password }),
   });
   const loginData = await loginRes.json();
-  if (!loginData.success || !loginData.token) throw new Error('Login failed');
+  if (
+    !loginData.success ||
+    !loginData.token ||
+    loginData.user?.mediVaultId !== regData.user.mediVaultId
+  ) throw new Error('Login failed or did not return the account MediVault ID');
   console.log('✓ Login passed\n');
 
   // 4. Health Profile: Get & Update

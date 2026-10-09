@@ -5,30 +5,21 @@ import { createAuditLog } from '../services/auditService.js';
 
 const populateRequest = (query) =>
   query
-    .populate('patient', 'name email')
-    .populate('medicalStaff', 'name email medicalStaffDetails')
-    .populate('decidedBy', 'name role');
+    .populate('patient', 'name email mediVaultId')
+    .populate('medicalStaff', 'name email mediVaultId medicalStaffDetails')
+    .populate('decidedBy', 'name role mediVaultId');
 
 export const searchPatientsForClinicalAccess = async (req, res, next) => {
   try {
-    const search = String(req.query.search || '').trim();
-    if (search.length < 2) {
+    const mediVaultId = String(req.query.search || '').trim().toUpperCase();
+    if (!/^MV-[A-F0-9]{16}$/.test(mediVaultId)) {
       return res.status(200).json({ success: true, patients: [] });
     }
 
-    const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const patients = await User.find({
-      role: 'patient',
-      isActive: true,
-      $or: [
-        { name: { $regex: escapedSearch, $options: 'i' } },
-        { email: { $regex: escapedSearch, $options: 'i' } },
-      ],
-    })
-      .select('name email')
-      .limit(10);
+    const patient = await User.findOne({ mediVaultId, role: 'patient', isActive: true })
+      .select('name mediVaultId');
 
-    return res.status(200).json({ success: true, patients });
+    return res.status(200).json({ success: true, patients: patient ? [patient] : [] });
   } catch (error) {
     next(error);
   }
@@ -43,18 +34,19 @@ export const createClinicalAccessRequest = async (req, res, next) => {
       });
     }
 
-    const { patientId, reason, requestedUntil } = req.body;
+    const { patientMediVaultId, reason, requestedUntil } = req.body;
     const expiration = new Date(requestedUntil);
 
     if (
-      !patientId ||
+      typeof patientMediVaultId !== 'string' ||
+      !/^MV-[A-F0-9]{16}$/i.test(patientMediVaultId.trim()) ||
       typeof reason !== 'string' ||
       !reason.trim() ||
       reason.trim().length > 1000
     ) {
       return res.status(400).json({
         success: false,
-        message: 'Patient and a reason of up to 1000 characters are required.',
+        message: 'A valid patient MediVault ID and a reason of up to 1000 characters are required.',
       });
     }
     if (!requestedUntil || Number.isNaN(expiration.getTime()) || expiration <= new Date()) {
@@ -64,7 +56,11 @@ export const createClinicalAccessRequest = async (req, res, next) => {
       });
     }
 
-    const patient = await User.findOne({ _id: patientId, role: 'patient', isActive: true }).select('_id');
+    const patient = await User.findOne({
+      mediVaultId: patientMediVaultId.trim().toUpperCase(),
+      role: 'patient',
+      isActive: true,
+    }).select('_id mediVaultId');
     if (!patient) {
       return res.status(404).json({ success: false, message: 'Patient account not found.' });
     }
@@ -100,8 +96,8 @@ export const createClinicalAccessRequest = async (req, res, next) => {
       requestedUntil: expiration,
     });
     await request.populate([
-      { path: 'patient', select: 'name email' },
-      { path: 'medicalStaff', select: 'name email medicalStaffDetails' },
+      { path: 'patient', select: 'name email mediVaultId' },
+      { path: 'medicalStaff', select: 'name email mediVaultId medicalStaffDetails' },
     ]);
 
     await createAuditLog({

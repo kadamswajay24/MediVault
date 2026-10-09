@@ -16,8 +16,8 @@ import medicalStaffRoutes from './routes/medicalStaffRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import clinicalAccessRoutes from './routes/clinicalAccessRoutes.js';
 
-// Initialize database
-connectDB();
+// Initialize database and assign MediVault IDs to any existing accounts before serving requests.
+await connectDB();
 
 const app = express();
 

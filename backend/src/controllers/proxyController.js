@@ -8,28 +8,32 @@ import { createAuditLog } from '../services/auditService.js';
 // @access  Private (Patient or Admin)
 export const delegateAccess = async (req, res, next) => {
   try {
-    const { proxyEmail, relationship, accessLevel = 'full', notes } = req.body;
+    const { proxyMediVaultId, relationship, accessLevel = 'full', notes } = req.body;
 
-    if (!proxyEmail) {
+    if (typeof proxyMediVaultId !== 'string' || !/^MV-[A-F0-9]{16}$/i.test(proxyMediVaultId.trim())) {
       return res.status(400).json({
         success: false,
-        message: 'Proxy user email is required.',
+        message: 'A valid MediVault ID for the caregiver is required.',
       });
     }
 
-    const normalizedEmail = proxyEmail.toLowerCase().trim();
-    if (normalizedEmail === req.user.email.toLowerCase()) {
+    const normalizedMediVaultId = proxyMediVaultId.trim().toUpperCase();
+    if (normalizedMediVaultId === req.user.mediVaultId) {
       return res.status(400).json({
         success: false,
         message: 'You cannot delegate proxy access to yourself.',
       });
     }
 
-    const proxyUser = await User.findOne({ email: normalizedEmail });
+    const proxyUser = await User.findOne({
+      mediVaultId: normalizedMediVaultId,
+      role: 'patient',
+      isActive: true,
+    });
     if (!proxyUser) {
       return res.status(404).json({
         success: false,
-        message: 'No registered user found with that email address. The caregiver must first have a MediVault account.',
+        message: 'No active MediVault account was found for that ID. The caregiver must create an account first.',
       });
     }
 
@@ -83,8 +87,8 @@ export const delegateAccess = async (req, res, next) => {
         id: delegation._id,
         proxyUser: {
           id: proxyUser._id,
+          mediVaultId: proxyUser.mediVaultId,
           name: proxyUser.name,
-          email: proxyUser.email,
         },
         relationship: delegation.relationship,
         accessLevel: delegation.accessLevel,
@@ -106,7 +110,7 @@ export const getMyProxies = async (req, res, next) => {
       patient: req.user._id,
       status: 'active',
     })
-      .populate('proxyUser', 'name email phone role')
+      .populate('proxyUser', 'name email mediVaultId phone role')
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
@@ -128,7 +132,7 @@ export const getMyDependents = async (req, res, next) => {
       proxyUser: req.user._id,
       status: 'active',
     })
-      .populate('patient', 'name email phone')
+      .populate('patient', 'name email mediVaultId phone')
       .sort({ createdAt: -1 });
 
     // Fetch brief health profile for each dependent
@@ -164,8 +168,8 @@ export const getMyDependents = async (req, res, next) => {
 export const revokeProxy = async (req, res, next) => {
   try {
     const delegation = await ProxyDelegation.findById(req.params.id)
-      .populate('proxyUser', 'name email')
-      .populate('patient', 'name email');
+      .populate('proxyUser', 'name mediVaultId')
+      .populate('patient', 'name mediVaultId');
 
     if (!delegation) {
       return res.status(404).json({

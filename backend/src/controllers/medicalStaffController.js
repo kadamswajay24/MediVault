@@ -21,7 +21,7 @@ const requireActiveClinicalAccess = async (staffId, patientId) => {
 export const addClinicalNote = async (req, res, next) => {
   try {
     const {
-      patientId,
+      patientMediVaultId,
       noteType = 'Consultation',
       title,
       diagnosis,
@@ -31,10 +31,10 @@ export const addClinicalNote = async (req, res, next) => {
       linkedRecords = [],
     } = req.body;
 
-    if (!patientId) {
+    if (typeof patientMediVaultId !== 'string' || !/^MV-[A-F0-9]{16}$/i.test(patientMediVaultId.trim())) {
       return res.status(400).json({
         success: false,
-        message: 'Patient ID is required.',
+        message: 'A valid patient MediVault ID is required.',
       });
     }
 
@@ -45,7 +45,11 @@ export const addClinicalNote = async (req, res, next) => {
       });
     }
 
-    const patient = await User.findById(patientId);
+    const patient = await User.findOne({
+      mediVaultId: patientMediVaultId.trim().toUpperCase(),
+      role: 'patient',
+      isActive: true,
+    });
     if (!patient) {
       return res.status(404).json({
         success: false,
@@ -112,18 +116,24 @@ export const addClinicalNote = async (req, res, next) => {
 // @access  Private
 export const getPatientNotes = async (req, res, next) => {
   try {
-    const { patientId } = req.params;
+    const patient = await User.findOne({
+      mediVaultId: String(req.params.patientId).trim().toUpperCase(),
+      role: 'patient',
+    }).select('_id');
+    if (!patient) {
+      return res.status(404).json({ success: false, message: 'Patient account not found.' });
+    }
 
-    const isPatient = req.user.role === 'patient' && req.user._id.toString() === patientId;
-    if (!isPatient && !(await requireActiveClinicalAccess(req.user._id, patientId))) {
+    const isPatient = req.user.role === 'patient' && req.user._id.toString() === patient._id.toString();
+    if (!isPatient && !(await requireActiveClinicalAccess(req.user._id, patient._id))) {
       return res.status(403).json({
         success: false,
         message: 'An active patient-specific access grant is required to view clinical notes.',
       });
     }
 
-    const notes = await MedicalNote.find({ patient: patientId })
-      .populate('doctor', 'name email medicalStaffDetails')
+    const notes = await MedicalNote.find({ patient: patient._id })
+      .populate('doctor', 'name email mediVaultId medicalStaffDetails')
       .populate('linkedRecords', 'title category recordDate')
       .sort({ createdAt: -1 });
 
@@ -142,7 +152,18 @@ export const getPatientNotes = async (req, res, next) => {
 // @access  Private (Medical Staff or Admin)
 export const getPatientClinicalOverview = async (req, res, next) => {
   try {
-    const { patientId } = req.params;
+    const patient = await User.findOne({
+      mediVaultId: String(req.params.patientId).trim().toUpperCase(),
+      role: 'patient',
+    })
+      .select('_id name email phone mediVaultId');
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient account not found.',
+      });
+    }
+    const patientId = patient._id;
 
     const accessGrant = await requireActiveClinicalAccess(req.user._id, patientId);
     if (!accessGrant) {
@@ -152,21 +173,13 @@ export const getPatientClinicalOverview = async (req, res, next) => {
       });
     }
 
-    const patient = await User.findById(patientId).select('name email phone');
-    if (!patient) {
-      return res.status(404).json({
-        success: false,
-        message: 'Patient not found.',
-      });
-    }
-
     const [profile, records, notes] = await Promise.all([
       HealthProfile.findOne({ user: patientId }),
       MedicalRecord.find({ user: patientId })
         .sort({ recordDate: -1 })
         .select('title category recordDate fileName fileType fileSize'),
       MedicalNote.find({ patient: patientId })
-        .populate('doctor', 'name medicalStaffDetails')
+        .populate('doctor', 'name mediVaultId medicalStaffDetails')
         .sort({ createdAt: -1 }),
     ]);
 
@@ -199,7 +212,7 @@ export const getPatientClinicalOverview = async (req, res, next) => {
 export const getDoctorConsultations = async (req, res, next) => {
   try {
     const notes = await MedicalNote.find({ doctor: req.user._id })
-      .populate('patient', 'name email phone')
+      .populate('patient', 'name email mediVaultId phone')
       .sort({ createdAt: -1 });
 
     return res.status(200).json({

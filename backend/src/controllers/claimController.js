@@ -151,7 +151,7 @@ export const getClaims = async (req, res, next) => {
     }
 
     const claims = await InsuranceClaim.find(query)
-      .populate('patient', 'name email phone')
+      .populate('patient', 'name email mediVaultId phone')
       .populate('assignedAgent', 'name email insuranceDetails')
       .populate('records', 'title category fileName fileSize fileType recordDate')
       .sort({ createdAt: -1 });
@@ -172,7 +172,7 @@ export const getClaims = async (req, res, next) => {
 export const getClaimById = async (req, res, next) => {
   try {
     const claim = await InsuranceClaim.findById(req.params.id)
-      .populate('patient', 'name email phone')
+      .populate('patient', 'name email mediVaultId phone')
       .populate('assignedAgent', 'name email insuranceDetails')
       .populate('records');
 
@@ -221,7 +221,7 @@ export const reviewClaim = async (req, res, next) => {
       });
     }
 
-    const claim = await InsuranceClaim.findById(req.params.id).populate('patient', 'name email');
+    const claim = await InsuranceClaim.findById(req.params.id).populate('patient', 'name email mediVaultId');
     if (!claim) {
       return res.status(404).json({
         success: false,
@@ -290,7 +290,7 @@ export const supplementClaim = async (req, res, next) => {
       });
     }
 
-    const claim = await InsuranceClaim.findById(req.params.id).populate('patient', 'name email');
+    const claim = await InsuranceClaim.findById(req.params.id).populate('patient', 'name email mediVaultId');
     if (!claim) {
       return res.status(404).json({
         success: false,
