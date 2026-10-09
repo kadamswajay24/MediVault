@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   Search,
   CheckCircle2,
@@ -28,10 +28,10 @@ export const AdminPage: React.FC = () => {
   const [companyName, setCompanyName] = useState('');
   const [agentId, setAgentId] = useState('');
   const [updatingRole, setUpdatingRole] = useState(false);
+  const [approvingUserId, setApprovingUserId] = useState<string | null>(null);
 
-  const fetchAdminData = async () => {
+  const fetchAdminData = useCallback(async () => {
     try {
-      setLoading(true);
       const [statsRes, usersRes, logsRes] = await Promise.all([
         adminAPI.getStats(),
         adminAPI.getUsers({
@@ -49,19 +49,14 @@ export const AdminPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [roleFilter, userSearch]);
 
-  useEffect(() => {
-    fetchAdminData();
-  }, [roleFilter]);
-
-  // Debounced search
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchAdminData();
     }, 350);
     return () => clearTimeout(timer);
-  }, [userSearch]);
+  }, [fetchAdminData]);
 
   const handleToggleStatus = async (user: User) => {
     const nextStatus = !user.isActive;
@@ -82,6 +77,18 @@ export const AdminPage: React.FC = () => {
       }
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to update user status.');
+    }
+  };
+
+  const handleApproveUser = async (user: User) => {
+    try {
+      setApprovingUserId(user.id);
+      await adminAPI.approveUser(user.id);
+      await fetchAdminData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to approve staff account.');
+    } finally {
+      setApprovingUserId(null);
     }
   };
 
@@ -318,7 +325,11 @@ export const AdminPage: React.FC = () => {
                         </td>
 
                         <td className="px-4 py-3.5">
-                          {u.isActive ? (
+                          {u.approvalStatus === 'pending' ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                              <Loader2 className="w-3.5 h-3.5" /> Pending approval
+                            </span>
+                          ) : u.isActive ? (
                             <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
                               <CheckCircle2 className="w-3.5 h-3.5" /> Active
                             </span>
@@ -334,6 +345,15 @@ export const AdminPage: React.FC = () => {
                         </td>
 
                         <td className="px-4 py-3.5 text-right whitespace-nowrap space-x-2">
+                          {u.approvalStatus === 'pending' && (
+                            <button
+                              onClick={() => handleApproveUser(u)}
+                              disabled={approvingUserId === u.id}
+                              className="px-2.5 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded"
+                            >
+                              {approvingUserId === u.id ? 'Approving...' : 'Approve'}
+                            </button>
+                          )}
                           <button
                             onClick={() => handleOpenRoleModal(u)}
                             className="px-2.5 py-1 text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded"
@@ -341,16 +361,18 @@ export const AdminPage: React.FC = () => {
                             Edit Role
                           </button>
 
-                          <button
-                            onClick={() => handleToggleStatus(u)}
-                            className={`px-2.5 py-1 text-xs font-semibold rounded ${
-                              u.isActive
-                                ? 'text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30'
-                                : 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
-                            }`}
-                          >
-                            {u.isActive ? 'Deactivate' : 'Reactivate'}
-                          </button>
+                          {u.approvalStatus !== 'pending' && (
+                            <button
+                              onClick={() => handleToggleStatus(u)}
+                              className={`px-2.5 py-1 text-xs font-semibold rounded ${
+                                u.isActive
+                                  ? 'text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30'
+                                  : 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+                              }`}
+                            >
+                              {u.isActive ? 'Deactivate' : 'Reactivate'}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}

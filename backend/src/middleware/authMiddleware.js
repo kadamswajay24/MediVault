@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import ProxyDelegation from '../models/ProxyDelegation.js';
+import ClinicalAccessRequest from '../models/ClinicalAccessRequest.js';
 
 export const protect = async (req, res, next) => {
   let token;
@@ -21,6 +22,13 @@ export const protect = async (req, res, next) => {
         return res.status(401).json({
           success: false,
           message: 'User no longer exists. Authorization denied.',
+        });
+      }
+
+      if (user.approvalStatus === 'pending') {
+        return res.status(403).json({
+          success: false,
+          message: 'Your staff account is awaiting administrator approval.',
         });
       }
 
@@ -72,6 +80,13 @@ export const resolvePatientContext = async (req, res, next) => {
   try {
     const requestedPatientId = req.headers['x-patient-context'] || req.query.patientId;
 
+    if (req.user.role === 'medical_staff' && !['GET', 'HEAD'].includes(req.method)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Staff access grants are read-only for patient records and profiles.',
+      });
+    }
+
     // Direct personal access
     if (!requestedPatientId || requestedPatientId === req.user._id.toString()) {
       req.effectivePatientId = req.user._id;
@@ -79,18 +94,31 @@ export const resolvePatientContext = async (req, res, next) => {
       return next();
     }
 
-    // Admin override
-    if (req.user.role === 'admin') {
+    // Medical staff may access only a patient-specific, unexpired approved grant.
+    if (req.user.role === 'medical_staff') {
+      const grant = await ClinicalAccessRequest.findOne({
+        patient: requestedPatientId,
+        medicalStaff: req.user._id,
+        status: 'approved',
+        expiresAt: { $gt: new Date() },
+      });
+      if (!grant) {
+        return res.status(403).json({
+          success: false,
+          message: 'No active patient-approved clinical access grant was found.',
+        });
+      }
       req.effectivePatientId = requestedPatientId;
-      req.isProxyActing = true;
+      req.isProxyActing = false;
+      req.clinicalAccessGrant = grant;
       return next();
     }
 
-    // Medical staff consultation access
-    if (req.user.role === 'medical_staff') {
-      req.effectivePatientId = requestedPatientId;
-      req.isProxyActing = false;
-      return next();
+    if (req.user.role === 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Administrators must not access patient records directly. Approve a time-limited staff request or use an authorized patient proxy.',
+      });
     }
 
     // Check proxy delegation

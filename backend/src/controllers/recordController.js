@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import MedicalRecord, { RECORD_CATEGORIES } from '../models/MedicalRecord.js';
 import ProxyDelegation from '../models/ProxyDelegation.js';
+import ClinicalAccessRequest from '../models/ClinicalAccessRequest.js';
 import { createAuditLog } from '../services/auditService.js';
 import { removePhysicalFile } from '../services/recordService.js';
 import { getUploadDirectory } from '../middleware/uploadMiddleware.js';
@@ -11,11 +12,15 @@ const canAccessRecord = async (user, record, proxyDelegation = null) => {
   // 1. Direct owner
   if (record.user.toString() === user._id.toString()) return true;
 
-  // 2. Administrator
-  if (user.role === 'admin') return true;
-
-  // 3. Medical staff consultation
-  if (user.role === 'medical_staff') return true;
+  // Medical staff require a current grant for each patient's records.
+  if (user.role === 'medical_staff') {
+    return Boolean(await ClinicalAccessRequest.findOne({
+      patient: record.user,
+      medicalStaff: user._id,
+      status: 'approved',
+      expiresAt: { $gt: new Date() },
+    }));
+  }
 
   // 4. Caregiver / Proxy
   if (proxyDelegation && proxyDelegation.patient._id.toString() === record.user.toString()) {
@@ -63,9 +68,7 @@ export const uploadRecord = async (req, res, next) => {
       });
     }
 
-    const fileUrl = `/uploads/${req.file.filename}`;
-
-    const record = await MedicalRecord.create({
+    const record = new MedicalRecord({
       user: targetUserId,
       title: title.trim(),
       category,
@@ -75,8 +78,10 @@ export const uploadRecord = async (req, res, next) => {
       storedFileName: req.file.filename,
       fileType: req.file.mimetype,
       fileSize: req.file.size,
-      fileUrl,
+      fileUrl: '',
     });
+    record.fileUrl = `/api/records/${record._id}/download`;
+    await record.save();
 
     // Audit log
     const proxyNotice = req.isProxyActing ? ` on behalf of patient` : '';

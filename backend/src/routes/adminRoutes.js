@@ -3,6 +3,7 @@ import {
   getUsers,
   updateUserRole,
   toggleUserStatus,
+  approveUser,
   getPlatformStats,
   getGlobalAuditLogs,
 } from '../controllers/adminController.js';
@@ -17,6 +18,7 @@ router.use(authorize('admin'));
 router.get('/users', getUsers);
 router.put('/users/:id/role', updateUserRole);
 router.put('/users/:id/status', toggleUserStatus);
+router.put('/users/:id/approve', approveUser);
 router.get('/stats', getPlatformStats);
 router.get('/audit-logs', getGlobalAuditLogs);
 

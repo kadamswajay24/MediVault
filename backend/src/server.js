@@ -2,9 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import morgan from 'morgan';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
 import { connectDB } from './config/db.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 
@@ -17,12 +14,10 @@ import proxyRoutes from './routes/proxyRoutes.js';
 import claimRoutes from './routes/claimRoutes.js';
 import medicalStaffRoutes from './routes/medicalStaffRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import clinicalAccessRoutes from './routes/clinicalAccessRoutes.js';
 
 // Load environment variables
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Initialize database
 connectDB();
@@ -41,10 +36,6 @@ app.use(express.urlencoded({ extended: true }));
 if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('dev'));
 }
-
-// Serve uploaded documents statically
-const uploadsDir = path.resolve(__dirname, '../uploads');
-app.use('/uploads', express.static(uploadsDir));
 
 // API Health Check
 app.get('/api/health', (req, res) => {
@@ -67,6 +58,7 @@ app.use('/api/proxy', proxyRoutes);
 app.use('/api/claims', claimRoutes);
 app.use('/api/medical-staff', medicalStaffRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/clinical-access', clinicalAccessRoutes);
 
 // Error Handling
 app.use(notFound);

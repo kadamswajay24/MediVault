@@ -7,10 +7,11 @@ import {
   Outlet,
   useLocation,
 } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './context/useAuth';
 import { ThemeProvider } from './context/ThemeContext';
 import { Navbar } from './components/Navbar';
-import { ProtectedRoute } from './components/ProtectedRoute';
+import { ProtectedRoute, RoleRoute } from './components/ProtectedRoute';
 import { UploadModal } from './components/UploadModal';
 
 import { LoginPage } from './pages/LoginPage';
@@ -21,15 +22,28 @@ import { ProfilePage } from './pages/ProfilePage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
 import { ClaimsPage } from './pages/ClaimsPage';
 import { CaregiversPage } from './pages/CaregiversPage';
-import { MedicalStaffPage } from './pages/MedicalStaffPage';
-import { AdminPage } from './pages/AdminPage';
+import { OrganizationPortalPage } from './pages/OrganizationPortalPage';
+import { PatientLandingPage } from './pages/PatientLandingPage';
+const MedicalStaffPage = React.lazy(() =>
+  import('./pages/MedicalStaffPage').then((page) => ({ default: page.MedicalStaffPage }))
+);
+const AdminPage = React.lazy(() =>
+  import('./pages/AdminPage').then((page) => ({ default: page.AdminPage }))
+);
+const AccessRequestsPage = React.lazy(() =>
+  import('./pages/AccessRequestsPage').then((page) => ({ default: page.AccessRequestsPage }))
+);
+
+const PageLoading: React.FC = () => (
+  <div className="py-20 text-center text-sm text-slate-500">Loading workspace...</div>
+);
 
 // Smart Home Redirect based on Authenticated Role
 const RoleBasedHomeRedirect: React.FC = () => {
   const { user, isAuthenticated, loading } = useAuth();
 
   if (loading) return null;
-  if (!isAuthenticated || !user) return <Navigate to="/login" replace />;
+  if (!isAuthenticated || !user) return <PatientLandingPage />;
 
   switch (user.role) {
     case 'admin':
@@ -108,24 +122,66 @@ export function App() {
           <Routes>
             <Route element={<AppLayout />}>
               {/* Public Routes */}
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/portals" element={<Navigate to="/" replace />} />
+              <Route path="/organization" element={<OrganizationPortalPage />} />
+              <Route path="/login" element={<Navigate to="/portals" replace />} />
+              <Route path="/register" element={<Navigate to="/portals" replace />} />
+              <Route path="/patient/login" element={<LoginPage portal="patient" />} />
+              <Route path="/clinical/login" element={<LoginPage portal="clinical" />} />
+              <Route path="/insurance/login" element={<LoginPage portal="insurance" />} />
+              <Route path="/patient/register" element={<RegisterPage portal="patient" />} />
+              <Route
+                path="/organization/register"
+                element={<RegisterPage portal="organization" />}
+              />
 
               {/* Protected Routes */}
               <Route element={<ProtectedRoute />}>
-                <Route path="/dashboard" element={<DashboardPage />} />
-                <Route path="/records" element={<RecordsPage />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/claims" element={<ClaimsPage />} />
-                <Route path="/caregivers" element={<CaregiversPage />} />
-                <Route path="/medical-staff" element={<MedicalStaffPage />} />
-                <Route path="/admin" element={<AdminPage />} />
+                <Route element={<RoleRoute roles={['patient', 'medical_staff', 'admin']} />}>
+                  <Route
+                    path="/access-requests"
+                    element={
+                      <React.Suspense fallback={<PageLoading />}>
+                        <AccessRequestsPage />
+                      </React.Suspense>
+                    }
+                  />
+                </Route>
                 <Route path="/audit-logs" element={<AuditLogsPage />} />
+                <Route element={<RoleRoute roles={['patient', 'insurance_agent']} />}>
+                  <Route path="/claims" element={<ClaimsPage />} />
+                </Route>
+                <Route element={<RoleRoute roles={['patient']} />}>
+                  <Route path="/dashboard" element={<DashboardPage />} />
+                  <Route path="/records" element={<RecordsPage />} />
+                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/caregivers" element={<CaregiversPage />} />
+                </Route>
+                <Route element={<RoleRoute roles={['medical_staff']} />}>
+                  <Route
+                    path="/medical-staff"
+                    element={
+                      <React.Suspense fallback={<PageLoading />}>
+                        <MedicalStaffPage />
+                      </React.Suspense>
+                    }
+                  />
+                </Route>
+                <Route element={<RoleRoute roles={['admin']} />}>
+                  <Route
+                    path="/admin"
+                    element={
+                      <React.Suspense fallback={<PageLoading />}>
+                        <AdminPage />
+                      </React.Suspense>
+                    }
+                  />
+                </Route>
               </Route>
 
               {/* Smart Fallback Redirects */}
               <Route path="/" element={<RoleBasedHomeRedirect />} />
-              <Route path="*" element={<RoleBasedHomeRedirect />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
         </Router>

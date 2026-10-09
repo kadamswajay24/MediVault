@@ -12,16 +12,24 @@ import {
   FileCheck2,
   Phone,
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import type { UserRole } from '../types';
 
-export const RegisterPage: React.FC = () => {
+type RegistrationPortal = 'patient' | 'organization';
+
+export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [phone, setPhone] = useState('');
-  const [role, setRole] = useState<UserRole>('patient');
+  const [role, setRole] = useState<UserRole>(portal === 'patient' ? 'patient' : 'medical_staff');
+  const isPatientPortal = portal === 'patient';
+  const signInPath = isPatientPortal
+    ? '/patient/login'
+    : role === 'insurance_agent'
+    ? '/insurance/login'
+    : '/clinical/login';
 
   // Role details
   const [licenseNumber, setLicenseNumber] = useState('');
@@ -32,6 +40,7 @@ export const RegisterPage: React.FC = () => {
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [registrationPending, setRegistrationPending] = useState(false);
 
   const { register } = useAuth();
   const navigate = useNavigate();
@@ -57,7 +66,7 @@ export const RegisterPage: React.FC = () => {
     setError(null);
 
     try {
-      await register({
+      const result = await register({
         name: name.trim(),
         email: email.trim(),
         password,
@@ -73,8 +82,12 @@ export const RegisterPage: React.FC = () => {
             : undefined,
       });
 
-      if (role === 'admin') navigate('/admin');
-      else if (role === 'insurance_agent') navigate('/claims');
+      if (result.pendingApproval) {
+        setRegistrationPending(true);
+        return;
+      }
+
+      if (role === 'insurance_agent') navigate('/claims');
       else if (role === 'medical_staff') navigate('/medical-staff');
       else navigate('/dashboard');
     } catch (err: any) {
@@ -95,14 +108,33 @@ export const RegisterPage: React.FC = () => {
             <ShieldCheck className="w-6 h-6 stroke-[2.4]" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Create MediVault Account
+            {isPatientPortal ? 'Create a Patient Account' : 'Apply for Organization Access'}
           </h1>
           <p className="text-xs text-slate-500">
-            Select your stakeholder role to customize your health records or claims workflow
+            {isPatientPortal
+              ? 'Create your personal account to manage your health records and care.'
+              : 'Choose your professional role. All organization accounts require administrator approval.'}
           </p>
         </div>
 
-        {/* Card Form */}
+        {registrationPending ? (
+          <div className="bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900 rounded-xl p-6 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-white">
+              Application submitted for review
+            </h2>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+              Your staff account will be available after an administrator approves your
+              application. You can sign in once your access is approved.
+            </p>
+            <Link
+              to={signInPath}
+              className="inline-flex items-center gap-2 mt-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
+            >
+              Return to sign in <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        ) : (
+        /* Card Form */
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm">
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
@@ -112,26 +144,13 @@ export const RegisterPage: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Role Selection Tabs */}
+            {/* Organization applications choose between clinical and insurance roles. */}
+            {!isPatientPortal && (
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
                 Stakeholder Role
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setRole('patient')}
-                  className={`p-2.5 rounded-lg border text-left text-xs transition-all ${
-                    role === 'patient'
-                      ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-200 font-bold'
-                      : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
-                  }`}
-                >
-                  <User className="w-4 h-4 mb-1 text-emerald-600" />
-                  <div>Patient</div>
-                  <div className="text-[10px] text-slate-400 font-normal">Vault Owner</div>
-                </button>
-
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setRole('medical_staff')}
@@ -161,6 +180,7 @@ export const RegisterPage: React.FC = () => {
                 </button>
               </div>
             </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -326,14 +346,15 @@ export const RegisterPage: React.FC = () => {
             </button>
           </form>
         </div>
+        )}
 
         <p className="text-center text-xs text-slate-500">
           Already have an account?{' '}
           <Link
-            to="/login"
+            to={signInPath}
             className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
           >
-            Sign in
+            Sign in to your portal
           </Link>
         </p>
       </div>

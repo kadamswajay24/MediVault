@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   FileText,
@@ -24,6 +24,7 @@ export const RecordsPage: React.FC = () => {
   const [records, setRecords] = useState<MedicalRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloadingRecordId, setDownloadingRecordId] = useState<string | null>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -34,9 +35,8 @@ export const RecordsPage: React.FC = () => {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null);
 
-  const fetchRecords = async () => {
+  const fetchRecords = useCallback(async () => {
     try {
-      setLoading(true);
       setError(null);
       const res = await recordAPI.getRecords({
         category: selectedCategory === 'All' ? undefined : selectedCategory,
@@ -51,19 +51,14 @@ export const RecordsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchQuery, selectedCategory, sortBy]);
 
-  useEffect(() => {
-    fetchRecords();
-  }, [selectedCategory, sortBy]);
-
-  // Debounced live search
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchRecords();
     }, 350);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [fetchRecords]);
 
   const handleCategorySelect = (cat: string) => {
     setSelectedCategory(cat);
@@ -81,6 +76,26 @@ export const RecordsPage: React.FC = () => {
 
   const handleDeleteSuccess = (recordId: string) => {
     setRecords((prev) => prev.filter((r) => r._id !== recordId));
+  };
+
+  const handleDownload = async (record: MedicalRecord) => {
+    setDownloadingRecordId(record._id);
+    setError(null);
+    try {
+      const file = await recordAPI.getRecordFile(record._id);
+      const objectUrl = URL.createObjectURL(file);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = record.fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Unable to securely download this record.');
+    } finally {
+      setDownloadingRecordId(null);
+    }
   };
 
   const getCategoryColor = (cat: string) => {
@@ -288,15 +303,16 @@ export const RecordsPage: React.FC = () => {
                     >
                       <Eye className="w-4 h-4" />
                     </button>
-                    <a
-                      href={recordAPI.downloadRecordUrl(record._id)}
-                      download={record.fileName}
+                    <button
+                      type="button"
+                      onClick={() => handleDownload(record)}
+                      disabled={downloadingRecordId === record._id}
                       id={`record-download-btn-${record._id}`}
                       title="Download"
-                      className="p-2 rounded-xl text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-teal-50 dark:hover:bg-teal-500/20 hover:text-teal-600 dark:hover:text-teal-300 border border-slate-200 dark:border-slate-700/70 transition-all"
+                      className="p-2 rounded-xl text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-teal-50 dark:hover:bg-teal-500/20 hover:text-teal-600 dark:hover:text-teal-300 border border-slate-200 dark:border-slate-700/70 transition-all disabled:opacity-50"
                     >
                       <Download className="w-4 h-4" />
-                    </a>
+                    </button>
                   </div>
                 </div>
               </div>

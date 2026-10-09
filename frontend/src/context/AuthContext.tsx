@@ -1,36 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { User, UserRole, MedicalStaffDetails, InsuranceDetails } from '../types';
 import { authAPI } from '../services/api';
-
-export interface ActiveDependentInfo {
-  id: string;
-  name: string;
-  relationship: string;
-  accessLevel: 'read_only' | 'full';
-}
-
-interface AuthContextType {
-  user: User | null;
-  token: string | null;
-  isAuthenticated: boolean;
-  loading: boolean;
-  activeDependent: ActiveDependentInfo | null;
-  setActiveDependent: (dependent: ActiveDependentInfo | null) => void;
-  login: (email: string, password: string) => Promise<void>;
-  register: (data: {
-    name: string;
-    email: string;
-    password: string;
-    role?: UserRole;
-    phone?: string;
-    medicalStaffDetails?: MedicalStaffDetails;
-    insuranceDetails?: InsuranceDetails;
-  }) => Promise<void>;
-  logout: () => void;
-  updateUserContext: (user: User) => void;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+import { AuthContext } from './authContextValue';
+import type { ActiveDependentInfo } from './authContextValue';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
@@ -82,14 +54,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     verifyAuth();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, allowedRoles?: UserRole[]) => {
     const data = await authAPI.login({ email, password });
     if (data.token && data.user) {
+      if (allowedRoles && !allowedRoles.includes(data.user.role)) {
+        throw new Error('This account belongs to a different MediVault portal. Choose the portal for your account and sign in there.');
+      }
       localStorage.setItem('medivault_token', data.token);
       localStorage.setItem('medivault_user', JSON.stringify(data.user));
       setToken(data.token);
       setUser(data.user);
+      return data.user;
     }
+    throw new Error('The sign-in service returned an incomplete response. Please try again.');
   };
 
   const register = async (registerData: {
@@ -108,6 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(data.token);
       setUser(data.user);
     }
+    return data;
   };
 
   const logout = () => {
@@ -142,12 +120,4 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       {children}
     </AuthContext.Provider>
   );
-};
-
-export const useAuth = (): AuthContextType => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 };

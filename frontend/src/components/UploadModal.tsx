@@ -25,7 +25,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<RecordCategory>('Laboratory Report');
   const [recordDate, setRecordDate] = useState(
-    new Date().toISOString().split('T')[0]
+    () => new Date().toISOString().split('T')[0]
   );
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);

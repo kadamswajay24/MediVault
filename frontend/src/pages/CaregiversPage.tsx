@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users,
   UserPlus,
@@ -9,7 +9,7 @@ import {
   Loader2,
   Heart,
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import { proxyAPI } from '../services/api';
 import type { ProxyDelegation } from '../types';
 
@@ -30,15 +30,14 @@ export const CaregiversPage: React.FC = () => {
   const [delegating, setDelegating] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
       const [proxiesRes, dependentsRes] = await Promise.all([
         proxyAPI.getMyProxies(),
         proxyAPI.getMyDependents(),
       ]);
 
+      setError(null);
       if (proxiesRes.success) setProxies(proxiesRes.proxies);
       if (dependentsRes.success) setDependents(dependentsRes.dependents);
     } catch (err: any) {
@@ -46,11 +45,14 @@ export const CaregiversPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    const timer = window.setTimeout(() => {
+      void fetchData();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchData]);
 
   const handleDelegateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

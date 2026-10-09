@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import { Loader2 } from 'lucide-react';
 
 export const ProtectedRoute: React.FC = () => {
@@ -16,7 +16,17 @@ export const ProtectedRoute: React.FC = () => {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
+  }
+
+  return <Outlet />;
+};
+
+export const RoleRoute: React.FC<{ roles: string[] }> = ({ roles }) => {
+  const { user } = useAuth();
+
+  if (!user || !roles.includes(user.role)) {
+    return <Navigate to="/" replace />;
   }
 
   return <Outlet />;

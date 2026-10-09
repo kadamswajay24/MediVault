@@ -39,8 +39,9 @@ api.interceptors.request.use(
         if (dep && dep.id) {
           config.headers['x-patient-context'] = dep.id;
         }
-      } catch (e) {
-        // Ignore parse error
+      } catch (error) {
+        console.warn('[API] Clearing invalid active patient context:', error);
+        localStorage.removeItem('medivault_active_dependent');
       }
     }
 
@@ -122,6 +123,11 @@ export const recordAPI = {
     return res.data;
   },
 
+  getRecordFile: async (id: string): Promise<Blob> => {
+    const res = await api.get(`/records/${id}/download`, { responseType: 'blob' });
+    return res.data;
+  },
+
   uploadRecord: async (
     formData: FormData
   ): Promise<{ success: boolean; message: string; record: MedicalRecord }> => {
@@ -138,9 +144,6 @@ export const recordAPI = {
     return res.data;
   },
 
-  downloadRecordUrl: (id: string): string => {
-    return `${API_BASE_URL}/records/${id}/download`;
-  },
 };
 
 export const dashboardAPI = {
@@ -194,6 +197,50 @@ export const proxyAPI = {
 
   revokeProxy: async (delegationId: string): Promise<{ success: boolean; message: string }> => {
     const res = await api.delete(`/proxy/${delegationId}`);
+    return res.data;
+  },
+};
+
+export interface ClinicalAccessRequest {
+  _id: string;
+  patient: User;
+  medicalStaff: User;
+  reason: string;
+  requestedUntil: string;
+  expiresAt?: string;
+  status: 'pending' | 'approved' | 'denied' | 'revoked';
+  decidedBy?: User;
+  decidedAt?: string;
+  revokedAt?: string;
+  isExpired?: boolean;
+  createdAt: string;
+}
+
+export const clinicalAccessAPI = {
+  getRequests: async (): Promise<{ success: boolean; requests: ClinicalAccessRequest[] }> => {
+    const res = await api.get('/clinical-access');
+    return res.data;
+  },
+
+  createRequest: async (data: {
+    patientId: string;
+    reason: string;
+    requestedUntil: string;
+  }): Promise<{ success: boolean; message: string; request: ClinicalAccessRequest }> => {
+    const res = await api.post('/clinical-access', data);
+    return res.data;
+  },
+
+  decideRequest: async (
+    id: string,
+    data: { decision: 'approved' | 'denied'; expiresAt?: string }
+  ): Promise<{ success: boolean; message: string; request: ClinicalAccessRequest }> => {
+    const res = await api.put(`/clinical-access/${id}/decision`, data);
+    return res.data;
+  },
+
+  revokeRequest: async (id: string): Promise<{ success: boolean; message: string }> => {
+    const res = await api.put(`/clinical-access/${id}/revoke`);
     return res.data;
   },
 };
@@ -257,6 +304,11 @@ export const claimAPI = {
 };
 
 export const medicalStaffAPI = {
+  searchPatients: async (search: string): Promise<{ success: boolean; patients: User[] }> => {
+    const res = await api.get('/medical-staff/patients/search', { params: { search } });
+    return res.data;
+  },
+
   addClinicalNote: async (data: {
     patientId: string;
     noteType?: string;
@@ -328,6 +380,13 @@ export const adminAPI = {
     isActive: boolean
   ): Promise<{ success: boolean; message: string; user: User }> => {
     const res = await api.put(`/admin/users/${userId}/status`, { isActive });
+    return res.data;
+  },
+
+  approveUser: async (
+    userId: string
+  ): Promise<{ success: boolean; message: string; user: User }> => {
+    const res = await api.put(`/admin/users/${userId}/approve`);
     return res.data;
   },
 

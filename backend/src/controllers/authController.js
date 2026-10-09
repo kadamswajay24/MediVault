@@ -22,6 +22,7 @@ const formatUserResponse = (user) => {
     email: user.email,
     role: user.role,
     isActive: user.isActive,
+    approvalStatus: user.approvalStatus,
     phone: user.phone || '',
     medicalStaffDetails: user.medicalStaffDetails || {},
     insuranceDetails: user.insuranceDetails || {},
@@ -58,11 +59,11 @@ export const registerUser = async (req, res, next) => {
       });
     }
 
-    const validRoles = ['patient', 'medical_staff', 'insurance_agent', 'admin'];
-    if (role && !validRoles.includes(role)) {
+    const validRoles = ['patient', 'medical_staff', 'insurance_agent'];
+    if (!validRoles.includes(role)) {
       return res.status(400).json({
         success: false,
-        message: `Invalid role specified. Must be one of: ${validRoles.join(', ')}`,
+        message: `Public registration is limited to: ${validRoles.join(', ')}. Administrator accounts must be provisioned by an existing system operator.`,
       });
     }
 
@@ -81,6 +82,8 @@ export const registerUser = async (req, res, next) => {
       email: normalizedEmail,
       password,
       role: role || 'patient',
+      approvalStatus: role === 'patient' ? 'approved' : 'pending',
+      isActive: role === 'patient',
       phone: phone ? String(phone).trim() : '',
     };
 
@@ -113,8 +116,6 @@ export const registerUser = async (req, res, next) => {
       emergencyContact: { name: '', relationship: '', phone: '' },
     });
 
-    const token = generateToken(user._id);
-
     // Audit log
     await createAuditLog({
       userId: user._id,
@@ -125,6 +126,16 @@ export const registerUser = async (req, res, next) => {
       req,
     });
 
+    if (user.approvalStatus === 'pending') {
+      return res.status(202).json({
+        success: true,
+        pendingApproval: true,
+        message: 'Your staff account is awaiting administrator approval.',
+        user: formatUserResponse(user),
+      });
+    }
+
+    const token = generateToken(user._id);
     return res.status(201).json({
       success: true,
       token,
@@ -159,18 +170,25 @@ export const loginUser = async (req, res, next) => {
       });
     }
 
-    if (!user.isActive) {
-      return res.status(403).json({
-        success: false,
-        message: 'Your account has been deactivated. Please contact support.',
-      });
-    }
-
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password credentials.',
+      });
+    }
+
+    if (user.approvalStatus === 'pending') {
+      return res.status(403).json({
+        success: false,
+        message: 'Your staff account is awaiting administrator approval.',
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account has been deactivated. Please contact support.',
       });
     }
 

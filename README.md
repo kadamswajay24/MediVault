@@ -18,7 +18,9 @@ MediVault is a secure, personal health management platform designed for patients
 
 1. **User Registration & Login**:
    - Secure sign-up with email validation and encrypted password hashing (bcrypt).
-   - Fast login with persistent JWT session management and demo credentials prefiller.
+   - Patients can register and access their accounts immediately.
+   - Medical staff and insurance agents require administrator approval before signing in.
+   - Administrator accounts are provisioned by an existing system operator, never through public registration.
 
 2. **JWT Authentication & Protected Routing**:
    - Protected client-side routes via `ProtectedRoute`.
@@ -55,6 +57,7 @@ MediVault is a secure, personal health management platform designed for patients
 7. **System & Clinical Audit Logs**:
    - Automatic background logging for:
      - `LOGIN`
+     - `ACCESS_REQUESTED` / `ACCESS_REQUEST_DECIDED` / `ACCESS_REVOKED`
      - `PROFILE_UPDATE`
      - `RECORD_UPLOAD`
      - `RECORD_VIEW` / Download
@@ -62,8 +65,11 @@ MediVault is a secure, personal health management platform designed for patients
    - Complete trace with timestamps, IP addresses, and resource details.
 
 8. **Strict User-Level Authorization & Security**:
-   - Users can **only** view, query, download, or delete their own medical records and health profiles.
+   - Patients can access their own records; proxies and clinicians can access patient data only through authorized, patient-specific grants.
    - Unauthorized attempts by other users return `403 Forbidden`.
+   - Medical staff request access to one identified patient, state a clinical purpose, and request an access end time.
+   - The patient, their authorized full-access proxy, or an administrator may approve for a chosen end time or deny the request.
+   - Patients, proxies, staff, or administrators may revoke an active grant; approved access expires automatically and is enforced by the API.
 
 9. **Architectural Readiness for Future Milestones**:
    - Future hook interfaces in `recordService.js` for:
@@ -80,6 +86,8 @@ MediVault is a secure, personal health management platform designed for patients
 medivault/
 ├── backend/
 │   ├── src/
+│   │   ├── scripts/
+│   │   │   └── promoteAdmin.js       # Provision an administrator from an existing account
 │   │   ├── config/
 │   │   │   └── db.js                 # MongoDB connection logic
 │   │   ├── controllers/
@@ -96,13 +104,15 @@ medivault/
 │   │   │   ├── User.js               # User accounts & bcrypt hooks
 │   │   │   ├── HealthProfile.js      # Patient clinical demographics
 │   │   │   ├── MedicalRecord.js      # Documents & future metadata placeholders
+│   │   │   ├── ClinicalAccessRequest.js # Patient-specific, expiring staff access grants
 │   │   │   └── AuditLog.js           # Immutable event logging
 │   │   ├── routes/
 │   │   │   ├── authRoutes.js
 │   │   │   ├── profileRoutes.js
 │   │   │   ├── recordRoutes.js
 │   │   │   ├── dashboardRoutes.js
-│   │   │   └── auditRoutes.js
+│   │   │   ├── auditRoutes.js
+│   │   │   ├── clinicalAccessRoutes.js
 │   │   ├── services/
 │   │   │   ├── auditService.js       # Asynchronous audit event logger
 │   │   │   └── recordService.js      # File cleaner & future extension hooks
@@ -122,8 +132,9 @@ medivault/
 │   │   ├── context/
 │   │   │   └── AuthContext.tsx       # Authentication state & session sync
 │   │   ├── pages/
-│   │   │   ├── LoginPage.tsx         # Sign in with demo prefill
+│   │   │   ├── LoginPage.tsx         # Secure sign-in
 │   │   │   ├── RegisterPage.tsx      # Sign up page
+│   │   │   ├── AccessRequestsPage.tsx # Patient/proxy/admin decisions and staff grants
 │   │   │   ├── DashboardPage.tsx     # Metrics, health alerts & timeline
 │   │   │   ├── RecordsPage.tsx       # Searchable & filterable records grid
 │   │   │   ├── ProfilePage.tsx       # Demographic & allergy editor
@@ -179,6 +190,20 @@ npm run dev
 # Frontend will run at: http://localhost:5173
 ```
 
+### Provision the First Administrator
+
+Public sign-up is limited to patients and staff; administrator access cannot be self-requested.
+After registering a trusted operator account as a patient, promote it from the backend using
+an account with database access:
+
+```bash
+cd backend
+npm run admin:promote -- operator@example.com
+```
+
+The operator can then sign in and approve pending medical staff and insurance agent accounts
+from the administration user directory.
+
 ---
 
 ## 🧪 Automated End-to-End Verification
@@ -219,22 +244,29 @@ npm run test:rbac
 
 ## 📡 API Reference Overview
 
+### Separate Sign-In Portals
+- The public home (`/`) is patient-facing and shows only patient sign-in (`/patient/login`) and patient registration (`/patient/register`).
+- Organization access is separate at `/organization`, with dedicated sign-in paths for medical staff (`/clinical/login`) and insurance/governance (`/insurance/login`).
+- Clinician and insurance-agent applications are available at `/organization/register`. Administrator accounts are provisioned by an existing system owner.
+
+The sign-in forms accept only the account roles assigned to their portal. Backend role authorization remains the enforcement boundary for protected data and operations.
+
 ### 1. Authentication & Profiles
 | Method | Endpoint | Description | Roles |
 |---|---|---|---|
-| `POST` | `/api/auth/register` | Register account with role (`patient`, `medical_staff`, `insurance_agent`, `admin`) | Public |
+| `POST` | `/api/auth/register` | Register as a patient or submit a staff application; staff access requires administrator approval | Public |
 | `POST` | `/api/auth/login` | Login and receive role-annotated JWT token | Public |
 | `GET` | `/api/auth/me` | Current authenticated user profile & role details | Authenticated |
-| `GET` | `/api/profile` | Get patient clinical profile (supports `x-patient-context` for proxies) | Patient / Proxy |
+| `GET` | `/api/profile` | Get patient clinical profile (supports `x-patient-context` for proxies and approved medical staff) | Patient / Proxy / Medical Staff with active grant |
 | `PUT` | `/api/profile` | Update demographics, allergies, emergency contacts | Patient / Full Proxy |
 
 ### 2. Medical Records Hub
 | Method | Endpoint | Description | Roles |
 |---|---|---|---|
-| `GET` | `/api/records` | List records (`?search`, `?category`, `?sort`, `x-patient-context`) | Patient / Proxy / Doctor |
+| `GET` | `/api/records` | List records (`?search`, `?category`, `?sort`, `x-patient-context`) | Patient / Proxy / Medical Staff with active grant |
 | `POST` | `/api/records` | Upload medical document (`file`, `title`, `category`, `recordDate`) | Patient / Full Proxy |
-| `GET` | `/api/records/:id` | View specific record metadata | Authorized Stakeholder |
-| `GET` | `/api/records/:id/download` | Download physical document | Authorized Stakeholder |
+| `GET` | `/api/records/:id` | View specific record metadata | Patient / Proxy / Medical Staff with active grant |
+| `GET` | `/api/records/:id/download` | Download physical document | Patient / Proxy / Medical Staff with active grant |
 | `DELETE` | `/api/records/:id` | Delete record & disk file | Patient / Full Proxy |
 
 ### 3. Dual-Context Caregiver & Proxy Delegation
@@ -249,20 +281,29 @@ npm run test:rbac
 | Method | Endpoint | Description | Roles |
 |---|---|---|---|
 | `POST` | `/api/claims` | File new reimbursement/cashless claim with attached vault records | Patient / Caregiver |
-| `GET` | `/api/claims` | List claims (filtered by user, company, or admin) | Patient / Agent / Admin |
-| `GET` | `/api/claims/:id` | View claim details, patient notes, and attached documents | Authorized Stakeholder |
-| `PUT` | `/api/claims/:id/review` | Evaluate claim (`status`, `approvedAmount`, `agentRemarks`) | Insurance Agent / Admin |
-| `GET` | `/api/claims/:claimId/records/:recordId/download` | Privacy-preserving download of verified claim attachment | Insurance Agent / Admin |
+| `GET` | `/api/claims` | List claims for the authenticated patient or insurance agent | Patient / Insurance Agent |
+| `GET` | `/api/claims/:id` | View claim details, patient notes, and attached documents | Patient / Insurance Agent |
+| `PUT` | `/api/claims/:id/review` | Evaluate claim (`status`, `approvedAmount`, `agentRemarks`) | Insurance Agent |
+| `GET` | `/api/claims/:claimId/records/:recordId/download` | Privacy-preserving download of verified claim attachment | Insurance Agent |
 
 ### 5. Medical Staff & Clinical Consultations
 | Method | Endpoint | Description | Roles |
 |---|---|---|---|
-| `POST` | `/api/medical-staff/notes` | Add clinical consultation note & digital prescription | Medical Staff / Admin |
-| `GET` | `/api/medical-staff/patients/:patientId/notes` | Get clinical notes and prescriptions for a patient | Patient / Doctor / Admin |
-| `GET` | `/api/medical-staff/patients/:patientId/overview` | View patient clinical profile and record history | Medical Staff / Admin |
+| `GET` | `/api/medical-staff/patients/search` | Search active patient accounts by name or email (no clinical data returned) | Approved Medical Staff |
+| `POST` | `/api/medical-staff/notes` | Add a clinical consultation note & digital prescription for a patient with an active access grant | Medical Staff |
+| `GET` | `/api/medical-staff/patients/:patientId/notes` | Get clinical notes and prescriptions for an authorized patient | Patient / Medical Staff with active grant |
+| `GET` | `/api/medical-staff/patients/:patientId/overview` | View patient clinical profile and record history with an active access grant | Medical Staff |
 | `GET` | `/api/medical-staff/my-consultations` | Get all consultations authored by the logged-in doctor | Medical Staff |
 
-### 6. System Governance & Administration
+### 6. Patient-Specific Clinical Access
+| Method | Endpoint | Description | Roles |
+|---|---|---|---|
+| `POST` | `/api/clinical-access` | Request access to one patient with a clinical purpose and requested end time | Approved Medical Staff |
+| `GET` | `/api/clinical-access` | List requests and grants visible to the authenticated user | Patient / Authorized Proxy / Medical Staff / Admin |
+| `PUT` | `/api/clinical-access/:id/decision` | Approve with a chosen future expiration or deny a pending request | Patient / Authorized Full Proxy / Admin |
+| `PUT` | `/api/clinical-access/:id/revoke` | Revoke an active grant immediately | Patient / Authorized Full Proxy / Requesting Medical Staff / Admin |
+
+### 7. System Governance & Administration
 | Method | Endpoint | Description | Roles |
 |---|---|---|---|
 | `GET` | `/api/admin/users` | List all users across all roles (`?role`, `?status`, `?search`) | Admin |
@@ -281,4 +322,3 @@ npm run test:rbac
 - **Privacy-Preserving Insurance Verification**: Insurance agents can only inspect records explicitly attached to an active claim.
 - **MIME Validation & Sanitization**: Restricts uploads strictly to `application/pdf`, `image/jpeg`, `image/png` with random timestamp hashed filenames.
 - **Immutable Cross-Stakeholder Audit Trail**: Captures logins, proxy delegations, caregiver actions, claim submissions, claim reviews, and administrative changes with IP and user agent.
-

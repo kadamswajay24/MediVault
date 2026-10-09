@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   X,
   Download,
@@ -26,13 +26,44 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ recordId: string; url: string } | null>(null);
+  const [previewError, setPreviewError] = useState<{ recordId: string; message: string } | null>(null);
+  const recordId = record?._id;
+
+  useEffect(() => {
+    if (!recordId || !isOpen) return;
+
+    let active = true;
+    let objectUrl: string | null = null;
+    recordAPI
+      .getRecordFile(recordId)
+      .then((file) => {
+        if (!active) return;
+        objectUrl = URL.createObjectURL(file);
+        setPreview({ recordId, url: objectUrl });
+      })
+      .catch((requestError: any) => {
+        if (active) {
+          setPreviewError({
+            recordId,
+            message: requestError.response?.data?.message || 'Unable to load this protected record.',
+          });
+        }
+      });
+
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [recordId, isOpen]);
 
   if (!record || !isOpen) return null;
 
+  const previewUrl = preview?.recordId === record._id ? preview.url : null;
+  const shownError =
+    error || (previewError?.recordId === record._id ? previewError.message : null);
   const isImage = record.fileType.startsWith('image/');
   const isPdf = record.fileType === 'application/pdf';
-
-  const downloadUrl = recordAPI.downloadRecordUrl(record._id);
 
   const handleDelete = async () => {
     if (!confirmDelete) {
@@ -104,9 +135,9 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
           </button>
         </div>
 
-        {error && (
+        {shownError && (
           <div className="mt-3 p-3 rounded-xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-600 dark:text-rose-300 text-sm">
-            {error}
+            {shownError}
           </div>
         )}
 
@@ -115,21 +146,23 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
           {/* Document Preview Box */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 p-4 flex flex-col items-center justify-center min-h-[220px]">
             {isImage ? (
-              <div className="space-y-3 w-full flex flex-col items-center">
-                <img
-                  src={record.fileUrl}
-                  alt={record.title}
-                  className="max-h-72 max-w-full rounded-lg object-contain border border-slate-200 dark:border-slate-800 shadow-md"
-                />
-                <a
-                  href={record.fileUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 font-medium"
-                >
-                  <ExternalLink className="w-3 h-3" /> View Full Resolution
-                </a>
-              </div>
+              previewUrl ? (
+                <div className="space-y-3 w-full flex flex-col items-center">
+                  <img
+                    src={previewUrl}
+                    alt={record.title}
+                    className="max-h-72 max-w-full rounded-lg object-contain border border-slate-200 dark:border-slate-800 shadow-md"
+                  />
+                  <a
+                    href={previewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 font-medium"
+                  >
+                    <ExternalLink className="w-3 h-3" /> View Full Resolution
+                  </a>
+                </div>
+              ) : <LoaderPreview />
             ) : isPdf ? (
               <div className="text-center space-y-3 py-6">
                 <div className="w-16 h-16 rounded-2xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-500 dark:text-rose-400 flex items-center justify-center mx-auto">
@@ -141,15 +174,17 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
                     PDF Document • {(record.fileSize / (1024 * 1024)).toFixed(2)} MB
                   </p>
                 </div>
-                <a
-                  href={record.fileUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-teal-700 dark:text-teal-300 border border-slate-300 dark:border-slate-700 transition-all shadow-sm"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  Open PDF in Browser
-                </a>
+                {previewUrl ? (
+                  <a
+                    href={previewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-teal-700 dark:text-teal-300 border border-slate-300 dark:border-slate-700 transition-all shadow-sm"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Open PDF in Browser
+                  </a>
+                ) : <LoaderPreview />}
               </div>
             ) : (
               <div className="text-center space-y-2 py-6">
@@ -227,10 +262,11 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
 
           <div className="flex items-center gap-2.5">
             <a
-              href={downloadUrl}
+              href={previewUrl || '#'}
               download={record.fileName}
+              aria-disabled={!previewUrl}
               id="viewer-download-btn"
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-teal-50 dark:bg-teal-500/10 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-500/20 border border-teal-200 dark:border-teal-500/30 transition-all shadow-sm"
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-teal-50 dark:bg-teal-500/10 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-500/20 border border-teal-200 dark:border-teal-500/30 transition-all shadow-sm ${!previewUrl ? 'pointer-events-none opacity-50' : ''}`}
             >
               <Download className="w-3.5 h-3.5" />
               Download Document
@@ -248,3 +284,7 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
     </div>
   );
 };
+
+const LoaderPreview: React.FC = () => (
+  <p className="text-xs text-slate-500">Loading secure document preview...</p>
+);

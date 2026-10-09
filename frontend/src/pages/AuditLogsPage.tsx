@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   History,
   ShieldCheck,
@@ -21,14 +21,13 @@ export const AuditLogsPage: React.FC = () => {
   const [actionFilter, setActionFilter] = useState('ALL');
   const [error, setError] = useState<string | null>(null);
 
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
       const res = await auditAPI.getLogs({
         action: actionFilter === 'ALL' ? undefined : actionFilter,
       });
       if (res.success) {
+        setError(null);
         setLogs(res.logs);
       }
     } catch (err: any) {
@@ -36,11 +35,14 @@ export const AuditLogsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [actionFilter]);
 
   useEffect(() => {
-    fetchLogs();
-  }, [actionFilter]);
+    const timer = window.setTimeout(() => {
+      void fetchLogs();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchLogs]);
 
   const getActionBadge = (action: string) => {
     switch (action) {
@@ -49,6 +51,14 @@ export const AuditLogsPage: React.FC = () => {
           icon: LogIn,
           color: 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20',
           label: 'User Authentication',
+        };
+      case 'ACCESS_REQUESTED':
+      case 'ACCESS_REQUEST_DECIDED':
+      case 'ACCESS_REVOKED':
+        return {
+          icon: ShieldCheck,
+          color: 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20',
+          label: action.replaceAll('_', ' ').toLowerCase(),
         };
       case 'PROFILE_UPDATE':
         return {
@@ -120,7 +130,17 @@ export const AuditLogsPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap">
-          {['ALL', 'LOGIN', 'RECORD_UPLOAD', 'RECORD_VIEW', 'RECORD_DELETE', 'PROFILE_UPDATE'].map(
+          {[
+            'ALL',
+            'LOGIN',
+            'ACCESS_REQUESTED',
+            'ACCESS_REQUEST_DECIDED',
+            'ACCESS_REVOKED',
+            'RECORD_UPLOAD',
+            'RECORD_VIEW',
+            'RECORD_DELETE',
+            'PROFILE_UPDATE',
+          ].map(
             (act) => (
               <button
                 key={act}

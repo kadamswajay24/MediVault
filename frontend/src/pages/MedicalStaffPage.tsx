@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Stethoscope,
   Pill,
@@ -9,13 +9,13 @@ import {
   Building,
   Award,
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { medicalStaffAPI, adminAPI } from '../services/api';
+import { useAuth } from '../context/useAuth';
+import { clinicalAccessAPI, medicalStaffAPI } from '../services/api';
 import type { MedicalNote, PrescriptionItem, User as UserType } from '../types';
 
 export const MedicalStaffPage: React.FC = () => {
   const { user } = useAuth();
-  const isDoctor = user?.role === 'medical_staff' || user?.role === 'admin';
+  const isDoctor = user?.role === 'medical_staff';
 
   const [notes, setNotes] = useState<MedicalNote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,6 +26,15 @@ export const MedicalStaffPage: React.FC = () => {
   const [selectedPatient, setSelectedPatient] = useState<UserType | null>(null);
   const [patientOverview, setPatientOverview] = useState<any | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
+  const [requestReason, setRequestReason] = useState('');
+  const [requestedUntil, setRequestedUntil] = useState(() => {
+    const date = new Date(Date.now() + 8 * 60 * 60 * 1000);
+    date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+    return date.toISOString().slice(0, 16);
+  });
+  const [requestingAccess, setRequestingAccess] = useState(false);
+  const [accessRequestMessage, setAccessRequestMessage] = useState<string | null>(null);
+  const [patientSearchError, setPatientSearchError] = useState<string | null>(null);
 
   // New Note Modal
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
@@ -40,9 +49,8 @@ export const MedicalStaffPage: React.FC = () => {
   const [submittingNote, setSubmittingNote] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
 
-  const fetchDoctorData = async () => {
+  const fetchDoctorData = useCallback(async () => {
     try {
-      setLoading(true);
       if (isDoctor) {
         const res = await medicalStaffAPI.getDoctorConsultations();
         if (res.success) setNotes(res.notes);
@@ -51,32 +59,36 @@ export const MedicalStaffPage: React.FC = () => {
         const res = await medicalStaffAPI.getPatientNotes(user.id);
         if (res.success) setNotes(res.notes);
       }
-    } catch {
-      // Ignore
+    } catch (err: any) {
+      setNoteError(err.response?.data?.message || 'Unable to load clinical consultations.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [isDoctor, user]);
 
   useEffect(() => {
-    fetchDoctorData();
-  }, [user]);
+    const timer = window.setTimeout(() => {
+      void fetchDoctorData();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchDoctorData]);
 
   // Patient search for doctor
   const handleSearchPatient = async (query: string) => {
     setPatientSearch(query);
+    setPatientSearchError(null);
     if (!query.trim()) {
       setMatchedPatients([]);
       return;
     }
 
     try {
-      const res = await adminAPI.getUsers({ role: 'patient', search: query.trim() });
+      const res = await medicalStaffAPI.searchPatients(query.trim());
       if (res.success) {
-        setMatchedPatients(res.users);
+        setMatchedPatients(res.patients);
       }
-    } catch {
-      // Fallback
+    } catch (err: any) {
+      setPatientSearchError(err.response?.data?.message || 'Unable to search patients.');
     }
   };
 
@@ -84,17 +96,43 @@ export const MedicalStaffPage: React.FC = () => {
     setSelectedPatient(p);
     setMatchedPatients([]);
     setPatientSearch(p.name);
+    setPatientOverview(null);
     setOverviewLoading(true);
+    setAccessRequestMessage(null);
 
     try {
       const res = await medicalStaffAPI.getPatientClinicalOverview(p.id);
       if (res.success) {
         setPatientOverview(res);
       }
-    } catch {
+    } catch (err: any) {
       setPatientOverview(null);
+      if (err.response?.status !== 403) {
+        setAccessRequestMessage(err.response?.data?.message || 'Unable to load patient overview.');
+      }
     } finally {
       setOverviewLoading(false);
+    }
+  };
+
+  const handleRequestAccess = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedPatient || !requestReason.trim()) return;
+
+    setRequestingAccess(true);
+    setAccessRequestMessage(null);
+    try {
+      const response = await clinicalAccessAPI.createRequest({
+        patientId: selectedPatient.id,
+        reason: requestReason.trim(),
+        requestedUntil: new Date(requestedUntil).toISOString(),
+      });
+      setAccessRequestMessage(response.message);
+      setRequestReason('');
+    } catch (err: any) {
+      setAccessRequestMessage(err.response?.data?.message || 'Unable to request patient access.');
+    } finally {
+      setRequestingAccess(false);
     }
   };
 
@@ -202,7 +240,7 @@ export const MedicalStaffPage: React.FC = () => {
               setIsNoteModalOpen(true);
               setNoteError(null);
             }}
-            disabled={!selectedPatient}
+            disabled={!selectedPatient || !patientOverview}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all disabled:opacity-50"
           >
             <Plus className="w-4 h-4" />
@@ -249,6 +287,9 @@ export const MedicalStaffPage: React.FC = () => {
               </div>
             )}
           </div>
+          {patientSearchError && (
+            <p className="text-xs text-rose-600 dark:text-rose-400">{patientSearchError}</p>
+          )}
 
           {/* Patient Clinical Overview Card */}
           {selectedPatient && (
@@ -268,6 +309,7 @@ export const MedicalStaffPage: React.FC = () => {
 
                 <button
                   onClick={() => setIsNoteModalOpen(true)}
+                  disabled={!patientOverview}
                   className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-500"
                 >
                   Create Prescription
@@ -310,7 +352,53 @@ export const MedicalStaffPage: React.FC = () => {
                     </p>
                   </div>
                 </div>
-              ) : null}
+              ) : (
+                <form
+                  onSubmit={handleRequestAccess}
+                  className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-900 dark:bg-amber-950/20"
+                >
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
+                      Request patient-specific access
+                    </h4>
+                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                      The patient, their authorized full-access proxy, or an administrator must approve your request. Access ends at the approved time.
+                    </p>
+                  </div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Clinical purpose
+                    <textarea
+                      value={requestReason}
+                      onChange={(event) => setRequestReason(event.target.value)}
+                      required
+                      maxLength={1000}
+                      rows={2}
+                      placeholder="Explain why you need this patient's records."
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                    />
+                  </label>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Requested access end
+                    <input
+                      type="datetime-local"
+                      value={requestedUntil}
+                      onChange={(event) => setRequestedUntil(event.target.value)}
+                      required
+                      className="mt-1 block rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                    />
+                  </label>
+                  {accessRequestMessage && (
+                    <p className="text-xs text-emerald-700 dark:text-emerald-300">{accessRequestMessage}</p>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={requestingAccess || !requestReason.trim()}
+                    className="rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                  >
+                    {requestingAccess ? 'Sending request...' : 'Send access request'}
+                  </button>
+                </form>
+              )}
             </div>
           )}
         </div>

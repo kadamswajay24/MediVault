@@ -2,7 +2,18 @@ import MedicalNote, { NOTE_TYPES } from '../models/MedicalNote.js';
 import User from '../models/User.js';
 import HealthProfile from '../models/HealthProfile.js';
 import MedicalRecord from '../models/MedicalRecord.js';
+import ClinicalAccessRequest from '../models/ClinicalAccessRequest.js';
 import { createAuditLog } from '../services/auditService.js';
+
+const requireActiveClinicalAccess = async (staffId, patientId) => {
+  const grant = await ClinicalAccessRequest.findOne({
+    patient: patientId,
+    medicalStaff: staffId,
+    status: 'approved',
+    expiresAt: { $gt: new Date() },
+  });
+  return grant;
+};
 
 // @desc    Add clinical consultation note or digital prescription
 // @route   POST /api/medical-staff/notes
@@ -39,6 +50,27 @@ export const addClinicalNote = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: 'Patient account not found.',
+      });
+    }
+
+    const accessGrant = await requireActiveClinicalAccess(req.user._id, patient._id);
+    if (!accessGrant) {
+      return res.status(403).json({
+        success: false,
+        message: 'An active, patient-specific clinical access grant is required before adding a note.',
+      });
+    }
+
+    const validLinkedRecords = Array.isArray(linkedRecords) && linkedRecords.length
+      ? await MedicalRecord.countDocuments({
+          _id: { $in: linkedRecords },
+          user: patient._id,
+        })
+      : 0;
+    if (validLinkedRecords !== (Array.isArray(linkedRecords) ? linkedRecords.length : 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Every linked record must belong to the selected patient.',
       });
     }
 
@@ -82,6 +114,14 @@ export const getPatientNotes = async (req, res, next) => {
   try {
     const { patientId } = req.params;
 
+    const isPatient = req.user.role === 'patient' && req.user._id.toString() === patientId;
+    if (!isPatient && !(await requireActiveClinicalAccess(req.user._id, patientId))) {
+      return res.status(403).json({
+        success: false,
+        message: 'An active patient-specific access grant is required to view clinical notes.',
+      });
+    }
+
     const notes = await MedicalNote.find({ patient: patientId })
       .populate('doctor', 'name email medicalStaffDetails')
       .populate('linkedRecords', 'title category recordDate')
@@ -103,6 +143,14 @@ export const getPatientNotes = async (req, res, next) => {
 export const getPatientClinicalOverview = async (req, res, next) => {
   try {
     const { patientId } = req.params;
+
+    const accessGrant = await requireActiveClinicalAccess(req.user._id, patientId);
+    if (!accessGrant) {
+      return res.status(403).json({
+        success: false,
+        message: 'An active patient-specific clinical access grant is required.',
+      });
+    }
 
     const patient = await User.findById(patientId).select('name email phone');
     if (!patient) {

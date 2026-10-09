@@ -9,7 +9,8 @@
     "dev": "node --watch src/server.js",
     "test": "node test_mvp.js",
     "test:rbac": "node test_rbac.js",
-    "test:all": "node test_mvp.js && node test_rbac.js"
+    "test:all": "node test_mvp.js && node test_rbac.js",
+    "admin:promote": "node src/scripts/promoteAdmin.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

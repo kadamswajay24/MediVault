@@ -16,13 +16,20 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const PASSWORD = process.env.DEMO_SEED_PASSWORD;
+
+if (process.env.NODE_ENV !== 'development') {
+  throw new Error('Demo data can only be seeded when NODE_ENV=development.');
+}
+
+if (!PASSWORD || PASSWORD.length < 12) {
+  throw new Error('Set DEMO_SEED_PASSWORD to a value of at least 12 characters before seeding.');
+}
 
 async function seedDemoData() {
   console.log('[MediVault Seed] Connecting to MongoDB...');
   await mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/medivault');
   console.log('[MediVault Seed] Connected successfully.');
-
-  const PASSWORD = 'Password@2026';
 
   // 1. Create or update Demo Patient
   let patient = await User.findOne({ email: 'patient@medivault.io' });
@@ -243,11 +250,7 @@ async function seedDemoData() {
   }
 
   console.log('✓ Demo Stakeholder Accounts Ready:');
-  console.log('  1. Patient:    patient@medivault.io   (Password: Password@2026)');
-  console.log('  2. Caregiver:  caregiver@medivault.io (Password: Password@2026)');
-  console.log('  3. Doctor:     doctor@medivault.io    (Password: Password@2026)');
-  console.log('  4. Agent:      agent@medivault.io     (Password: Password@2026)');
-  console.log('  5. Admin:      admin@medivault.io     (Password: Password@2026)');
+  console.log('  Demo account passwords are set from DEMO_SEED_PASSWORD.');
 
   await mongoose.disconnect();
 }

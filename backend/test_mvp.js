@@ -17,7 +17,53 @@ async function runTests() {
   if (healthData.status !== 'online') throw new Error('Health check failed');
   console.log('✓ Health check passed\n');
 
-  // 2. User 1 Registration
+  // 2. Public registration restrictions and staff approval
+  console.log('[TEST 2] Verifying staff approval and administrator registration restrictions...');
+  const roleRegistrationRes = await fetch(`${BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Public Admin Attempt',
+      email: `admin_${Date.now()}@medivault.io`,
+      password: 'Password@2026',
+      role: 'admin',
+    }),
+  });
+  if (roleRegistrationRes.status !== 400) {
+    throw new Error('Public administrator registration should be rejected');
+  }
+
+  const pendingStaffEmail = `staff_${Date.now()}@medivault.io`;
+  const pendingStaffRes = await fetch(`${BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Pending Medical Staff',
+      email: pendingStaffEmail,
+      password: 'Password@2026',
+      role: 'medical_staff',
+    }),
+  });
+  const pendingStaffData = await pendingStaffRes.json();
+  if (
+    pendingStaffRes.status !== 202 ||
+    !pendingStaffData.pendingApproval ||
+    pendingStaffData.token
+  ) {
+    throw new Error('Medical staff registration should wait for administrator approval');
+  }
+
+  const pendingLoginRes = await fetch(`${BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: pendingStaffEmail, password: 'Password@2026' }),
+  });
+  if (pendingLoginRes.status !== 403) {
+    throw new Error('Pending staff must not be able to sign in');
+  }
+  console.log('✓ Staff approval gate and administrator registration restriction passed\n');
+
+  // 3. User 1 Registration
   const testUser = {
     name: 'Ashish Patient',
     email: `patient_${Date.now()}@medivault.io`,
@@ -31,7 +77,14 @@ async function runTests() {
   });
   const regData = await regRes.json();
   console.log('Registration status:', regRes.status, 'success:', regData.success);
-  if (!regData.success || !regData.token) throw new Error('Registration failed');
+  if (
+    !regData.success ||
+    !regData.token ||
+    regData.user?.role !== 'patient' ||
+    regData.user?.approvalStatus !== 'approved'
+  ) {
+    throw new Error('Patient registration failed or was not immediately approved');
+  }
   const user1Token = regData.token;
   console.log('✓ Registration & token generation passed\n');
 

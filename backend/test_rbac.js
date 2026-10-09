@@ -10,7 +10,24 @@ async function runRBACTests() {
   const BASE_URL = 'http://localhost:5000/api';
   const timestamp = Date.now();
 
-  // Helper to register user
+  const adminEmail = process.env.TEST_ADMIN_EMAIL;
+  const adminPassword = process.env.TEST_ADMIN_PASSWORD;
+  if (!adminEmail || !adminPassword) {
+    throw new Error('Set TEST_ADMIN_EMAIL and TEST_ADMIN_PASSWORD to run RBAC tests.');
+  }
+
+  const adminLoginRes = await fetch(`${BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: adminEmail, password: adminPassword }),
+  });
+  const adminLoginData = await adminLoginRes.json();
+  if (!adminLoginData.success || adminLoginData.user?.role !== 'admin') {
+    throw new Error(`Could not authenticate configured test administrator: ${adminLoginData.message}`);
+  }
+  const admin = { token: adminLoginData.token, user: adminLoginData.user };
+
+  // Helper to register patient accounts
   const registerUser = async (data) => {
     const res = await fetch(`${BASE_URL}/auth/register`, {
       method: 'POST',
@@ -22,6 +39,38 @@ async function runRBACTests() {
       throw new Error(`Failed to register ${data.name}: ${json.message}`);
     }
     return { token: json.token, user: json.user };
+  };
+
+  const registerStaffUser = async (data) => {
+    const res = await fetch(`${BASE_URL}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const json = await res.json();
+    if (res.status !== 202 || !json.pendingApproval || json.token) {
+      throw new Error(`Expected ${data.name} registration to await approval: ${json.message}`);
+    }
+
+    const approvalRes = await fetch(`${BASE_URL}/admin/users/${json.user.id}/approve`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${admin.token}` },
+    });
+    const approvalData = await approvalRes.json();
+    if (!approvalData.success) {
+      throw new Error(`Failed to approve ${data.name}: ${approvalData.message}`);
+    }
+
+    const loginRes = await fetch(`${BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: data.email, password: data.password }),
+    });
+    const loginData = await loginRes.json();
+    if (!loginData.success || !loginData.token) {
+      throw new Error(`Failed to sign in approved staff account ${data.name}: ${loginData.message}`);
+    }
+    return { token: loginData.token, user: loginData.user };
   };
 
   // 1. Register Stakeholders
@@ -62,7 +111,7 @@ async function runRBACTests() {
       hospitalAffiliation: 'Apollo Multispeciality Hospital',
     },
   };
-  const doctor = await registerUser(doctorData);
+  const doctor = await registerStaffUser(doctorData);
   console.log('✓ Medical Staff registered:', doctor.user.name, `(${doctor.user.role})`);
 
   // D. Insurance Agent
@@ -78,19 +127,56 @@ async function runRBACTests() {
       licenseNumber: 'IRDAI-AG-99321',
     },
   };
-  const agent = await registerUser(agentData);
+  const agent = await registerStaffUser(agentData);
   console.log('✓ Insurance Agent registered:', agent.user.name, `(${agent.user.role})`);
 
-  // E. Administrator
-  const adminData = {
-    name: 'Chief Admin',
-    email: `admin_${timestamp}@medivault.io`,
-    password: 'Password@2026',
-    role: 'admin',
-    phone: '+91 9876543214',
-  };
-  const admin = await registerUser(adminData);
-  console.log('✓ Administrator registered:', admin.user.name, `(${admin.user.role})\n`);
+  console.log('✓ Existing administrator authenticated:', admin.user.email, '\n');
+
+  console.log('[TEST 1A] Testing patient-specific, time-limited clinical access...');
+  const accessRequestRes = await fetch(`${BASE_URL}/clinical-access`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${doctor.token}`,
+    },
+    body: JSON.stringify({
+      patientId: patient.user.id,
+      reason: 'Evaluate current cardiac symptoms',
+      requestedUntil: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+    }),
+  });
+  const accessRequestData = await accessRequestRes.json();
+  if (!accessRequestData.success || accessRequestData.request.status !== 'pending') {
+    throw new Error(`Clinical access request failed: ${accessRequestData.message}`);
+  }
+
+  const deniedOverviewRes = await fetch(
+    `${BASE_URL}/medical-staff/patients/${patient.user.id}/overview`,
+    { headers: { Authorization: `Bearer ${doctor.token}` } }
+  );
+  if (deniedOverviewRes.status !== 403) {
+    throw new Error('Medical staff must not view patient data before approval');
+  }
+
+  const accessDecisionRes = await fetch(
+    `${BASE_URL}/clinical-access/${accessRequestData.request._id}/decision`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${patient.token}`,
+      },
+      body: JSON.stringify({
+        decision: 'approved',
+        expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+      }),
+    }
+  );
+  const accessDecisionData = await accessDecisionRes.json();
+  if (!accessDecisionData.success || accessDecisionData.request.status !== 'approved') {
+    throw new Error(`Patient clinical access approval failed: ${accessDecisionData.message}`);
+  }
+  console.log('✓ Clinical access denied before approval and granted with an expiration\n');
 
   // 2. Patient Uploads a Medical Document
   console.log('[TEST 2] Patient Uploading Medical Record...');
@@ -136,6 +222,68 @@ async function runRBACTests() {
   const delegateData = await delegateRes.json();
   if (!delegateData.success) throw new Error(`Proxy delegation failed: ${delegateData.message}`);
   console.log('✓ Proxy delegation granted from Patient to Caregiver');
+
+  const revokePatientGrantRes = await fetch(
+    `${BASE_URL}/clinical-access/${accessRequestData.request._id}/revoke`,
+    {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${patient.token}` },
+    }
+  );
+  if (!(await revokePatientGrantRes.json()).success) {
+    throw new Error('Patient was unable to revoke the prior clinical access grant');
+  }
+
+  const proxyApprovalRequestRes = await fetch(`${BASE_URL}/clinical-access`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${doctor.token}`,
+    },
+    body: JSON.stringify({
+      patientId: patient.user.id,
+      reason: 'Follow-up cardiac evaluation',
+      requestedUntil: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+    }),
+  });
+  const proxyApprovalRequest = await proxyApprovalRequestRes.json();
+  if (!proxyApprovalRequest.success) {
+    throw new Error(`Second clinical access request failed: ${proxyApprovalRequest.message}`);
+  }
+  const proxyDecisionRes = await fetch(
+    `${BASE_URL}/clinical-access/${proxyApprovalRequest.request._id}/decision`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${caregiver.token}`,
+      },
+      body: JSON.stringify({
+        decision: 'approved',
+        expiresAt: new Date(Date.now() + 90 * 60 * 1000).toISOString(),
+      }),
+    }
+  );
+  const proxyDecision = await proxyDecisionRes.json();
+  if (!proxyDecision.success) {
+    throw new Error(`Authorized proxy could not approve staff access: ${proxyDecision.message}`);
+  }
+  console.log('✓ Authorized proxy approved staff access with an expiration\n');
+
+  const staffRecordsRes = await fetch(
+    `${BASE_URL}/records?patientId=${encodeURIComponent(patient.user.id)}`,
+    { headers: { Authorization: `Bearer ${doctor.token}` } }
+  );
+  const staffRecordsData = await staffRecordsRes.json();
+  if (!staffRecordsData.success || staffRecordsData.count !== 1) {
+    throw new Error(`Approved staff could not read patient records: ${staffRecordsData.message}`);
+  }
+  const staffDownloadRes = await fetch(`${BASE_URL}/records/${recordId}/download`, {
+    headers: { Authorization: `Bearer ${doctor.token}` },
+  });
+  if (staffDownloadRes.status !== 200) {
+    throw new Error('Approved staff could not download patient record under their access grant');
+  }
 
   // Caregiver queries their dependents
   const dependentsRes = await fetch(`${BASE_URL}/proxy/my-dependents`, {
@@ -346,6 +494,13 @@ async function runRBACTests() {
   console.log('Total registered users seen by Admin:', adminUsersData.count);
   if (adminUsersData.count < 5) throw new Error('Admin user list incomplete');
   console.log('✓ Admin user management directory verified');
+
+  const adminClaimsRes = await fetch(`${BASE_URL}/claims`, {
+    headers: { Authorization: `Bearer ${admin.token}` },
+  });
+  if (adminClaimsRes.status !== 403) {
+    throw new Error('Administrators must not access patient claims or records directly');
+  }
 
   // Admin views global audit logs
   const adminAuditRes = await fetch(`${BASE_URL}/admin/audit-logs`, {

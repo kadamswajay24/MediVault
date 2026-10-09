@@ -69,6 +69,10 @@ export const updateUserRole = async (req, res, next) => {
 
     const oldRole = user.role;
     user.role = role;
+    if (oldRole !== role || (role === 'patient' && user.approvalStatus === 'pending')) {
+      user.approvalStatus = 'approved';
+      user.isActive = true;
+    }
 
     if (medicalStaffDetails && typeof medicalStaffDetails === 'object') {
       user.medicalStaffDetails = {
@@ -168,6 +172,64 @@ export const toggleUserStatus = async (req, res, next) => {
         email: user.email,
         role: user.role,
         isActive: user.isActive,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Approve a pending staff account
+// @route   PUT /api/admin/users/:id/approve
+// @access  Private (Admin)
+export const approveUser = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User account not found.',
+      });
+    }
+
+    if (user.role === 'patient' || user.role === 'admin') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only staff accounts can be approved through this action.',
+      });
+    }
+
+    if (user.approvalStatus !== 'pending') {
+      return res.status(409).json({
+        success: false,
+        message: 'This staff account does not have a pending approval request.',
+      });
+    }
+
+    user.approvalStatus = 'approved';
+    user.isActive = true;
+    await user.save();
+
+    await createAuditLog({
+      userId: user._id,
+      performedBy: req.user._id,
+      action: 'ADMIN_USER_UPDATED',
+      details: `Admin (${req.user.name}) approved staff account for ${user.name} as [${user.role}]`,
+      resourceId: user._id,
+      resourceType: 'User',
+      req,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Staff account approved successfully.',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+        approvalStatus: user.approvalStatus,
       },
     });
   } catch (error) {

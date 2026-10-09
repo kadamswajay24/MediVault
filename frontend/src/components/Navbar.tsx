@@ -18,9 +18,10 @@ import {
   Shield,
   ArrowRightLeft,
   XCircle,
+  KeyRound,
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/useAuth';
+import { useTheme } from '../context/useTheme';
 
 interface NavbarProps {
   onOpenUpload?: () => void;
@@ -35,7 +36,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate('/');
   };
 
   // Determine role-specific nav items
@@ -51,14 +52,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
       case 'medical_staff':
         return [
           { name: 'Clinical Consultations', path: '/medical-staff', icon: Stethoscope },
+          { name: 'Patient Access', path: '/access-requests', icon: KeyRound },
           { name: 'Audit Trail', path: '/audit-logs', icon: History },
         ];
       case 'admin':
         return [
           { name: 'Governance', path: '/admin', icon: Shield },
-          { name: 'Claims', path: '/claims', icon: FileCheck2 },
-          { name: 'Clinical Care', path: '/medical-staff', icon: Stethoscope },
-          { name: 'Records Hub', path: '/records', icon: FileText },
+          { name: 'Access Requests', path: '/access-requests', icon: KeyRound },
           { name: 'Audit Trail', path: '/audit-logs', icon: History },
         ];
       case 'patient':
@@ -69,6 +69,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
           { name: 'Insurance Claims', path: '/claims', icon: FileCheck2 },
           { name: 'Caregivers', path: '/caregivers', icon: Users },
           { name: 'Health Profile', path: '/profile', icon: User },
+          { name: 'Staff Access', path: '/access-requests', icon: KeyRound },
           { name: 'Audit Trail', path: '/audit-logs', icon: History },
         ];
     }
@@ -118,7 +119,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
         <div className="flex items-center gap-6">
           <Link
             to={
-              user?.role === 'admin'
+              !isAuthenticated
+                ? '/'
+                : user?.role === 'admin'
                 ? '/admin'
                 : user?.role === 'insurance_agent'
                 ? '/claims'
@@ -227,13 +230,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
           ) : (
             <div className="flex items-center gap-2 text-xs">
               <Link
-                to="/login"
+                to="/patient/login"
                 className="px-3 py-1.5 font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900"
               >
                 Sign In
               </Link>
               <Link
-                to="/register"
+                to="/patient/register"
                 className="px-3 py-1.5 rounded-lg font-semibold bg-emerald-600 text-white hover:bg-emerald-500"
               >
                 Get Started

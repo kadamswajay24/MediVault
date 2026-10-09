@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   FileText,
@@ -12,7 +12,7 @@ import {
   FileCheck2,
   AlertCircle,
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import { dashboardAPI } from '../services/api';
 import type { DashboardResponse, MedicalRecord } from '../types';
 import { UploadModal } from '../components/UploadModal';
@@ -28,12 +28,11 @@ export const DashboardPage: React.FC = () => {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
       const res = await dashboardAPI.getStats();
       if (res.success) {
+        setError(null);
         setData(res);
       }
     } catch (err: any) {
@@ -41,11 +40,14 @@ export const DashboardPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchDashboardData();
-  }, [activeDependent]);
+    const timer = window.setTimeout(() => {
+      void fetchDashboardData();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeDependent, fetchDashboardData]);
 
   const handleUploadSuccess = () => {
     fetchDashboardData();
@@ -72,7 +74,10 @@ export const DashboardPage: React.FC = () => {
           <h2 className="text-base font-bold text-slate-900 dark:text-white">Unable to Load Vault Data</h2>
           <p className="text-xs text-slate-500 mt-1">{error}</p>
           <button
-            onClick={fetchDashboardData}
+            onClick={() => {
+              setError(null);
+              void fetchDashboardData();
+            }}
             className="mt-4 px-4 py-2 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700"
           >
             Retry

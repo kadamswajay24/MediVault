@@ -10,7 +10,7 @@ import {
   Loader2,
   ShieldCheck,
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import { profileAPI } from '../services/api';
 import type { HealthProfile } from '../types';
 

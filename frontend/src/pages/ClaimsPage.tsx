@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   FileCheck2,
   Clock,
@@ -13,7 +13,7 @@ import {
   TrendingUp,
   History,
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import { claimAPI, recordAPI } from '../services/api';
 import type { InsuranceClaim, MedicalRecord, ClaimStatus, ClaimType } from '../types';
 import { RecordViewerModal } from '../components/RecordViewerModal';
@@ -73,9 +73,8 @@ export const ClaimsPage: React.FC = () => {
   const [supplementing, setSupplementing] = useState(false);
   const [supplementError, setSupplementError] = useState<string | null>(null);
 
-  const fetchClaims = async () => {
+  const fetchClaims = useCallback(async () => {
     try {
-      setLoading(true);
       setError(null);
       const res = await claimAPI.getClaims({
         status: statusFilter === 'All' ? undefined : statusFilter,
@@ -89,19 +88,14 @@ export const ClaimsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchQuery, statusFilter]);
 
-  useEffect(() => {
-    fetchClaims();
-  }, [statusFilter, activeDependent]);
-
-  // Debounced search
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchClaims();
     }, 350);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [activeDependent, fetchClaims]);
 
   // Load patient's medical records for attaching to claim
   const handleOpenSubmitModal = async () => {

@@ -18,6 +18,7 @@ export interface User {
   email: string;
   role: UserRole;
   isActive: boolean;
+  approvalStatus?: 'pending' | 'approved';
   phone?: string;
   medicalStaffDetails?: MedicalStaffDetails;
   insuranceDetails?: InsuranceDetails;
@@ -26,9 +27,10 @@ export interface User {
 
 export interface AuthResponse {
   success: boolean;
-  token: string;
+  token?: string;
   user: User;
   message?: string;
+  pendingApproval?: boolean;
 }
 
 export interface EmergencyContact {
@@ -186,6 +188,9 @@ export interface AuditLog {
     | 'CLAIM_SUBMITTED'
     | 'CLAIM_REVIEWED'
     | 'CLINICAL_NOTE_ADDED'
+    | 'ACCESS_REQUESTED'
+    | 'ACCESS_REQUEST_DECIDED'
+    | 'ACCESS_REVOKED'
     | 'ADMIN_USER_UPDATED';
   details: string;
   resourceId?: string | null;
