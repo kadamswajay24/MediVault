@@ -359,8 +359,18 @@ export const adminAPI = {
     status?: string;
     search?: string;
   }): Promise<{ success: boolean; count: number; users: User[] }> => {
-    const res = await api.get('/admin/users', { params });
-    return res.data;
+    const res = await api.get<{
+      success: boolean;
+      count: number;
+      users: Array<Omit<User, 'id'> & { id?: string; _id?: string }>;
+    }>('/admin/users', { params });
+    return {
+      ...res.data,
+      users: res.data.users.map((user) => ({
+        ...user,
+        id: user.id || user._id || '',
+      })),
+    };
   },
 
   updateUserRole: async (

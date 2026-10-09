@@ -61,6 +61,11 @@ export const AdminPage: React.FC = () => {
   }, [fetchAdminData]);
 
   const handleToggleStatus = async (user: User) => {
+    if (!user.id) {
+      alert('This user record is missing its database ID. Refresh the page and try again.');
+      return;
+    }
+
     const nextStatus = !user.isActive;
     if (
       !confirm(
@@ -83,6 +88,11 @@ export const AdminPage: React.FC = () => {
   };
 
   const handleApproveUser = async (user: User) => {
+    if (!user.id) {
+      alert('This user record is missing its database ID. Refresh the page and try again.');
+      return;
+    }
+
     try {
       setApprovingUserId(user.id);
       await adminAPI.approveUser(user.id);
@@ -116,6 +126,10 @@ export const AdminPage: React.FC = () => {
   const handleSaveRole = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
+    if (!editingUser.id) {
+      alert('This user record is missing its database ID. Refresh the page and try again.');
+      return;
+    }
 
     setUpdatingRole(true);
     try {
@@ -284,7 +298,7 @@ export const AdminPage: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                     {users.map((u) => (
-                      <tr key={u.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                      <tr key={u.id || u.email} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
                         <td className="px-4 py-3.5">
                           <div className="font-bold text-slate-900 dark:text-white text-xs">
                             {u.name}
@@ -363,7 +377,7 @@ export const AdminPage: React.FC = () => {
                           {u.approvalStatus === 'pending' && (
                             <button
                               onClick={() => handleApproveUser(u)}
-                              disabled={approvingUserId === u.id}
+                              disabled={!u.id || approvingUserId === u.id}
                               className="button-primary px-2.5 py-1 text-xs font-semibold disabled:opacity-50 rounded"
                             >
                               {approvingUserId === u.id ? 'Approving...' : 'Approve'}
@@ -371,6 +385,7 @@ export const AdminPage: React.FC = () => {
                           )}
                           <button
                             onClick={() => handleOpenRoleModal(u)}
+                            disabled={!u.id}
                             className="px-2.5 py-1 text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded"
                           >
                             Edit Role
@@ -379,6 +394,7 @@ export const AdminPage: React.FC = () => {
                           {u.approvalStatus !== 'pending' && (
                             <button
                               onClick={() => handleToggleStatus(u)}
+                              disabled={!u.id}
                               className={`px-2.5 py-1 text-xs font-semibold rounded ${
                                 u.isActive
                                   ? 'text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30'
