@@ -270,7 +270,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               type="submit"
               id="upload-submit-btn"
               disabled={loading || !file}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 hover:from-teal-400 hover:to-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-all"
+              className="button-primary flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
               {loading ? (
                 <>

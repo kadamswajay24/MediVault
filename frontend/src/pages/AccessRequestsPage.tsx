@@ -201,7 +201,7 @@ export const AccessRequestsPage: React.FC = () => {
                           type="button"
                           onClick={() => handleDecision(request, 'approved')}
                           disabled={busyRequestId === request._id || !expiryInputs[request._id]}
-                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+                          className="button-primary inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-50"
                         >
                           {busyRequestId === request._id ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />

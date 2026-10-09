@@ -138,7 +138,7 @@ export const AdminPage: React.FC = () => {
           </span>
         </div>
         <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-          Oversee all registered stakeholders, configure role permissions, monitor system-wide compliance, and audit security events.
+          Manage accounts and role permissions, review platform activity, and audit security events.
         </p>
       </div>
 
@@ -170,7 +170,7 @@ export const AdminPage: React.FC = () => {
             <div className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
               {stats.totalRecords}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">Encrypted on Disk</div>
+            <div className="text-[11px] text-slate-500 mt-1">Medical records stored</div>
           </div>
 
           <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -182,11 +182,11 @@ export const AdminPage: React.FC = () => {
           </div>
 
           <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm col-span-2 lg:col-span-1">
-            <span className="text-xs text-slate-500 font-semibold uppercase">Compliance Logs</span>
+            <span className="text-xs text-slate-500 font-semibold uppercase">Audit Events</span>
             <div className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
               {stats.totalAuditLogs}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">HIPAA Compliant</div>
+            <div className="text-[11px] text-slate-500 mt-1">Recorded platform activity</div>
           </div>
         </div>
       )}
@@ -349,7 +349,7 @@ export const AdminPage: React.FC = () => {
                             <button
                               onClick={() => handleApproveUser(u)}
                               disabled={approvingUserId === u.id}
-                              className="px-2.5 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded"
+                              className="button-primary px-2.5 py-1 text-xs font-semibold disabled:opacity-50 rounded"
                             >
                               {approvingUserId === u.id ? 'Approving...' : 'Approve'}
                             </button>

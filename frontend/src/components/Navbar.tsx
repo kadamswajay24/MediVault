@@ -97,7 +97,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
     <header className="app-header sticky top-0 z-40 w-full border-b backdrop-blur-md">
       {/* Top dependent switcher alert bar if proxy is active */}
       {activeDependent && (
-        <div className="bg-teal-600 text-white px-4 py-1.5 text-xs flex items-center justify-between font-medium">
+        <div className="bg-teal-700 text-white px-4 py-1.5 text-xs flex items-center justify-between font-medium">
           <div className="max-w-7xl mx-auto w-full flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <ArrowRightLeft className="w-3.5 h-3.5" />
@@ -131,7 +131,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
             }
             className="flex items-center gap-2 group"
           >
-            <div className="h-8 w-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-sm">
+            <div className="h-8 w-8 rounded-lg bg-emerald-500 flex items-center justify-center text-slate-950 shadow-sm">
               <ShieldCheck className="w-4 h-4 stroke-[2.4]" />
             </div>
             <span className="text-base font-bold tracking-tight text-slate-900 dark:text-white">
@@ -181,7 +181,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
               {onOpenUpload && user?.role === 'patient' && (
                 <button
                   onClick={onOpenUpload}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm"
+                  className="button-primary flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Upload Record</span>
@@ -234,7 +234,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
               </Link>
               <Link
                 to="/patient/register"
-                className="px-3 py-1.5 rounded-lg font-semibold bg-emerald-600 text-white hover:bg-emerald-500"
+                className="button-primary px-3 py-1.5 rounded-lg font-semibold"
               >
                 Get Started
               </Link>

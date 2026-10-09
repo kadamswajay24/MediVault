@@ -147,7 +147,7 @@ export const AuditLogsPage: React.FC = () => {
                 onClick={() => setActionFilter(act)}
                 className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
                   actionFilter === act
-                    ? 'bg-teal-600 dark:bg-teal-500 text-white dark:text-slate-950 font-bold shadow-sm'
+                    ? 'bg-teal-700 dark:bg-teal-500 text-white dark:text-slate-950 font-bold'
                     : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >

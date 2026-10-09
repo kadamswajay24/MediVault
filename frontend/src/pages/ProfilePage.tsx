@@ -474,7 +474,7 @@ export const ProfilePage: React.FC = () => {
             type="submit"
             id="profile-save-btn"
             disabled={saving}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 hover:from-teal-400 hover:to-emerald-400 shadow-lg shadow-teal-500/25 transition-all transform hover:-translate-y-0.5 disabled:opacity-50"
+            className="button-primary flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold shadow-sm disabled:opacity-50"
           >
             {saving ? (
               <>

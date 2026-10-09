@@ -20,7 +20,7 @@ export const PatientLandingPage: React.FC = () => (
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <Link
             to="/patient/login"
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500"
+            className="button-primary inline-flex items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-semibold shadow-sm"
           >
             Sign in to your account
             <ArrowRight className="h-4 w-4" />

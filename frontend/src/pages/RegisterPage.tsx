@@ -104,7 +104,7 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
       <div className="max-w-lg w-full space-y-6">
         {/* Header */}
         <div className="text-center space-y-1">
-          <div className="inline-flex p-2.5 rounded-xl bg-emerald-600 text-white mb-2 shadow-sm">
+          <div className="inline-flex p-2.5 rounded-xl bg-emerald-500 text-slate-950 mb-2 shadow-sm">
             <ShieldCheck className="w-6 h-6 stroke-[2.4]" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
@@ -330,7 +330,7 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all disabled:opacity-50"
+              className="button-primary w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold shadow-sm disabled:opacity-50"
             >
               {loading ? (
                 <>

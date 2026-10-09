@@ -132,7 +132,7 @@ export const CaregiversPage: React.FC = () => {
             setIsDelegateModalOpen(true);
             setModalError(null);
           }}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all"
+          className="button-primary inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm"
         >
           <UserPlus className="w-4 h-4" />
           Authorize New Caregiver
@@ -230,7 +230,7 @@ export const CaregiversPage: React.FC = () => {
                         </div>
 
                         {isActive ? (
-                          <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-teal-600 text-white flex items-center gap-1">
+                          <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-teal-700 text-white flex items-center gap-1">
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             Active Vault
                           </span>
@@ -427,7 +427,7 @@ export const CaregiversPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={delegating}
-                  className="px-4 py-2 text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 rounded-lg shadow-sm disabled:opacity-50 flex items-center gap-2"
+                  className="button-primary px-4 py-2 text-sm font-semibold rounded-lg shadow-sm disabled:opacity-50 flex items-center gap-2"
                 >
                   {delegating && <Loader2 className="w-4 h-4 animate-spin" />}
                   Confirm Delegation

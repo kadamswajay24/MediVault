@@ -307,7 +307,7 @@ export const ClaimsPage: React.FC = () => {
         {!isAgent && (
           <button
             onClick={handleOpenSubmitModal}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all"
+            className="button-primary inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm"
           >
             <Plus className="w-4 h-4" />
             File New Claim
@@ -372,7 +372,7 @@ export const ClaimsPage: React.FC = () => {
           {!isAgent && (
             <button
               onClick={handleOpenSubmitModal}
-              className="mt-4 px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-500"
+              className="button-primary mt-4 px-3.5 py-2 rounded-lg text-xs font-semibold"
             >
               Submit First Claim
             </button>
@@ -670,7 +670,7 @@ export const ClaimsPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 rounded-lg shadow-sm disabled:opacity-50 flex items-center gap-2"
+                  className="button-primary px-4 py-2 text-sm font-semibold rounded-lg shadow-sm disabled:opacity-50 flex items-center gap-2"
                 >
                   {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                   Submit Claim to Insurer
@@ -757,7 +757,7 @@ export const ClaimsPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={reviewing}
-                  className="px-4 py-2 text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 rounded-lg shadow-sm disabled:opacity-50 flex items-center gap-2"
+                  className="button-primary px-4 py-2 text-sm font-semibold rounded-lg shadow-sm disabled:opacity-50 flex items-center gap-2"
                 >
                   {reviewing && <Loader2 className="w-4 h-4 animate-spin" />}
                   Submit Adjudication

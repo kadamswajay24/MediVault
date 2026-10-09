@@ -131,7 +131,7 @@ export const RecordsPage: React.FC = () => {
         <button
           onClick={() => setIsUploadOpen(true)}
           id="records-page-upload-btn"
-          className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 hover:from-teal-400 hover:to-emerald-400 shadow-lg shadow-teal-500/20 transition-all self-start sm:self-auto"
+          className="button-primary flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm self-start sm:self-auto"
         >
           <Plus className="w-4 h-4 stroke-[2.5]" />
           <span>Upload New Record</span>
@@ -188,7 +188,7 @@ export const RecordsPage: React.FC = () => {
             onClick={() => handleCategorySelect('All')}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
               selectedCategory === 'All'
-                ? 'bg-teal-600 dark:bg-teal-500 text-white dark:text-slate-950 shadow-md shadow-teal-500/20'
+                ? 'bg-teal-700 dark:bg-teal-500 text-white dark:text-slate-950'
                 : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/80 dark:hover:bg-slate-800'
             }`}
           >

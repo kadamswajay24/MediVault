@@ -116,7 +116,7 @@ export const DashboardPage: React.FC = () => {
           <button
             onClick={() => setIsUploadOpen(true)}
             id="dashboard-upload-cta"
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all"
+            className="button-primary flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold shadow-sm"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>Upload Document</span>
@@ -151,7 +151,7 @@ export const DashboardPage: React.FC = () => {
           <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
             {stats.totalRecords}
           </div>
-          <p className="text-[11px] text-slate-400 mt-0.5">Encrypted diagnostic files</p>
+          <p className="text-[11px] text-slate-500 mt-0.5">Documents in your health vault</p>
         </div>
 
         {/* Insurance Claims */}
