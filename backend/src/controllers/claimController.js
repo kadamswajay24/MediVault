@@ -91,7 +91,10 @@ export const submitClaim = async (req, res, next) => {
       userId: patientId,
       performedBy: req.user._id,
       action: 'CLAIM_SUBMITTED',
-      details: `Insurance claim ${claimNumber} submitted to ${insuranceCompany} for amount $${numericAmount}`,
+      details: `Insurance claim ${claimNumber} submitted to ${insuranceCompany} for amount ${new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+      }).format(numericAmount)}`,
       resourceId: claim._id,
       resourceType: 'InsuranceClaim',
       req,

@@ -134,12 +134,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
             <div className="h-8 w-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-sm">
               <ShieldCheck className="w-4 h-4 stroke-[2.4]" />
             </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-base font-bold tracking-tight text-slate-900 dark:text-white">
-                Medi<span className="text-emerald-600 dark:text-emerald-400">Vault</span>
-              </span>
-              <span className="text-[10px] text-slate-500 font-mono">2.0</span>
-            </div>
+            <span className="text-base font-bold tracking-tight text-slate-900 dark:text-white">
+              Medi<span className="text-emerald-600 dark:text-emerald-400">Vault</span>
+            </span>
           </Link>
 
           {/* Desktop Nav Links */}

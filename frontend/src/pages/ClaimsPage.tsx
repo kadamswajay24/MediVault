@@ -28,6 +28,12 @@ const CLAIM_TYPES: ClaimType[] = [
   'Other',
 ];
 
+const formatINR = (amount: number) =>
+  new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+  }).format(amount);
+
 export const ClaimsPage: React.FC = () => {
   const { user, activeDependent } = useAuth();
   const isAgent = user?.role === 'insurance_agent';
@@ -214,7 +220,7 @@ export const ClaimsPage: React.FC = () => {
     const maxAllowed = supplementingClaim.claimAmount - supplementingClaim.approvedAmount;
     if (numericAmount > maxAllowed) {
       setSupplementError(
-        `Additional amount cannot exceed $${maxAllowed.toLocaleString()} (original claim ceiling).`
+        `Additional amount cannot exceed ${formatINR(maxAllowed)} (original claim ceiling).`
       );
       return;
     }
@@ -424,11 +430,11 @@ export const ClaimsPage: React.FC = () => {
 
                     <td className="px-4 py-3.5">
                       <div className="font-semibold text-slate-900 dark:text-white">
-                        ${claim.claimAmount.toLocaleString()}
+                        {formatINR(claim.claimAmount)}
                       </div>
                       {claim.approvedAmount > 0 && (
                         <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                          Approved: ${claim.approvedAmount.toLocaleString()}
+                          Approved: {formatINR(claim.approvedAmount)}
                         </div>
                       )}
                     </td>
@@ -580,7 +586,7 @@ export const ClaimsPage: React.FC = () => {
 
                 <div>
                   <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Claim Amount ($) *
+                    Claim Amount (INR) *
                   </label>
                   <input
                     type="number"
@@ -685,7 +691,7 @@ export const ClaimsPage: React.FC = () => {
                   Adjudicate Claim: {reviewingClaim.claimNumber}
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Policy: {reviewingClaim.policyNumber} • Requested: ${reviewingClaim.claimAmount.toLocaleString()}
+                  Policy: {reviewingClaim.policyNumber} • Requested: {formatINR(reviewingClaim.claimAmount)}
                 </p>
               </div>
               <button
@@ -715,7 +721,7 @@ export const ClaimsPage: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
-                  Approved Payout Amount ($)
+                  Approved Payout Amount (INR)
                 </label>
                 <input
                   type="number"
@@ -735,7 +741,7 @@ export const ClaimsPage: React.FC = () => {
                   rows={3}
                   value={agentRemarks}
                   onChange={(e) => setAgentRemarks(e.target.value)}
-                  placeholder="e.g. Diagnostic reports verified. Approved minus $200 copay."
+                  placeholder="e.g. Diagnostic reports verified. Approved minus ₹200 copay."
                   className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg"
                 />
               </div>
@@ -798,16 +804,16 @@ export const ClaimsPage: React.FC = () => {
             <div className="mb-4 p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-2">
               <div className="flex justify-between text-xs">
                 <span className="text-slate-500 font-medium">Original Claimed</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-white">${supplementingClaim.claimAmount.toLocaleString()}</span>
+                <span className="font-mono font-bold text-slate-900 dark:text-white">{formatINR(supplementingClaim.claimAmount)}</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-slate-500 font-medium">Initially Approved</span>
-                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">${supplementingClaim.approvedAmount.toLocaleString()}</span>
+                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{formatINR(supplementingClaim.approvedAmount)}</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-slate-500 font-medium">Remaining Ceiling</span>
                 <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
-                  ${(supplementingClaim.claimAmount - supplementingClaim.approvedAmount).toLocaleString()}
+                  {formatINR(supplementingClaim.claimAmount - supplementingClaim.approvedAmount)}
                 </span>
               </div>
               {/* Supplemental payment history */}
@@ -819,7 +825,7 @@ export const ClaimsPage: React.FC = () => {
                   {supplementingClaim.supplementalPayments.map((sp) => (
                     <div key={sp._id} className="flex justify-between text-[11px] text-slate-500">
                       <span className="truncate max-w-[200px]">{sp.reason}</span>
-                      <span className="font-mono text-amber-600 dark:text-amber-400 ml-2">+${sp.amount.toLocaleString()}</span>
+                      <span className="font-mono text-amber-600 dark:text-amber-400 ml-2">+{formatINR(sp.amount)}</span>
                     </div>
                   ))}
                 </div>
@@ -836,7 +842,7 @@ export const ClaimsPage: React.FC = () => {
             <form onSubmit={handleSaveSupplement} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
-                  Additional Amount to Deposit ($) *
+                  Additional Amount to Deposit (INR) *
                 </label>
                 <input
                   type="number"
@@ -847,7 +853,7 @@ export const ClaimsPage: React.FC = () => {
                   autoFocus
                   value={supplementAmount}
                   onChange={(e) => setSupplementAmount(e.target.value)}
-                  placeholder={`Max: $${(supplementingClaim.claimAmount - supplementingClaim.approvedAmount).toLocaleString()}`}
+                  placeholder={`Max: ${formatINR(supplementingClaim.claimAmount - supplementingClaim.approvedAmount)}`}
                   className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                 />
               </div>
