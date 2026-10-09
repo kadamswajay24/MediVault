@@ -232,7 +232,9 @@ go to the frontend. The API remains a normal local Express server outside Vercel
    - `MONGODB_URI`: the Atlas connection string
    - `JWT_SECRET`: a unique, randomly generated production secret
    - `JWT_EXPIRES_IN`: for example, `7d`
-   - `CLIENT_URL`: the exact deployed Vercel origin, such as `https://your-app.vercel.app`
+   - `CLIENT_URL`: comma-separated exact origins only if the frontend is hosted separately
+     from the API (for example, `https://app.example.com`). Same-origin Vercel service
+     requests are allowed automatically; this variable is not needed for the bundled app.
    - `NODE_ENV=production`
 4. The frontend uses the same-origin `/api` path, so it needs no backend URL binding and
    no `VITE_API_BASE_URL` override for this routing setup.

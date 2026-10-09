@@ -21,8 +21,25 @@ connectDB();
 
 const app = express();
 
+const isSameOrigin = (origin, req) => {
+  if (!origin) return false;
+
+  const forwardedHost = req.get('x-forwarded-host')?.split(',')[0].trim();
+  const requestHost = forwardedHost || req.get('host');
+  const requestProtocol = req.get('x-forwarded-proto')?.split(',')[0].trim() || req.protocol;
+
+  if (!requestHost) return false;
+
+  try {
+    const originUrl = new URL(origin);
+    return originUrl.host === requestHost && originUrl.protocol === `${requestProtocol}:`;
+  } catch {
+    return false;
+  }
+};
+
 // Middlewares
-app.use(cors({
+const corsMiddleware = cors({
   origin: process.env.NODE_ENV === 'production'
     ? (origin, callback) => {
       const allowedOrigins = (process.env.CLIENT_URL || '')
@@ -39,7 +56,16 @@ app.use(cors({
     }
     : true,
   credentials: true,
-}));
+});
+
+app.use((req, res, next) => {
+  if (process.env.NODE_ENV === 'production' && isSameOrigin(req.get('origin'), req)) {
+    next();
+    return;
+  }
+
+  corsMiddleware(req, res, next);
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
