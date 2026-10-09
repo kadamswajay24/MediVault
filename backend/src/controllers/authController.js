@@ -67,6 +67,15 @@ export const registerUser = async (req, res, next) => {
       });
     }
 
+    const normalizedPhone = String(phone || '').replace(/[\s()-]/g, '');
+    const phoneMatch = normalizedPhone.match(/^\+?91([6-9]\d{9})$/);
+    if (!phoneMatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid 10-digit Indian mobile number with the +91 country code.',
+      });
+    }
+
     const normalizedEmail = email.toLowerCase().trim();
     const existingUser = await User.findOne({ email: normalizedEmail });
 
@@ -84,7 +93,7 @@ export const registerUser = async (req, res, next) => {
       role: role || 'patient',
       approvalStatus: role === 'patient' ? 'approved' : 'pending',
       isActive: role === 'patient',
-      phone: phone ? String(phone).trim() : '',
+      phone: `+91${phoneMatch[1]}`,
     };
 
     if (medicalStaffDetails && typeof medicalStaffDetails === 'object') {

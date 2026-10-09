@@ -45,10 +45,22 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
   const { register } = useAuth();
   const navigate = useNavigate();
 
+  const handlePhoneChange = (value: string) => {
+    const formattedNumber = value.trim().replace(/[\s()-]/g, '');
+    const internationalNumber = formattedNumber.match(/^\+?91([6-9]\d{9})$/);
+    const digits = value.replace(/\D/g, '');
+    setPhone(internationalNumber ? internationalNumber[1] : digits.slice(0, 10));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !email || !password || !confirmPassword) {
       setError('Please fill in all required fields.');
+      return;
+    }
+
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      setError('Enter a valid 10-digit Indian mobile number.');
       return;
     }
 
@@ -71,7 +83,7 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
         email: email.trim(),
         password,
         role,
-        phone: phone.trim(),
+        phone: `+91${phone}`,
         medicalStaffDetails:
           role === 'medical_staff'
             ? { licenseNumber, specialization, hospitalAffiliation }
@@ -202,17 +214,26 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Phone Number
+                  Phone Number *
                 </label>
                 <div className="relative">
                   <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <span className="absolute left-9 top-1/2 -translate-y-1/2 border-r border-slate-300 pr-2 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400">
+                    +91
+                  </span>
                   <input
-                    type="text"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+91 9876543210"
-                    className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
-                  />
+                      type="tel"
+                      required
+                      inputMode="numeric"
+                      autoComplete="tel-national"
+                      pattern="[6-9][0-9]{9}"
+                      value={phone}
+                      onChange={(e) => handlePhoneChange(e.target.value)}
+                      placeholder="9876543210"
+                      aria-label="10-digit Indian mobile number"
+                      title="Enter a 10-digit Indian mobile number starting with 6, 7, 8, or 9."
+                      className="w-full pl-[4.4rem] pr-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    />
                 </div>
               </div>
             </div>

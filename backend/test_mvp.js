@@ -42,6 +42,7 @@ async function runTests() {
       email: pendingStaffEmail,
       password: 'Password@2026',
       role: 'medical_staff',
+      phone: '+91 9876543214',
     }),
   });
   const pendingStaffData = await pendingStaffRes.json();
@@ -64,10 +65,38 @@ async function runTests() {
   console.log('✓ Staff approval gate and administrator registration restriction passed\n');
 
   // 3. User 1 Registration
+  const missingPhoneRes = await fetch(`${BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Missing Phone Patient',
+      email: `missing_phone_${Date.now()}@medivault.io`,
+      password: 'Password@2026',
+    }),
+  });
+  if (missingPhoneRes.status !== 400) {
+    throw new Error('Registration without an Indian mobile number should be rejected');
+  }
+
+  const nonIndianPhoneRes = await fetch(`${BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Invalid Phone Patient',
+      email: `invalid_phone_${Date.now()}@medivault.io`,
+      password: 'Password@2026',
+      phone: '9876543210',
+    }),
+  });
+  if (nonIndianPhoneRes.status !== 400) {
+    throw new Error('Registration without the +91 country code should be rejected');
+  }
+
   const testUser = {
     name: 'Ashish Patient',
     email: `patient_${Date.now()}@medivault.io`,
     password: 'Password@2026',
+    phone: '+91 9876543215',
   };
   console.log('[TEST 2] Registering User 1:', testUser.email);
   const regRes = await fetch(`${BASE_URL}/auth/register`, {
@@ -81,9 +110,10 @@ async function runTests() {
     !regData.success ||
     !regData.token ||
     regData.user?.role !== 'patient' ||
-    regData.user?.approvalStatus !== 'approved'
+    regData.user?.approvalStatus !== 'approved' ||
+    regData.user?.phone !== '+919876543215'
   ) {
-    throw new Error('Patient registration failed or was not immediately approved');
+    throw new Error('Patient registration failed, was not immediately approved, or did not normalize the Indian mobile number');
   }
   const user1Token = regData.token;
   console.log('✓ Registration & token generation passed\n');
