@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import type { UserRole } from '../types';
+import { MEDICAL_SPECIALIZATIONS } from '../constants/medicalSpecializations';
 
 type RegistrationPortal = 'patient' | 'organization';
 
@@ -34,6 +35,7 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
   // Role details
   const [licenseNumber, setLicenseNumber] = useState('');
   const [specialization, setSpecialization] = useState('');
+  const [customSpecialization, setCustomSpecialization] = useState('');
   const [hospitalAffiliation, setHospitalAffiliation] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [agentId, setAgentId] = useState('');
@@ -87,7 +89,12 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
         phone: `+91${phone}`,
         medicalStaffDetails:
           role === 'medical_staff'
-            ? { licenseNumber, specialization, hospitalAffiliation }
+            ? {
+                licenseNumber,
+                specialization:
+                  specialization === 'Other' ? customSpecialization.trim() : specialization,
+                hospitalAffiliation,
+              }
             : undefined,
         insuranceDetails:
           role === 'insurance_agent'
@@ -276,14 +283,28 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
                     onChange={(e) => setLicenseNumber(e.target.value)}
                     className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded"
                   />
-                  <input
-                    type="text"
-                    placeholder="Specialization (e.g. Cardiologist)"
+                  <select
+                    aria-label="Medical specialization"
                     value={specialization}
                     onChange={(e) => setSpecialization(e.target.value)}
                     className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded"
-                  />
+                  >
+                    <option value="">Select specialization</option>
+                    {MEDICAL_SPECIALIZATIONS.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
+                {specialization === 'Other' && (
+                  <input
+                    type="text"
+                    placeholder="Enter specialization"
+                    value={customSpecialization}
+                    onChange={(e) => setCustomSpecialization(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded text-xs"
+                  />
+                )}
                 <input
                   type="text"
                   placeholder="Hospital / Clinic Affiliation"

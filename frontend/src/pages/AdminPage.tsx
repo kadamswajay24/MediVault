@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { adminAPI } from '../services/api';
 import type { User, UserRole, AdminStatsResponse, AuditLog } from '../types';
+import { MEDICAL_SPECIALIZATIONS } from '../constants/medicalSpecializations';
 
 export const AdminPage: React.FC = () => {
   const [stats, setStats] = useState<AdminStatsResponse['stats'] | null>(null);
@@ -24,6 +25,7 @@ export const AdminPage: React.FC = () => {
   const [targetRole, setTargetRole] = useState<UserRole>('patient');
   const [licenseNumber, setLicenseNumber] = useState('');
   const [specialization, setSpecialization] = useState('');
+  const [customSpecialization, setCustomSpecialization] = useState('');
   const [hospitalAffiliation, setHospitalAffiliation] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [agentId, setAgentId] = useState('');
@@ -96,7 +98,16 @@ export const AdminPage: React.FC = () => {
     setEditingUser(u);
     setTargetRole(u.role);
     setLicenseNumber(u.medicalStaffDetails?.licenseNumber || '');
-    setSpecialization(u.medicalStaffDetails?.specialization || '');
+    const existingSpecialization = u.medicalStaffDetails?.specialization || '';
+    const isStandardSpecialization = MEDICAL_SPECIALIZATIONS.includes(
+      existingSpecialization as (typeof MEDICAL_SPECIALIZATIONS)[number]
+    );
+    setSpecialization(
+      existingSpecialization && !isStandardSpecialization ? 'Other' : existingSpecialization
+    );
+    setCustomSpecialization(
+      existingSpecialization && !isStandardSpecialization ? existingSpecialization : ''
+    );
     setHospitalAffiliation(u.medicalStaffDetails?.hospitalAffiliation || '');
     setCompanyName(u.insuranceDetails?.companyName || '');
     setAgentId(u.insuranceDetails?.agentId || '');
@@ -110,7 +121,11 @@ export const AdminPage: React.FC = () => {
     try {
       const res = await adminAPI.updateUserRole(editingUser.id, {
         role: targetRole,
-        medicalStaffDetails: { licenseNumber, specialization, hospitalAffiliation },
+        medicalStaffDetails: {
+          licenseNumber,
+          specialization: specialization === 'Other' ? customSpecialization.trim() : specialization,
+          hospitalAffiliation,
+        },
         insuranceDetails: { companyName, agentId, licenseNumber },
       });
 
@@ -479,14 +494,33 @@ export const AdminPage: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-600 dark:text-slate-400">Specialization</label>
-                    <input
-                      type="text"
+                    <select
+                      aria-label="Medical specialization"
                       value={specialization}
                       onChange={(e) => setSpecialization(e.target.value)}
-                      placeholder="e.g. Cardiologist"
                       className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded mt-0.5"
-                    />
+                    >
+                      <option value="">Select specialization</option>
+                      {MEDICAL_SPECIALIZATIONS.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                      <option value="Other">Other</option>
+                    </select>
                   </div>
+                  {specialization === 'Other' && (
+                    <div>
+                      <label className="block text-[11px] text-slate-600 dark:text-slate-400">
+                        Enter Specialization
+                      </label>
+                      <input
+                        type="text"
+                        value={customSpecialization}
+                        onChange={(e) => setCustomSpecialization(e.target.value)}
+                        placeholder="Enter specialization"
+                        className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded mt-0.5"
+                      />
+                    </div>
+                  )}
                   <div>
                     <label className="block text-[11px] text-slate-600 dark:text-slate-400">Hospital Affiliation</label>
                     <input
