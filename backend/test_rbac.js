@@ -532,7 +532,18 @@ async function runRBACTests() {
   const adminUsersData = await adminUsersRes.json();
   console.log('Total registered users seen by Admin:', adminUsersData.count);
   if (adminUsersData.count < 5) throw new Error('Admin user list incomplete');
+  if (adminUsersData.users.some((user) => !user.id)) {
+    throw new Error('Admin user directory entries must include the API user ID');
+  }
   console.log('✓ Admin user management directory verified');
+
+  const invalidAdminUserRes = await fetch(`${BASE_URL}/admin/users/undefined/approve`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${admin.token}` },
+  });
+  if (invalidAdminUserRes.status !== 400) {
+    throw new Error('Admin actions must reject invalid user IDs with a client error');
+  }
 
   const adminClaimsRes = await fetch(`${BASE_URL}/claims`, {
     headers: { Authorization: `Bearer ${admin.token}` },

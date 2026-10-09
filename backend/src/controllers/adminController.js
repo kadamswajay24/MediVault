@@ -1,9 +1,12 @@
+import mongoose from 'mongoose';
 import User from '../models/User.js';
 import MedicalRecord from '../models/MedicalRecord.js';
 import InsuranceClaim from '../models/InsuranceClaim.js';
 import AuditLog from '../models/AuditLog.js';
 import ProxyDelegation from '../models/ProxyDelegation.js';
 import { createAuditLog } from '../services/auditService.js';
+
+const isValidUserId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 // @desc    Get all users across all roles (Admin only)
 // @route   GET /api/admin/users
@@ -37,7 +40,10 @@ export const getUsers = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       count: users.length,
-      users,
+      users: users.map((user) => ({
+        ...user.toObject(),
+        id: user._id.toString(),
+      })),
     });
   } catch (error) {
     next(error);
@@ -57,6 +63,10 @@ export const updateUserRole = async (req, res, next) => {
         success: false,
         message: `Role must be one of: ${validRoles.join(', ')}`,
       });
+    }
+
+    if (!isValidUserId(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'A valid user ID is required.' });
     }
 
     const user = await User.findById(req.params.id);
@@ -133,6 +143,10 @@ export const toggleUserStatus = async (req, res, next) => {
       });
     }
 
+    if (!isValidUserId(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'A valid user ID is required.' });
+    }
+
     const user = await User.findById(req.params.id);
     if (!user) {
       return res.status(404).json({
@@ -184,6 +198,10 @@ export const toggleUserStatus = async (req, res, next) => {
 // @access  Private (Admin)
 export const approveUser = async (req, res, next) => {
   try {
+    if (!isValidUserId(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'A valid user ID is required.' });
+    }
+
     const user = await User.findById(req.params.id);
     if (!user) {
       return res.status(404).json({
