@@ -35,7 +35,13 @@
 
   body {
     font-family: var(--font-sans);
-    background-color: #101d2b;
+    background-color: #f5f8fc;
+    background-image:
+      linear-gradient(rgba(245, 248, 252, 0.78), rgba(245, 248, 252, 0.78)),
+      url('/medivault-clinic-bg.png');
+    background-position: center;
+    background-size: cover;
+    background-attachment: fixed;
     color: #f4f8fb;
     min-height: 100vh;
     margin: 0;
@@ -45,6 +51,13 @@
   html:not(.dark) body {
     background-color: #f5f8fc;
     color: #172a3a;
+  }
+
+  html.dark body {
+    background-color: #101d2b;
+    background-image:
+      linear-gradient(rgba(16, 29, 43, 0.88), rgba(16, 29, 43, 0.88)),
+      url('/medivault-clinic-bg.png');
   }
 
   /* Custom crisp scrollbar */
@@ -68,11 +81,7 @@
 }
 
 .app-shell {
-  background-color: #101d2b;
-}
-
-html:not(.dark) .app-shell {
-  background-color: #f5f8fb;
+  background-color: transparent;
 }
 
 .surface-card {
