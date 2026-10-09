@@ -37,7 +37,7 @@
     font-family: var(--font-sans);
     background-color: #f5f8fc;
     background-image:
-      linear-gradient(rgba(245, 248, 252, 0.78), rgba(245, 248, 252, 0.78)),
+      linear-gradient(rgba(245, 248, 252, 0.94), rgba(245, 248, 252, 0.94)),
       url('/medivault-clinic-bg.png');
     background-position: center;
     background-size: cover;
