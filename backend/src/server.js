@@ -53,7 +53,7 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'online',
     service: 'MediVault Core RBAC API',
-    version: '2.0.0-RBAC',
+    version: '1.0.0',
     rolesSupported: ['patient', 'medical_staff', 'insurance_agent', 'admin', 'caregiver_proxy'],
     timestamp: new Date().toISOString(),
   });
