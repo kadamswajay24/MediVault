@@ -5,7 +5,11 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const uploadDir = path.resolve(__dirname, '../../uploads');
+const uploadDir = process.env.UPLOAD_DIR || (
+  process.env.VERCEL
+    ? path.join('/tmp', 'medivault-uploads')
+    : path.resolve(__dirname, '../../uploads')
+);
 
 // Ensure directory exists
 if (!fs.existsSync(uploadDir)) {

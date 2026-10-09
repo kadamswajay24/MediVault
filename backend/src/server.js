@@ -1,6 +1,6 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import morgan from 'morgan';
 import { connectDB } from './config/db.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
@@ -16,9 +16,6 @@ import medicalStaffRoutes from './routes/medicalStaffRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import clinicalAccessRoutes from './routes/clinicalAccessRoutes.js';
 
-// Load environment variables
-dotenv.config();
-
 // Initialize database
 connectDB();
 
@@ -26,7 +23,21 @@ const app = express();
 
 // Middlewares
 app.use(cors({
-  origin: true,
+  origin: process.env.NODE_ENV === 'production'
+    ? (origin, callback) => {
+      const allowedOrigins = (process.env.CLIENT_URL || '')
+        .split(',')
+        .map((url) => url.trim())
+        .filter(Boolean);
+
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`Origin ${origin} is not allowed by CORS`));
+    }
+    : true,
   credentials: true,
 }));
 
@@ -66,8 +77,10 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-const server = app.listen(PORT, () => {
-  console.log(`[MediVault Server] Running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`[MediVault Server] Running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  });
+}
 
 export default app;

@@ -206,6 +206,52 @@ from the administration user directory.
 
 ---
 
+## ☁️ Deployment (Vercel Services + MongoDB Atlas)
+
+The root `vercel.json` deploys the Vite frontend and Express API as separate Vercel
+services in one project. Requests to `/api/*` are routed to the backend; all other paths
+go to the frontend. The API remains a normal local Express server outside Vercel.
+
+### Local development
+
+- Run MongoDB locally and set `backend/.env` to use
+  `MONGODB_URI=mongodb://127.0.0.1:27017/medivault`.
+- Keep `frontend/.env` set to `VITE_API_BASE_URL=/api`; Vite proxies API and upload
+  requests to the local backend.
+- Start the backend and frontend using the setup steps above. Local uploads remain in
+  `backend/uploads`.
+
+### Hosted deployment
+
+1. Import the repository root into Vercel from GitHub. Keep the project root at the
+   repository root so Vercel can read the top-level `vercel.json` and build both services.
+2. Create a MongoDB Atlas cluster and database user. Configure Atlas network access so the
+   Vercel backend can reach it. MongoDB is an external service; its URI is not a Vercel
+   service binding.
+3. Set environment variables for the backend service in Vercel:
+   - `MONGODB_URI`: the Atlas connection string
+   - `JWT_SECRET`: a unique, randomly generated production secret
+   - `JWT_EXPIRES_IN`: for example, `7d`
+   - `CLIENT_URL`: the exact deployed Vercel origin, such as `https://your-app.vercel.app`
+   - `NODE_ENV=production`
+4. The frontend uses the same-origin `/api` path, so it needs no backend URL binding and
+   no `VITE_API_BASE_URL` override for this routing setup.
+5. Deploy and check `https://your-app.vercel.app/api/health`.
+
+Vercel serverless filesystems are ephemeral. The backend currently stores medical uploads
+on disk, so uploads written to `/tmp` may disappear between invocations and are not
+durable. Configure external persistent object storage and adapt upload/download handling
+before relying on uploads in production. The existing 10 MB upload limit may also exceed
+Vercel's function request-body limit.
+
+Never commit `.env` files or expose production secrets in `VITE_*` variables. MediVault
+handles sensitive health information; this deployment setup does not by itself make the
+application compliant with healthcare privacy regulations. Do not use it for real
+patient data until hosting, access controls, encryption, backups, and compliance have
+been independently reviewed.
+
+---
+
 ## 🧪 Automated End-to-End Verification
 
 The backend includes an automated test script verifying all 10 core MVP requirements (registration, login, profile updates, file upload via Multer, filtering/search, download, dashboard stats, user isolation security, and audit logs):
