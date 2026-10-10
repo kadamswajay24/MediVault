@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Stethoscope,
   Pill,
@@ -8,10 +8,21 @@ import {
   Trash2,
   Building,
   Award,
+  CalendarDays,
+  Eye,
+  FileText,
+  RefreshCw,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { clinicalAccessAPI, medicalStaffAPI } from '../services/api';
-import type { MedicalNote, PrescriptionItem, User as UserType } from '../types';
+import { RecordViewerModal } from '../components/RecordViewerModal';
+import type {
+  MedicalNote,
+  MedicalRecord,
+  MedicalStaffClinicalOverview,
+  PrescriptionItem,
+  User as UserType,
+} from '../types';
 
 export const MedicalStaffPage: React.FC = () => {
   const { user } = useAuth();
@@ -24,8 +35,9 @@ export const MedicalStaffPage: React.FC = () => {
   const [patientSearch, setPatientSearch] = useState('');
   const [matchedPatients, setMatchedPatients] = useState<UserType[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<UserType | null>(null);
-  const [patientOverview, setPatientOverview] = useState<any | null>(null);
+  const [patientOverview, setPatientOverview] = useState<MedicalStaffClinicalOverview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null);
   const [requestReason, setRequestReason] = useState('');
   const [requestedUntil, setRequestedUntil] = useState(() => {
     const date = new Date(Date.now() + 8 * 60 * 60 * 1000);
@@ -35,6 +47,8 @@ export const MedicalStaffPage: React.FC = () => {
   const [requestingAccess, setRequestingAccess] = useState(false);
   const [accessRequestMessage, setAccessRequestMessage] = useState<string | null>(null);
   const [patientSearchError, setPatientSearchError] = useState<string | null>(null);
+  const selectedPatientRef = useRef<UserType | null>(null);
+  const overviewRequestsInProgress = useRef(new Set<string>());
 
   // New Note Modal
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
@@ -92,28 +106,50 @@ export const MedicalStaffPage: React.FC = () => {
     }
   };
 
+  const loadPatientOverview = useCallback(async (patient: UserType, showLoading = false) => {
+    if (overviewRequestsInProgress.current.has(patient.id)) return;
+    overviewRequestsInProgress.current.add(patient.id);
+    if (showLoading) setOverviewLoading(true);
+
+    try {
+      const res = await medicalStaffAPI.getPatientClinicalOverview(patient.mediVaultId);
+      if (selectedPatientRef.current?.id === patient.id && res.success) {
+        setPatientOverview(res);
+        setAccessRequestMessage(null);
+      }
+    } catch (err: any) {
+      if (selectedPatientRef.current?.id !== patient.id) return;
+      setPatientOverview(null);
+      if (err.response?.status !== 403) {
+        setAccessRequestMessage(err.response?.data?.message || 'Unable to load patient overview.');
+      }
+    } finally {
+      overviewRequestsInProgress.current.delete(patient.id);
+      if (showLoading && selectedPatientRef.current?.id === patient.id) {
+        setOverviewLoading(false);
+      }
+    }
+  }, []);
+
   const handleSelectPatient = async (p: UserType) => {
+    selectedPatientRef.current = p;
     setSelectedPatient(p);
     setMatchedPatients([]);
     setPatientSearch(p.mediVaultId);
     setPatientOverview(null);
     setOverviewLoading(true);
     setAccessRequestMessage(null);
-
-    try {
-      const res = await medicalStaffAPI.getPatientClinicalOverview(p.mediVaultId);
-      if (res.success) {
-        setPatientOverview(res);
-      }
-    } catch (err: any) {
-      setPatientOverview(null);
-      if (err.response?.status !== 403) {
-        setAccessRequestMessage(err.response?.data?.message || 'Unable to load patient overview.');
-      }
-    } finally {
-      setOverviewLoading(false);
-    }
+    await loadPatientOverview(p, true);
   };
+
+  useEffect(() => {
+    if (!selectedPatient || patientOverview || overviewLoading) return;
+
+    const timer = window.setInterval(() => {
+      void loadPatientOverview(selectedPatient);
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [selectedPatient, patientOverview, overviewLoading, loadPatientOverview]);
 
   const handleRequestAccess = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -189,7 +225,7 @@ export const MedicalStaffPage: React.FC = () => {
         ]);
         fetchDoctorData();
         // Refresh overview if open
-        handleSelectPatient(selectedPatient);
+        await loadPatientOverview(selectedPatient, true);
       }
     } catch (err: any) {
       setNoteError(err.response?.data?.message || 'Failed to issue clinical note.');
@@ -320,6 +356,15 @@ export const MedicalStaffPage: React.FC = () => {
                 >
                   Create Prescription
                 </button>
+                <button
+                  type="button"
+                  onClick={() => void loadPatientOverview(selectedPatient, true)}
+                  disabled={overviewLoading}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${overviewLoading ? 'animate-spin' : ''}`} />
+                  Refresh records
+                </button>
               </div>
 
               {overviewLoading ? (
@@ -328,6 +373,7 @@ export const MedicalStaffPage: React.FC = () => {
                   Loading patient medical profile...
                 </div>
               ) : patientOverview ? (
+                <>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                   <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800">
                     <span className="text-[10px] uppercase font-bold text-slate-500">Clinical Profile</span>
@@ -335,6 +381,9 @@ export const MedicalStaffPage: React.FC = () => {
                       Blood Group: {patientOverview.profile?.bloodGroup || 'Unknown'}
                     </p>
                     <p className="text-slate-500">Gender: {patientOverview.profile?.gender || 'Not specified'}</p>
+                    {patientOverview.profile?.dateOfBirth && (
+                      <p className="text-slate-500">Date of birth: {patientOverview.profile.dateOfBirth}</p>
+                    )}
                   </div>
 
                   <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-800 dark:text-rose-200">
@@ -342,9 +391,9 @@ export const MedicalStaffPage: React.FC = () => {
                       Known Allergies
                     </span>
                     <p className="mt-1 font-semibold">
-                      {patientOverview.profile?.allergies?.length > 0
-                        ? patientOverview.profile.allergies.join(', ')
-                        : 'No known drug allergies'}
+                      {patientOverview.profile?.allergies?.length
+                        ? patientOverview.profile?.allergies.join(', ')
+                        : 'Not recorded'}
                     </p>
                   </div>
 
@@ -358,6 +407,119 @@ export const MedicalStaffPage: React.FC = () => {
                     </p>
                   </div>
                 </div>
+                <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Health summary</h4>
+                    <div className="mt-3 space-y-3 text-xs">
+                      {[
+                        { label: 'Conditions', values: patientOverview.profile?.medicalConditions || [] },
+                        { label: 'Current medications', values: patientOverview.profile?.medications || [] },
+                      ].map(({ label, values }) => (
+                        <div key={label}>
+                          <p className="mb-1 font-medium text-slate-600 dark:text-slate-400">{label}</p>
+                          {values.length ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {values.map((value, index) => (
+                                <span key={`${label}-${index}`} className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                                  {value}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-slate-500">None recorded</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Recent clinical notes</h4>
+                    {patientOverview.notes.length ? (
+                      <div className="mt-3 space-y-3">
+                        {patientOverview.notes.slice(0, 5).map((note) => (
+                          <article key={note._id} className="border-l-2 border-blue-300 pl-3 text-xs dark:border-blue-700">
+                            <div className="flex flex-wrap items-center justify-between gap-1">
+                              <p className="font-semibold text-slate-800 dark:text-slate-200">{note.title}</p>
+                              <time className="text-slate-500">{new Date(note.createdAt).toLocaleDateString()}</time>
+                            </div>
+                            {note.diagnosis && <p className="mt-1 text-slate-600 dark:text-slate-400">Diagnosis: {note.diagnosis}</p>}
+                            {note.clinicalNotes && <p className="mt-1 whitespace-pre-wrap text-slate-600 dark:text-slate-400">{note.clinicalNotes}</p>}
+                            {note.prescriptionItems.length > 0 && (
+                              <p className="mt-1 text-slate-600 dark:text-slate-400">
+                                Medicines: {note.prescriptionItems.map((item) => `${item.medicineName} (${item.dosage}, ${item.frequency})`).join('; ')}
+                              </p>
+                            )}
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-xs text-slate-500">No previous clinical notes are available.</p>
+                    )}
+                  </section>
+                </div>
+
+                <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Patient reports</h4>
+                      <p className="mt-0.5 text-xs text-slate-500">Report details and patient-provided notes are shown below. Open a report to review its original file.</p>
+                    </div>
+                    <span className="text-xs text-slate-500">{patientOverview.records.length} total</span>
+                  </div>
+                  {patientOverview.records.length ? (
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {patientOverview.records.map((record) => {
+                        const extractedText = record.metadata?.ocrExtractedText?.trim();
+                        const textPreview = extractedText
+                          ? extractedText.replace(/\s+/g, ' ').slice(0, 360)
+                          : '';
+                        return (
+                          <article key={record._id} className="py-3 first:pt-0 last:pb-0">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <FileText className="h-4 w-4 shrink-0 text-blue-500" />
+                                  <h5 className="font-semibold text-sm text-slate-900 dark:text-white">{record.title}</h5>
+                                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">{record.category}</span>
+                                </div>
+                                <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
+                                  <CalendarDays className="h-3.5 w-3.5" />
+                                  {new Date(record.recordDate).toLocaleDateString()} · {record.fileName}
+                                </p>
+                                {record.description && (
+                                  <p className="mt-2 text-xs leading-5 text-slate-700 dark:text-slate-300">
+                                    <span className="font-medium">Patient note: </span>{record.description}
+                                  </p>
+                                )}
+                                {textPreview && (
+                                  <p className="mt-2 text-xs leading-5 text-slate-600 dark:text-slate-400">
+                                    <span className="font-medium">Text from report: </span>
+                                    {textPreview}{extractedText && extractedText.length > 360 ? '…' : ''}
+                                  </p>
+                                )}
+                                {!record.description && !textPreview && (
+                                  <p className="mt-2 text-xs text-slate-500">No summary is available; open the report to review its contents.</p>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedRecord(record)}
+                                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                Open report
+                              </button>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="py-5 text-center text-xs text-slate-500">No reports have been added to this patient’s vault.</p>
+                  )}
+                </section>
+                </>
               ) : (
                 <form
                   onSubmit={handleRequestAccess}
@@ -394,7 +556,10 @@ export const MedicalStaffPage: React.FC = () => {
                     />
                   </label>
                   {accessRequestMessage && (
-                    <p className="text-xs text-emerald-700 dark:text-emerald-300">{accessRequestMessage}</p>
+                    <div className="space-y-1">
+                      <p className="text-xs text-emerald-700 dark:text-emerald-300">{accessRequestMessage}</p>
+                      <p className="text-xs text-slate-500">This page checks for approval automatically. You can also use “Refresh records” above.</p>
+                    </div>
                   )}
                   <button
                     type="submit"
@@ -686,6 +851,14 @@ export const MedicalStaffPage: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {selectedRecord && (
+        <RecordViewerModal
+          record={selectedRecord}
+          allowDelete={false}
+          onClose={() => setSelectedRecord(null)}
+        />
       )}
     </div>
   );

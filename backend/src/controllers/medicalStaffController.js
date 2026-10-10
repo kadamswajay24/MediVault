@@ -177,7 +177,9 @@ export const getPatientClinicalOverview = async (req, res, next) => {
       HealthProfile.findOne({ user: patientId }),
       MedicalRecord.find({ user: patientId })
         .sort({ recordDate: -1 })
-        .select('title category recordDate fileName fileType fileSize'),
+        .select(
+          'user title category description recordDate fileName storedFileName fileType fileSize fileUrl metadata createdAt updatedAt'
+        ),
       MedicalNote.find({ patient: patientId })
         .populate('doctor', 'name mediVaultId medicalStaffDetails')
         .sort({ createdAt: -1 }),

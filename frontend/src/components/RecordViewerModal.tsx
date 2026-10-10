@@ -13,6 +13,7 @@ import { recordAPI } from '../services/api';
 interface RecordViewerModalProps {
   record: MedicalRecord | null;
   isOpen?: boolean;
+  allowDelete?: boolean;
   onClose: () => void;
   onDeleteSuccess?: (recordId: string) => void;
 }
@@ -20,6 +21,7 @@ interface RecordViewerModalProps {
 export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
   record,
   isOpen = true,
+  allowDelete = true,
   onClose,
   onDeleteSuccess,
 }) => {
@@ -227,7 +229,7 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
         {/* Footer Actions */}
         <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            {confirmDelete ? (
+            {allowDelete && (confirmDelete ? (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-rose-500 dark:text-rose-400 font-medium">Are you sure?</span>
                 <button
@@ -257,7 +259,7 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
                 <Trash2 className="w-3.5 h-3.5" />
                 Delete Record
               </button>
-            )}
+            ))}
           </div>
 
           <div className="flex items-center gap-2.5">

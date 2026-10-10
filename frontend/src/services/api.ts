@@ -8,6 +8,7 @@ import type {
   InsuranceClaim,
   ProxyDelegation,
   MedicalNote,
+  MedicalStaffClinicalOverview,
   AdminStatsResponse,
   User,
   UserRole,
@@ -332,13 +333,7 @@ export const medicalStaffAPI = {
 
   getPatientClinicalOverview: async (
     patientId: string
-  ): Promise<{
-    success: boolean;
-    patient: User;
-    profile: HealthProfile | null;
-    records: MedicalRecord[];
-    notes: MedicalNote[];
-  }> => {
+  ): Promise<MedicalStaffClinicalOverview> => {
     const res = await api.get(`/medical-staff/patients/${patientId}/overview`);
     return res.data;
   },

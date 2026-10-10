@@ -77,7 +77,7 @@ export const LoginPage: React.FC<{ portal: LoginPortal }> = ({ portal }) => {
   return (
     <section
       aria-labelledby="login-page-title"
-      className="flex flex-col items-center justify-start px-4 py-6 sm:min-h-[calc(100vh-10rem)] sm:justify-center sm:py-10"
+      className="login-layout flex flex-col items-center justify-start px-4 py-6 sm:min-h-[calc(100vh-10rem)] sm:justify-center sm:py-10"
     >
       <div className="w-full max-w-md space-y-5 sm:space-y-7">
         <div className="text-center">

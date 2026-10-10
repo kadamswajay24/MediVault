@@ -172,6 +172,14 @@ export interface MedicalNote {
   createdAt: string;
 }
 
+export interface MedicalStaffClinicalOverview {
+  success: boolean;
+  patient: User;
+  profile: HealthProfile | null;
+  records: MedicalRecord[];
+  notes: MedicalNote[];
+}
+
 export interface AuditLog {
   _id: string;
   user: User | string;

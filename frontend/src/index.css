@@ -84,6 +84,14 @@
   background-color: transparent;
 }
 
+@media (max-height: 760px) and (min-width: 640px) {
+  .login-layout {
+    justify-content: flex-start;
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
+  }
+}
+
 .surface-card {
   background-color: #ffffff;
   border: 1px solid #d8e2ee;

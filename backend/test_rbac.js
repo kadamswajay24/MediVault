@@ -454,6 +454,15 @@ async function runRBACTests() {
   if (!doctorOverviewData.success) throw new Error('Doctor overview failed');
   console.log('✓ Doctor accessed patient overview for:', doctorOverviewData.patient.name);
   console.log('  Records available to doctor:', doctorOverviewData.records.length);
+  const doctorReport = doctorOverviewData.records.find((record) => record._id === recordId);
+  if (
+    !doctorReport ||
+    doctorReport.title !== 'Coronary Angiogram Diagnostic Report' ||
+    doctorReport.description !== 'Pre-procedure cardiac angiography evaluation'
+  ) {
+    throw new Error('Doctor overview must include report titles and patient-provided clinical details');
+  }
+  console.log('✓ Doctor overview includes report-by-report clinical details');
 
   // Doctor issues a clinical note & digital prescription
   const notePayload = {
