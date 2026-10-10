@@ -27,6 +27,11 @@ import { PatientLandingPage } from './pages/PatientLandingPage';
 const MedicalStaffPage = React.lazy(() =>
   import('./pages/MedicalStaffPage').then((page) => ({ default: page.MedicalStaffPage }))
 );
+const PatientClinicalFilePage = React.lazy(() =>
+  import('./pages/PatientClinicalFilePage').then((page) => ({
+    default: page.PatientClinicalFilePage,
+  }))
+);
 const AdminPage = React.lazy(() =>
   import('./pages/AdminPage').then((page) => ({ default: page.AdminPage }))
 );
@@ -157,6 +162,14 @@ export function App() {
                     element={
                       <React.Suspense fallback={<PageLoading />}>
                         <MedicalStaffPage />
+                      </React.Suspense>
+                    }
+                  />
+                  <Route
+                    path="/medical-staff/patients/:patientId"
+                    element={
+                      <React.Suspense fallback={<PageLoading />}>
+                        <PatientClinicalFilePage />
                       </React.Suspense>
                     }
                   />

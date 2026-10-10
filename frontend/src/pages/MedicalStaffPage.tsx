@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Stethoscope,
   Pill,
@@ -365,6 +366,14 @@ export const MedicalStaffPage: React.FC = () => {
                   <RefreshCw className={`h-3.5 w-3.5 ${overviewLoading ? 'animate-spin' : ''}`} />
                   Refresh records
                 </button>
+                {patientOverview && (
+                  <Link
+                    to={`/medical-staff/patients/${encodeURIComponent(selectedPatient.mediVaultId)}`}
+                    className="inline-flex items-center rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
+                  >
+                    Open patient file
+                  </Link>
+                )}
               </div>
 
               {overviewLoading ? (
