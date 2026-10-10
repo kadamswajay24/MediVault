@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Check, Clock3, Loader2, ShieldAlert, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Check, Clock3, Loader2, ShieldAlert, Stethoscope, X } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { clinicalAccessAPI } from '../services/api';
 import type { ClinicalAccessRequest } from '../services/api';
@@ -174,6 +175,15 @@ export const AccessRequestsPage: React.FC = () => {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
+                    {isStaff && request.status === 'approved' && !expired && (
+                      <Link
+                        to={`/medical-staff/patients/${encodeURIComponent(request.patient.mediVaultId)}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500"
+                      >
+                        <Stethoscope className="h-3.5 w-3.5" />
+                        Open patient file
+                      </Link>
+                    )}
                     {canDecide(request) && (
                       <>
                         {request.status === 'pending' && (
