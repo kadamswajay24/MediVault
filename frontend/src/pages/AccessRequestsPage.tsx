@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Clock3, Loader2, ShieldAlert, Stethoscope, X } from 'lucide-react';
+import { Check, Clock3, Loader2, Search, ShieldAlert, Stethoscope, X } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { clinicalAccessAPI } from '../services/api';
 import type { ClinicalAccessRequest } from '../services/api';
@@ -15,6 +15,7 @@ export const AccessRequestsPage: React.FC = () => {
   const { user } = useAuth();
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [requests, setRequests] = useState<ClinicalAccessRequest[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [expiryInputs, setExpiryInputs] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
@@ -97,9 +98,20 @@ export const AccessRequestsPage: React.FC = () => {
     (isStaff ||
       user?.role === 'patient' ||
       user?.role === 'admin');
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
+  const filteredRequests = normalizedSearch
+    ? requests.filter((request) =>
+        [
+          request.patient.name,
+          request.patient.mediVaultId,
+          request.medicalStaff.name,
+          request.medicalStaff.mediVaultId,
+        ].some((value) => value.toLocaleLowerCase().includes(normalizedSearch))
+      )
+    : requests;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       <div className="border-b border-slate-200 dark:border-slate-800 pb-5">
         <div className="flex items-center gap-2">
           <ShieldAlert className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
@@ -122,6 +134,20 @@ export const AccessRequestsPage: React.FC = () => {
         </div>
       )}
 
+      {!loading && requests.length > 0 && (
+        <div className="relative max-w-lg">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search by patient or staff name or MediVault ID"
+            aria-label="Search access requests by patient or staff name or MediVault ID"
+            className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+          />
+        </div>
+      )}
+
       {loading ? (
         <div className="flex justify-center py-16 text-slate-500">
           <Loader2 className="w-6 h-6 animate-spin" />
@@ -130,9 +156,13 @@ export const AccessRequestsPage: React.FC = () => {
         <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center text-sm text-slate-500 dark:border-slate-700">
           No clinical access requests to display.
         </div>
+      ) : filteredRequests.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700">
+          No access requests match “{searchQuery}”.
+        </div>
       ) : (
-        <div className="space-y-3">
-          {requests.map((request) => {
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {filteredRequests.map((request) => {
             const expired =
               request.isExpired ||
               (request.expiresAt ? new Date(request.expiresAt).getTime() <= currentTime : false);
@@ -140,10 +170,10 @@ export const AccessRequestsPage: React.FC = () => {
             return (
               <section
                 key={request._id}
-                className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+                className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
               >
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="space-y-2">
+                <div className="flex flex-1 flex-col gap-3">
+                  <div className="min-w-0 space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="font-semibold text-slate-900 dark:text-white">
                         {isStaff ? request.patient.name : request.medicalStaff.name}
@@ -160,8 +190,8 @@ export const AccessRequestsPage: React.FC = () => {
                         Patient: {request.patient.name} ({request.patient.mediVaultId})
                       </p>
                     )}
-                    <p className="text-sm text-slate-700 dark:text-slate-300">{request.reason}</p>
-                    <p className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+                    <p className="break-words text-sm text-slate-700 dark:text-slate-300">{request.reason}</p>
+                    <p className="inline-flex items-start gap-1.5 text-xs text-slate-500">
                       <Clock3 className="w-3.5 h-3.5" />
                       {request.status === 'approved' && request.expiresAt
                         ? `Access ends ${new Date(request.expiresAt).toLocaleString()}`
@@ -174,7 +204,7 @@ export const AccessRequestsPage: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
                     {isStaff && request.status === 'approved' && !expired && (
                       <Link
                         to={`/medical-staff/patients/${encodeURIComponent(request.patient.mediVaultId)}`}
