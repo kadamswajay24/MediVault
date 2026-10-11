@@ -16,6 +16,7 @@ import {
   Pencil,
   Check,
   X,
+  ChevronDown,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { clinicalAccessAPI, medicalStaffAPI } from '../services/api';
@@ -1075,24 +1076,28 @@ export const MedicalStaffPage: React.FC = () => {
               </div>
 
               {/* Prescription Items */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              <details open className="group rounded-lg border border-slate-200 dark:border-slate-800">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                     Prescribed Medications ({prescriptionRows.length})
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleAddPrescriptionRow}
-                    className="text-xs text-blue-600 dark:text-blue-400 font-semibold hover:underline flex items-center gap-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Add Medication
-                  </button>
-                </div>
-                <p className="mb-2 text-[11px] text-slate-500">
-                  Reference examples only. Confirm the selected ingredient, allergies, interactions, local formulary, and dose before issuing.
-                </p>
+                  </span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="space-y-2 border-t border-slate-200 p-3 dark:border-slate-800">
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleAddPrescriptionRow}
+                      className="text-xs text-blue-600 dark:text-blue-400 font-semibold hover:underline flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Medication
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Reference examples only. Confirm the selected ingredient, allergies, interactions, local formulary, and dose before issuing.
+                  </p>
 
-                <div className="space-y-2">
+                  <div className="space-y-2">
                   {prescriptionRows.map((row, idx) => (
                     <div
                       key={idx}
@@ -1173,8 +1178,9 @@ export const MedicalStaffPage: React.FC = () => {
                       </div>
                     </div>
                   ))}
+                  </div>
                 </div>
-              </div>
+              </details>
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
