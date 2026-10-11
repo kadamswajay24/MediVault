@@ -7,6 +7,7 @@ import {
   Outlet,
   useLocation,
 } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/useAuth';
 import { ThemeProvider } from './context/ThemeContext';
@@ -199,6 +200,7 @@ export function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
+          <Analytics />
         </Router>
       </AuthProvider>
     </ThemeProvider>
