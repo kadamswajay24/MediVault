@@ -88,12 +88,24 @@ const FREQUENCY_OPTIONS = [
   'As directed',
 ];
 const DURATION_OPTIONS = ['1 day', '3 days', '5 days', '7 days', '10 days', '14 days', '30 days', 'Ongoing', 'As directed'];
+const INSTRUCTION_OPTIONS = [
+  'After meals',
+  'Before meals',
+  'With food',
+  'With water',
+  'Take on an empty stomach',
+  'At bedtime',
+  'Avoid alcohol',
+  'As needed',
+  'As directed',
+];
 
 type PrescriptionDraft = PrescriptionItem & {
   isCustom?: boolean;
   dosageIsCustom?: boolean;
   frequencyIsCustom?: boolean;
   durationIsCustom?: boolean;
+  instructionsIsCustom?: boolean;
 };
 
 export const MedicalStaffPage: React.FC = () => {
@@ -321,8 +333,8 @@ export const MedicalStaffPage: React.FC = () => {
 
   const handlePrescriptionOptionChange = (
     index: number,
-    field: 'dosage' | 'frequency' | 'duration',
-    customField: 'dosageIsCustom' | 'frequencyIsCustom' | 'durationIsCustom',
+    field: 'dosage' | 'frequency' | 'duration' | 'instructions',
+    customField: 'dosageIsCustom' | 'frequencyIsCustom' | 'durationIsCustom' | 'instructionsIsCustom',
     value: string
   ) => {
     const isCustom = value === 'other';
@@ -366,6 +378,7 @@ export const MedicalStaffPage: React.FC = () => {
           dosageIsCustom: Boolean(item.dosage) && !DOSAGE_OPTIONS.includes(item.dosage),
           frequencyIsCustom: Boolean(item.frequency) && !FREQUENCY_OPTIONS.includes(item.frequency),
           durationIsCustom: Boolean(item.duration) && !DURATION_OPTIONS.includes(item.duration),
+          instructionsIsCustom: Boolean(item.instructions) && !INSTRUCTION_OPTIONS.includes(item.instructions || ''),
         }))
       : [{ medicineName: '', dosage: '', frequency: '', duration: '', instructions: '', isCustom: false }]
     );
@@ -1257,6 +1270,31 @@ export const MedicalStaffPage: React.FC = () => {
                             </button>
                           )}
                         </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label htmlFor={`prescription-instructions-${idx}`} className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                          Instructions
+                        </label>
+                        <select
+                          id={`prescription-instructions-${idx}`}
+                          value={row.instructionsIsCustom ? 'other' : row.instructions || ''}
+                          onChange={(event) => handlePrescriptionOptionChange(idx, 'instructions', 'instructionsIsCustom', event.target.value)}
+                          className="w-full min-w-0 rounded border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
+                        >
+                          <option value="">No additional instructions</option>
+                          {INSTRUCTION_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                          <option value="other">Other...</option>
+                        </select>
+                        {row.instructionsIsCustom && (
+                          <input
+                            type="text"
+                            aria-label={`Custom instructions for medication ${idx + 1}`}
+                            placeholder="Enter instructions"
+                            value={row.instructions || ''}
+                            onChange={(event) => handleUpdatePrescriptionRow(idx, 'instructions', event.target.value)}
+                            className="w-full min-w-0 rounded border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
+                          />
+                        )}
                       </div>
                     </div>
                   ))}
