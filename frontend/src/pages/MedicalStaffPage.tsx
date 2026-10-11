@@ -75,7 +75,26 @@ const MEDICATION_CATALOG = [
   },
 ];
 
-type PrescriptionDraft = PrescriptionItem & { isCustom?: boolean };
+const DOSAGE_OPTIONS = ['1 tab', '1 tablet', '1 capsule', '2 tablets', '5 mL', '10 mL', '1 puff', '1 drop'];
+const FREQUENCY_OPTIONS = [
+  'Once daily',
+  'Twice daily',
+  'Three times daily',
+  'Every 4 hours',
+  'Every 6 hours',
+  'Every 8 hours',
+  'Every 12 hours',
+  'As needed (PRN)',
+  'As directed',
+];
+const DURATION_OPTIONS = ['1 day', '3 days', '5 days', '7 days', '10 days', '14 days', '30 days', 'Ongoing', 'As directed'];
+
+type PrescriptionDraft = PrescriptionItem & {
+  isCustom?: boolean;
+  dosageIsCustom?: boolean;
+  frequencyIsCustom?: boolean;
+  durationIsCustom?: boolean;
+};
 
 export const MedicalStaffPage: React.FC = () => {
   const { user } = useAuth();
@@ -300,6 +319,18 @@ export const MedicalStaffPage: React.FC = () => {
     );
   };
 
+  const handlePrescriptionOptionChange = (
+    index: number,
+    field: 'dosage' | 'frequency' | 'duration',
+    customField: 'dosageIsCustom' | 'frequencyIsCustom' | 'durationIsCustom',
+    value: string
+  ) => {
+    const isCustom = value === 'other';
+    setPrescriptionRows((rows) => rows.map((row, rowIndex) => rowIndex === index
+      ? { ...row, [field]: isCustom ? '' : value, [customField]: isCustom }
+      : row));
+  };
+
   const openNewNote = () => {
     setEditingNote(null);
     setNoteTitle('');
@@ -332,6 +363,9 @@ export const MedicalStaffPage: React.FC = () => {
       ? note.prescriptionItems.map((item) => ({
           ...item,
           isCustom: !MEDICATION_CATALOG.some((medication) => medication.name === item.medicineName),
+          dosageIsCustom: Boolean(item.dosage) && !DOSAGE_OPTIONS.includes(item.dosage),
+          frequencyIsCustom: Boolean(item.frequency) && !FREQUENCY_OPTIONS.includes(item.frequency),
+          durationIsCustom: Boolean(item.duration) && !DURATION_OPTIONS.includes(item.duration),
         }))
       : [{ medicineName: '', dosage: '', frequency: '', duration: '', instructions: '', isCustom: false }]
     );
@@ -1145,34 +1179,73 @@ export const MedicalStaffPage: React.FC = () => {
                         )}
                       </div>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                        <input
-                          type="text"
-                          aria-label={`Dosage for medication ${idx + 1}`}
-                          placeholder="Dosage (e.g. 500mg)"
-                          value={row.dosage}
-                          title={row.dosage}
-                          onChange={(e) => handleUpdatePrescriptionRow(idx, 'dosage', e.target.value)}
-                          className="min-w-0 rounded border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
-                        />
-                        <input
-                          type="text"
-                          aria-label={`Frequency for medication ${idx + 1}`}
-                          placeholder="Frequency (e.g. twice daily after meals)"
-                          value={row.frequency}
-                          title={row.frequency}
-                          onChange={(e) => handleUpdatePrescriptionRow(idx, 'frequency', e.target.value)}
-                          className="min-w-0 rounded border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
-                        />
-                        <div className="flex min-w-0 items-center gap-1">
-                          <input
-                            type="text"
-                            aria-label={`Duration for medication ${idx + 1}`}
-                            placeholder="Duration"
-                            value={row.duration}
-                            title={row.duration}
-                            onChange={(e) => handleUpdatePrescriptionRow(idx, 'duration', e.target.value)}
-                            className="min-w-0 w-full rounded border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
-                          />
+                        <div className="space-y-1">
+                          <select
+                            aria-label={`Dosage for medication ${idx + 1}`}
+                            value={row.dosageIsCustom ? 'other' : row.dosage}
+                            onChange={(event) => handlePrescriptionOptionChange(idx, 'dosage', 'dosageIsCustom', event.target.value)}
+                            className="w-full min-w-0 rounded border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
+                          >
+                            <option value="">Select dosage...</option>
+                            {DOSAGE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                            <option value="other">Other...</option>
+                          </select>
+                          {row.dosageIsCustom && (
+                            <input
+                              type="text"
+                              aria-label={`Custom dosage for medication ${idx + 1}`}
+                              placeholder="Enter dosage"
+                              value={row.dosage}
+                              onChange={(event) => handleUpdatePrescriptionRow(idx, 'dosage', event.target.value)}
+                              className="w-full min-w-0 rounded border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
+                            />
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <select
+                            aria-label={`Frequency for medication ${idx + 1}`}
+                            value={row.frequencyIsCustom ? 'other' : row.frequency}
+                            onChange={(event) => handlePrescriptionOptionChange(idx, 'frequency', 'frequencyIsCustom', event.target.value)}
+                            className="w-full min-w-0 rounded border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
+                          >
+                            <option value="">Select frequency...</option>
+                            {FREQUENCY_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                            <option value="other">Other...</option>
+                          </select>
+                          {row.frequencyIsCustom && (
+                            <input
+                              type="text"
+                              aria-label={`Custom frequency for medication ${idx + 1}`}
+                              placeholder="Enter frequency"
+                              value={row.frequency}
+                              onChange={(event) => handleUpdatePrescriptionRow(idx, 'frequency', event.target.value)}
+                              className="w-full min-w-0 rounded border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
+                            />
+                          )}
+                        </div>
+                        <div className="flex min-w-0 items-start gap-1">
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <select
+                              aria-label={`Duration for medication ${idx + 1}`}
+                              value={row.durationIsCustom ? 'other' : row.duration}
+                              onChange={(event) => handlePrescriptionOptionChange(idx, 'duration', 'durationIsCustom', event.target.value)}
+                              className="w-full min-w-0 rounded border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
+                            >
+                              <option value="">Select duration...</option>
+                              {DURATION_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                              <option value="other">Other...</option>
+                            </select>
+                            {row.durationIsCustom && (
+                              <input
+                                type="text"
+                                aria-label={`Custom duration for medication ${idx + 1}`}
+                                placeholder="Enter duration"
+                                value={row.duration}
+                                onChange={(event) => handleUpdatePrescriptionRow(idx, 'duration', event.target.value)}
+                                className="w-full min-w-0 rounded border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
+                              />
+                            )}
+                          </div>
                           {prescriptionRows.length > 1 && (
                             <button
                               type="button"
