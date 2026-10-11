@@ -55,5 +55,11 @@ export const PatientLandingPage: React.FC = () => (
         </article>
       </section>
     </div>
+    <nav aria-label="Other MediVault portals" className="mx-auto mt-10 flex max-w-6xl flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-slate-200 pt-5 text-xs dark:border-slate-800">
+      <span className="font-semibold text-slate-500">Professional access</span>
+      <Link to="/clinical/login" className="font-semibold text-slate-700 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400">Medical staff</Link>
+      <Link to="/insurance/login" className="font-semibold text-slate-700 hover:text-amber-600 dark:text-slate-300 dark:hover:text-amber-400">Insurance</Link>
+      <Link to="/admin/login" className="font-semibold text-slate-700 hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-400">Administrator</Link>
+    </nav>
   </main>
 );

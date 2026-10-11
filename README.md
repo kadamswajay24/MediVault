@@ -295,8 +295,8 @@ npm run test:rbac
 
 ### Separate Sign-In Portals
 - The public home (`/`) is patient-facing and shows only patient sign-in (`/patient/login`) and patient registration (`/patient/register`).
-- Organization access is separate at `/organization`, with dedicated sign-in paths for medical staff (`/clinical/login`) and insurance/governance (`/insurance/login`).
-- Clinician and insurance-agent applications are available at `/organization/register`. Administrator accounts are provisioned by an existing system owner.
+- Medical staff, insurance, and administrator sign-in use independent paths: `/clinical/login`, `/insurance/login`, and `/admin/login`. Each portal accepts only its assigned role; there is no combined organization sign-in portal.
+- Medical staff and insurance applications are separate at `/clinical/register` and `/insurance/register`. Administrator accounts are provisioned by an existing system owner.
 
 The sign-in forms accept only the account roles assigned to their portal. Backend role authorization remains the enforcement boundary for protected data and operations.
 

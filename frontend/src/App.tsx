@@ -22,7 +22,6 @@ import { ProfilePage } from './pages/ProfilePage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
 import { ClaimsPage } from './pages/ClaimsPage';
 import { CaregiversPage } from './pages/CaregiversPage';
-import { OrganizationPortalPage } from './pages/OrganizationPortalPage';
 import { PatientLandingPage } from './pages/PatientLandingPage';
 const MedicalStaffPage = React.lazy(() =>
   import('./pages/MedicalStaffPage').then((page) => ({ default: page.MedicalStaffPage }))
@@ -122,17 +121,15 @@ export function App() {
             <Route element={<AppLayout />}>
               {/* Public Routes */}
               <Route path="/portals" element={<Navigate to="/" replace />} />
-              <Route path="/organization" element={<OrganizationPortalPage />} />
               <Route path="/login" element={<Navigate to="/portals" replace />} />
               <Route path="/register" element={<Navigate to="/portals" replace />} />
               <Route path="/patient/login" element={<LoginPage portal="patient" />} />
               <Route path="/clinical/login" element={<LoginPage portal="clinical" />} />
               <Route path="/insurance/login" element={<LoginPage portal="insurance" />} />
+              <Route path="/admin/login" element={<LoginPage portal="admin" />} />
               <Route path="/patient/register" element={<RegisterPage portal="patient" />} />
-              <Route
-                path="/organization/register"
-                element={<RegisterPage portal="organization" />}
-              />
+              <Route path="/clinical/register" element={<RegisterPage portal="clinical" />} />
+              <Route path="/insurance/register" element={<RegisterPage portal="insurance" />} />
 
               {/* Protected Routes */}
               <Route element={<ProtectedRoute />}>

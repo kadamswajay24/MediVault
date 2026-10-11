@@ -13,7 +13,7 @@ import {
 import { useAuth } from '../context/useAuth';
 import type { UserRole } from '../types';
 
-type LoginPortal = 'patient' | 'clinical' | 'insurance';
+type LoginPortal = 'patient' | 'clinical' | 'insurance' | 'admin';
 
 const portalDetails: Record<LoginPortal, {
   title: string;
@@ -34,9 +34,15 @@ const portalDetails: Record<LoginPortal, {
     home: { patient: '/dashboard', medical_staff: '/medical-staff', insurance_agent: '/claims', admin: '/admin' },
   },
   insurance: {
-    title: 'Insurance & Governance Portal',
-    description: 'Claims workspace for insurers and governance tools for administrators.',
-    roles: ['insurance_agent', 'admin'],
+    title: 'Insurance Portal',
+    description: 'Claims workspace for approved insurance staff.',
+    roles: ['insurance_agent'],
+    home: { patient: '/dashboard', medical_staff: '/medical-staff', insurance_agent: '/claims', admin: '/admin' },
+  },
+  admin: {
+    title: 'Administrator Portal',
+    description: 'Governance workspace for system administrators.',
+    roles: ['admin'],
     home: { patient: '/dashboard', medical_staff: '/medical-staff', insurance_agent: '/claims', admin: '/admin' },
   },
 };
@@ -200,13 +206,23 @@ export const LoginPage: React.FC<{ portal: LoginPortal }> = ({ portal }) => {
         </section>
 
         <p className="text-center text-sm text-slate-600 dark:text-slate-400">
-          {portal === 'patient' ? 'New to MediVault?' : 'Need a new account?'}{' '}
-          <Link
-            to={portal === 'patient' ? '/patient/register' : '/organization/register'}
-            className="font-semibold text-emerald-700 underline-offset-4 hover:underline dark:text-emerald-400"
-          >
-            {portal === 'patient' ? 'Create a patient account' : 'Apply for organization access'}
-          </Link>
+          {portal === 'admin' ? (
+            'Administrator accounts are provisioned by the system owner.'
+          ) : (
+            <>
+              {portal === 'patient' ? 'New to MediVault?' : 'Need an account?'}{' '}
+              <Link
+                to={portal === 'patient' ? '/patient/register' : portal === 'clinical' ? '/clinical/register' : '/insurance/register'}
+                className="font-semibold text-emerald-700 underline-offset-4 hover:underline dark:text-emerald-400"
+              >
+                {portal === 'patient'
+                  ? 'Create a patient account'
+                  : portal === 'clinical'
+                    ? 'Apply for medical staff access'
+                    : 'Apply for insurance access'}
+              </Link>
+            </>
+          )}
         </p>
         <p className="flex items-center justify-center gap-2 text-center text-xs text-slate-600 dark:text-slate-400">
           <Lock className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
@@ -214,10 +230,10 @@ export const LoginPage: React.FC<{ portal: LoginPortal }> = ({ portal }) => {
         </p>
         <p className="text-center text-xs text-slate-600 dark:text-slate-400">
           <Link
-            to={portal === 'patient' ? '/' : '/organization'}
+            to="/"
             className="font-medium underline-offset-4 hover:text-emerald-700 hover:underline dark:hover:text-emerald-300"
           >
-            {portal === 'patient' ? 'Back to patient home' : 'Back to organization access'}
+            Back to MediVault home
           </Link>
         </p>
       </div>

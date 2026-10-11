@@ -9,7 +9,6 @@ import {
   AlertCircle,
   Loader2,
   Stethoscope,
-  FileCheck2,
   Phone,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
@@ -17,7 +16,7 @@ import type { UserRole } from '../types';
 import { MEDICAL_SPECIALIZATIONS } from '../constants/medicalSpecializations';
 import { HOSPITAL_AFFILIATIONS } from '../constants/hospitalAffiliations';
 
-type RegistrationPortal = 'patient' | 'organization';
+type RegistrationPortal = 'patient' | 'clinical' | 'insurance';
 
 export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal }) => {
   const [name, setName] = useState('');
@@ -25,14 +24,16 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [phone, setPhone] = useState('');
-  const [role, setRole] = useState<UserRole>(portal === 'patient' ? 'patient' : 'medical_staff');
+  const [role, setRole] = useState<UserRole>(
+    portal === 'patient' ? 'patient' : portal === 'insurance' ? 'insurance_agent' : 'medical_staff'
+  );
   const [staffType, setStaffType] = useState<'doctor' | 'nurse'>('doctor');
   const isPatientPortal = portal === 'patient';
-  const signInPath = isPatientPortal
+  const signInPath = portal === 'patient'
     ? '/patient/login'
-    : role === 'insurance_agent'
-    ? '/insurance/login'
-    : '/clinical/login';
+    : portal === 'insurance'
+      ? '/insurance/login'
+      : '/clinical/login';
 
   // Role details
   const [licenseNumber, setLicenseNumber] = useState('');
@@ -135,12 +136,16 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
             <ShieldCheck className="w-6 h-6 stroke-[2.4]" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            {isPatientPortal ? 'Create a Patient Account' : 'Apply for Organization Access'}
+            {isPatientPortal
+              ? 'Create a Patient Account'
+              : portal === 'clinical'
+                ? 'Apply for Medical Staff Access'
+                : 'Apply for Insurance Access'}
           </h1>
           <p className="text-xs text-slate-500">
             {isPatientPortal
               ? 'Create your personal account to manage your health records and care.'
-              : 'Choose your professional role. All organization accounts require administrator approval.'}
+              : 'Applications are reviewed by an administrator before access is granted.'}
           </p>
         </div>
 
@@ -176,13 +181,12 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Organization applications choose between clinical and insurance roles. */}
-            {!isPatientPortal && (
+            {portal === 'clinical' && (
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
-                Stakeholder Role
+                Medical staff role
               </label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -219,22 +223,6 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
                   <div className="text-[10px] text-slate-400 font-normal">Nursing staff</div>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRole('insurance_agent');
-                    setStaffType('doctor');
-                  }}
-                  className={`p-2.5 rounded-lg border text-left text-xs transition-all ${
-                    role === 'insurance_agent'
-                      ? 'border-amber-600 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 font-bold'
-                      : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
-                  }`}
-                >
-                  <FileCheck2 className="w-4 h-4 mb-1 text-amber-600" />
-                  <div>Insurer</div>
-                  <div className="text-[10px] text-slate-400 font-normal">Adjuster</div>
-                </button>
               </div>
             </div>
             )}
