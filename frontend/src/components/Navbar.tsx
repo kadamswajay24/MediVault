@@ -34,6 +34,30 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const isRegistrationPage = location.pathname.endsWith('/register');
+  const guestPortal = location.pathname.startsWith('/clinical/')
+    ? {
+        signInPath: '/clinical/login',
+        signInLabel: 'Clinical Sign In',
+        secondary: isRegistrationPage ? null : { path: '/clinical/register', label: 'Apply' },
+      }
+    : location.pathname.startsWith('/insurance/')
+      ? {
+          signInPath: '/insurance/login',
+          signInLabel: 'Insurance Sign In',
+          secondary: isRegistrationPage ? null : { path: '/insurance/register', label: 'Apply' },
+        }
+      : location.pathname.startsWith('/admin/')
+        ? {
+            signInPath: '/admin/login',
+            signInLabel: 'Admin Sign In',
+            secondary: { path: '/', label: 'Home' },
+          }
+        : {
+            signInPath: '/patient/login',
+            signInLabel: 'Sign In',
+            secondary: isRegistrationPage ? null : { path: '/patient/register', label: 'Get Started' },
+          };
 
   const handleLogout = () => {
     logout();
@@ -229,17 +253,19 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
           ) : (
             <div className="flex items-center gap-2 text-xs">
               <Link
-                to="/patient/login"
+                to={guestPortal.signInPath}
                 className="px-3 py-1.5 font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900"
               >
-                Sign In
+                {guestPortal.signInLabel}
               </Link>
-              <Link
-                to="/patient/register"
-                className="button-primary px-3 py-1.5 rounded-lg font-semibold"
-              >
-                Get Started
-              </Link>
+              {guestPortal.secondary && (
+                <Link
+                  to={guestPortal.secondary.path}
+                  className="button-primary px-3 py-1.5 rounded-lg font-semibold"
+                >
+                  {guestPortal.secondary.label}
+                </Link>
+              )}
             </div>
           )}
         </div>
