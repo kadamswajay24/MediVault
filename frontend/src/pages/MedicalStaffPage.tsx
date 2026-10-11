@@ -1101,9 +1101,9 @@ export const MedicalStaffPage: React.FC = () => {
                   {prescriptionRows.map((row, idx) => (
                     <div
                       key={idx}
-                      className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-5 gap-2 items-center text-xs"
+                      className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-800 dark:bg-slate-950"
                     >
-                      <div className="sm:col-span-2 space-y-1.5">
+                      <div className="space-y-1.5">
                         <select
                           value={row.isCustom ? 'custom' : row.medicineName}
                           onChange={(event) => {
@@ -1144,37 +1144,46 @@ export const MedicalStaffPage: React.FC = () => {
                             ))
                         )}
                       </div>
-                      <input
-                        type="text"
-                        placeholder="Dosage (e.g. 500mg)"
-                        value={row.dosage}
-                        onChange={(e) => handleUpdatePrescriptionRow(idx, 'dosage', e.target.value)}
-                        className="px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Freq (e.g. 2x daily)"
-                        value={row.frequency}
-                        onChange={(e) => handleUpdatePrescriptionRow(idx, 'frequency', e.target.value)}
-                        className="px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded"
-                      />
-                      <div className="flex items-center gap-1">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                         <input
                           type="text"
-                          placeholder="Duration"
-                          value={row.duration}
-                          onChange={(e) => handleUpdatePrescriptionRow(idx, 'duration', e.target.value)}
-                          className="w-full px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded"
+                          aria-label={`Dosage for medication ${idx + 1}`}
+                          placeholder="Dosage (e.g. 500mg)"
+                          value={row.dosage}
+                          title={row.dosage}
+                          onChange={(e) => handleUpdatePrescriptionRow(idx, 'dosage', e.target.value)}
+                          className="min-w-0 rounded border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
                         />
-                        {prescriptionRows.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemovePrescriptionRow(idx)}
-                            className="p-1 text-slate-400 hover:text-rose-500"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        <input
+                          type="text"
+                          aria-label={`Frequency for medication ${idx + 1}`}
+                          placeholder="Frequency (e.g. twice daily after meals)"
+                          value={row.frequency}
+                          title={row.frequency}
+                          onChange={(e) => handleUpdatePrescriptionRow(idx, 'frequency', e.target.value)}
+                          className="min-w-0 rounded border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
+                        />
+                        <div className="flex min-w-0 items-center gap-1">
+                          <input
+                            type="text"
+                            aria-label={`Duration for medication ${idx + 1}`}
+                            placeholder="Duration"
+                            value={row.duration}
+                            title={row.duration}
+                            onChange={(e) => handleUpdatePrescriptionRow(idx, 'duration', e.target.value)}
+                            className="min-w-0 w-full rounded border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
+                          />
+                          {prescriptionRows.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePrescriptionRow(idx)}
+                              aria-label={`Remove medication ${idx + 1}`}
+                              className="shrink-0 p-1 text-slate-400 hover:text-rose-500"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
