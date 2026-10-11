@@ -153,6 +153,14 @@ export function App() {
                 <Route element={<RoleRoute roles={['patient']} />}>
                   <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/records" element={<RecordsPage />} />
+                  <Route
+                    path="/prescriptions"
+                    element={
+                      <React.Suspense fallback={<PageLoading />}>
+                        <MedicalStaffPage />
+                      </React.Suspense>
+                    }
+                  />
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/caregivers" element={<CaregiversPage />} />
                 </Route>

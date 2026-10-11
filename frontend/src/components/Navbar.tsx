@@ -13,6 +13,7 @@ import {
   Sun,
   Moon,
   FileCheck2,
+  Pill,
   Users,
   Stethoscope,
   Shield,
@@ -66,6 +67,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
         return [
           { name: 'Dashboard', path: '/dashboard', icon: Activity },
           { name: 'Medical Records', path: '/records', icon: FileText },
+          { name: 'Prescriptions', path: '/prescriptions', icon: Pill },
           { name: 'Insurance Claims', path: '/claims', icon: FileCheck2 },
           { name: 'Caregivers', path: '/caregivers', icon: Users },
           { name: 'Health Profile', path: '/profile', icon: User },

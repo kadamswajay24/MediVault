@@ -24,6 +24,54 @@ import type {
   PrescriptionItem,
   User as UserType,
 } from '../types';
+import type { ClinicalAccessRequest } from '../services/api';
+
+const MEDICATION_CATALOG = [
+  {
+    name: 'Paracetamol (acetaminophen) 500 mg',
+    ingredient: 'Paracetamol / acetaminophen',
+    use: 'Pain and fever relief',
+    caution: 'Check for duplicate acetaminophen-containing products and liver disease.',
+  },
+  {
+    name: 'Ibuprofen 200 mg',
+    ingredient: 'Ibuprofen',
+    use: 'Pain, fever, and inflammation',
+    caution: 'Review gastrointestinal, kidney, cardiovascular, and pregnancy risks.',
+  },
+  {
+    name: 'Amoxicillin 500 mg',
+    ingredient: 'Amoxicillin',
+    use: 'A penicillin antibiotic for selected bacterial infections',
+    caution: 'Check penicillin allergy; antibiotics are not for viral infections.',
+  },
+  {
+    name: 'Cetirizine 10 mg',
+    ingredient: 'Cetirizine',
+    use: 'Allergy symptoms',
+    caution: 'May cause drowsiness; consider kidney function and other sedatives.',
+  },
+  {
+    name: 'Metformin 500 mg',
+    ingredient: 'Metformin',
+    use: 'Blood glucose management in type 2 diabetes',
+    caution: 'Review kidney function and relevant acute illness or contrast procedures.',
+  },
+  {
+    name: 'Amlodipine 5 mg',
+    ingredient: 'Amlodipine',
+    use: 'Hypertension or angina',
+    caution: 'Monitor blood pressure; ankle swelling and dizziness can occur.',
+  },
+  {
+    name: 'Omeprazole 20 mg',
+    ingredient: 'Omeprazole',
+    use: 'Acid-related conditions',
+    caution: 'Review duration, interactions, and ongoing need.',
+  },
+];
+
+type PrescriptionDraft = PrescriptionItem & { isCustom?: boolean };
 
 export const MedicalStaffPage: React.FC = () => {
   const { user } = useAuth();
@@ -35,6 +83,8 @@ export const MedicalStaffPage: React.FC = () => {
   // Patient Lookup State (For Doctor)
   const [patientSearch, setPatientSearch] = useState('');
   const [matchedPatients, setMatchedPatients] = useState<UserType[]>([]);
+  const [approvedPatients, setApprovedPatients] = useState<UserType[]>([]);
+  const [approvedPatientsLoading, setApprovedPatientsLoading] = useState(true);
   const [selectedPatient, setSelectedPatient] = useState<UserType | null>(null);
   const [patientOverview, setPatientOverview] = useState<MedicalStaffClinicalOverview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
@@ -58,8 +108,8 @@ export const MedicalStaffPage: React.FC = () => {
   const [diagnosis, setDiagnosis] = useState('');
   const [clinicalNotes, setClinicalNotes] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
-  const [prescriptionRows, setPrescriptionRows] = useState<PrescriptionItem[]>([
-    { medicineName: '', dosage: '1 tab', frequency: 'Twice daily', duration: '5 days', instructions: 'After meals' },
+  const [prescriptionRows, setPrescriptionRows] = useState<PrescriptionDraft[]>([
+    { medicineName: '', dosage: '', frequency: '', duration: '', instructions: '', isCustom: false },
   ]);
   const [submittingNote, setSubmittingNote] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
@@ -87,6 +137,51 @@ export const MedicalStaffPage: React.FC = () => {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [fetchDoctorData]);
+
+  useEffect(() => {
+    if (isDoctor) return;
+
+    const timer = window.setInterval(() => {
+      void fetchDoctorData();
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [fetchDoctorData, isDoctor]);
+
+  useEffect(() => {
+    if (!isDoctor) return;
+
+    let isCurrent = true;
+    clinicalAccessAPI.getRequests()
+      .then((response) => {
+        if (!isCurrent) return;
+        const now = Date.now();
+        const activeGrants: ClinicalAccessRequest[] = response.requests
+          .filter((request) =>
+            request.status === 'approved' &&
+            !request.isExpired &&
+            request.expiresAt &&
+            new Date(request.expiresAt).getTime() > now
+          )
+          .sort((left, right) =>
+            new Date(right.expiresAt!).getTime() - new Date(left.expiresAt!).getTime()
+          );
+        const patientsById = new Map<string, UserType>();
+        activeGrants.forEach((request) => patientsById.set(request.patient.id, request.patient));
+        setApprovedPatients(Array.from(patientsById.values()));
+      })
+      .catch((err: any) => {
+        if (isCurrent) {
+          setPatientSearchError(err.response?.data?.message || 'Unable to load approved patients.');
+        }
+      })
+      .finally(() => {
+        if (isCurrent) setApprovedPatientsLoading(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [isDoctor]);
 
   // Patient search for doctor
   const handleSearchPatient = async (query: string) => {
@@ -136,7 +231,7 @@ export const MedicalStaffPage: React.FC = () => {
     selectedPatientRef.current = p;
     setSelectedPatient(p);
     setMatchedPatients([]);
-    setPatientSearch(p.mediVaultId);
+    setPatientSearch('');
     setPatientOverview(null);
     setOverviewLoading(true);
     setAccessRequestMessage(null);
@@ -176,7 +271,7 @@ export const MedicalStaffPage: React.FC = () => {
   const handleAddPrescriptionRow = () => {
     setPrescriptionRows((prev) => [
       ...prev,
-      { medicineName: '', dosage: '1 tab', frequency: 'Once daily', duration: '7 days', instructions: '' },
+      { medicineName: '', dosage: '', frequency: '', duration: '', instructions: '', isCustom: false },
     ]);
   };
 
@@ -205,7 +300,15 @@ export const MedicalStaffPage: React.FC = () => {
     setNoteError(null);
 
     try {
-      const validPrescriptions = prescriptionRows.filter((r) => r.medicineName.trim().length > 0);
+      const validPrescriptions = prescriptionRows
+        .filter((row) => row.medicineName.trim().length > 0)
+        .map((row) => ({
+          medicineName: row.medicineName,
+          dosage: row.dosage,
+          frequency: row.frequency,
+          duration: row.duration,
+          instructions: row.instructions,
+        }));
       const res = await medicalStaffAPI.addClinicalNote({
         patientMediVaultId: selectedPatient.mediVaultId,
         noteType,
@@ -222,7 +325,7 @@ export const MedicalStaffPage: React.FC = () => {
         setDiagnosis('');
         setClinicalNotes('');
         setPrescriptionRows([
-          { medicineName: '', dosage: '1 tab', frequency: 'Twice daily', duration: '5 days', instructions: 'After meals' },
+          { medicineName: '', dosage: '', frequency: '', duration: '', instructions: '', isCustom: false },
         ]);
         fetchDoctorData();
         // Refresh overview if open
@@ -245,7 +348,7 @@ export const MedicalStaffPage: React.FC = () => {
               {isDoctor ? 'Clinical Consultations & Prescriptions' : 'My Clinical Prescriptions'}
             </h1>
             <span className="text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-medium">
-              Medical Provider Hub
+              {isDoctor ? 'Medical Provider Hub' : 'Patient Vault'}
             </span>
           </div>
           {isDoctor && user?.mediVaultId && (
@@ -276,18 +379,41 @@ export const MedicalStaffPage: React.FC = () => {
           )}
         </div>
 
-        {isDoctor && (
+        {!isDoctor && (
           <button
-            onClick={() => {
-              setIsNoteModalOpen(true);
-              setNoteError(null);
-            }}
-            disabled={!selectedPatient || !patientOverview}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all disabled:opacity-50"
+            type="button"
+            onClick={() => void fetchDoctorData()}
+            title="Refresh prescriptions"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            <Plus className="w-4 h-4" />
-            Issue Digital Rx / Note
+            <RefreshCw className="h-4 w-4" />
+            Refresh
           </button>
+        )}
+        {isDoctor && (
+          <div className="flex flex-col items-end gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                setIsNoteModalOpen(true);
+                setNoteError(null);
+              }}
+              disabled={!selectedPatient || !patientOverview}
+              title="Creates a prescription or clinical note on the selected patient's record"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all disabled:opacity-50"
+            >
+              <Plus className="w-4 h-4" />
+              Issue Digital Rx / Note
+            </button>
+            {!selectedPatient && (
+              <p className="text-xs text-slate-500">Select an approved patient below to enable.</p>
+            )}
+            {selectedPatient && !patientOverview && (
+              <p className="text-xs text-slate-500">
+                {overviewLoading ? 'Loading patient records...' : 'An active patient-approved access grant is required.'}
+              </p>
+            )}
+          </div>
         )}
       </div>
 
@@ -297,6 +423,34 @@ export const MedicalStaffPage: React.FC = () => {
           <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
             Select Patient for Clinical Consultation
           </label>
+          <div className="max-w-xl">
+            <label htmlFor="approved-patient" className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+              Approved patients
+            </label>
+            <select
+              id="approved-patient"
+              value={selectedPatient?.id || ''}
+              onChange={(event) => {
+                const patient = approvedPatients.find((item) => item.id === event.target.value);
+                if (patient) void handleSelectPatient(patient);
+              }}
+              disabled={approvedPatientsLoading || approvedPatients.length === 0}
+              className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+            >
+              <option value="">
+                {approvedPatientsLoading
+                  ? 'Loading approved patients...'
+                  : approvedPatients.length
+                    ? 'Choose an approved patient'
+                    : 'No active approved patients'}
+              </option>
+              {approvedPatients.map((patient) => (
+                <option key={patient.id} value={patient.id}>
+                  {patient.name} - ID ending {patient.mediVaultId.slice(-4)}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="relative max-w-xl">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -684,7 +838,7 @@ export const MedicalStaffPage: React.FC = () => {
                   Issue Digital Prescription &amp; Clinical Note
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Patient: {selectedPatient?.name} ({selectedPatient?.mediVaultId})
+                  Patient: {selectedPatient?.name}
                 </p>
               </div>
               <button
@@ -776,6 +930,9 @@ export const MedicalStaffPage: React.FC = () => {
                     <Plus className="w-3.5 h-3.5" /> Add Medication
                   </button>
                 </div>
+                <p className="mb-2 text-[11px] text-slate-500">
+                  Reference examples only. Confirm the selected ingredient, allergies, interactions, local formulary, and dose before issuing.
+                </p>
 
                 <div className="space-y-2">
                   {prescriptionRows.map((row, idx) => (
@@ -783,13 +940,47 @@ export const MedicalStaffPage: React.FC = () => {
                       key={idx}
                       className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-5 gap-2 items-center text-xs"
                     >
-                      <input
-                        type="text"
-                        placeholder="Drug / Medicine Name"
-                        value={row.medicineName}
-                        onChange={(e) => handleUpdatePrescriptionRow(idx, 'medicineName', e.target.value)}
-                        className="sm:col-span-2 px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded"
-                      />
+                      <div className="sm:col-span-2 space-y-1.5">
+                        <select
+                          value={row.isCustom ? 'custom' : row.medicineName}
+                          onChange={(event) => {
+                            const isCustom = event.target.value === 'custom';
+                            const medication = MEDICATION_CATALOG.find((item) => item.name === event.target.value);
+                            setPrescriptionRows((current) =>
+                              current.map((item, rowIndex) => rowIndex === idx
+                                ? { ...item, isCustom, medicineName: isCustom ? '' : medication?.name || '' }
+                                : item)
+                            );
+                          }}
+                          aria-label={`Medication for prescription row ${idx + 1}`}
+                          className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded"
+                        >
+                          <option value="">Select medication...</option>
+                          {MEDICATION_CATALOG.map((medication) => (
+                            <option key={medication.name} value={medication.name}>{medication.name}</option>
+                          ))}
+                          <option value="custom">Other / not listed</option>
+                        </select>
+                        {row.isCustom ? (
+                          <input
+                            type="text"
+                            placeholder="Enter medication name"
+                            value={row.medicineName}
+                            onChange={(event) => handleUpdatePrescriptionRow(idx, 'medicineName', event.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded"
+                          />
+                        ) : (
+                          MEDICATION_CATALOG
+                            .filter((medication) => medication.name === row.medicineName)
+                            .map((medication) => (
+                              <div key={medication.name} className="space-y-0.5 text-[10px] text-slate-500">
+                                <p><span className="font-semibold">Active ingredient:</span> {medication.ingredient}</p>
+                                <p><span className="font-semibold">Common use:</span> {medication.use}</p>
+                                <p className="text-amber-700 dark:text-amber-400"><span className="font-semibold">Check:</span> {medication.caution}</p>
+                              </div>
+                            ))
+                        )}
+                      </div>
                       <input
                         type="text"
                         placeholder="Dosage (e.g. 500mg)"
