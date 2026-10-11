@@ -170,6 +170,14 @@ export interface MedicalNote {
   followUpDate?: string;
   linkedRecords?: MedicalRecord[];
   createdAt: string;
+  updatedAt?: string;
+  deletedAt?: string | null;
+  deletionRequest?: {
+    status?: 'pending' | 'approved' | 'denied';
+    reason?: string;
+    requestedAt?: string;
+    reviewedAt?: string;
+  };
 }
 
 export interface MedicalStaffClinicalOverview {
@@ -197,6 +205,9 @@ export interface AuditLog {
     | 'CLAIM_SUBMITTED'
     | 'CLAIM_REVIEWED'
     | 'CLINICAL_NOTE_ADDED'
+    | 'CLINICAL_NOTE_UPDATED'
+    | 'CLINICAL_NOTE_DELETION_REQUESTED'
+    | 'CLINICAL_NOTE_DELETION_DECIDED'
     | 'ACCESS_REQUESTED'
     | 'ACCESS_REQUEST_DECIDED'
     | 'ACCESS_REVOKED'

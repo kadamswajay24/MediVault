@@ -13,6 +13,9 @@ import {
   Eye,
   FileText,
   RefreshCw,
+  Pencil,
+  Check,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { clinicalAccessAPI, medicalStaffAPI } from '../services/api';
@@ -103,6 +106,7 @@ export const MedicalStaffPage: React.FC = () => {
 
   // New Note Modal
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
+  const [editingNote, setEditingNote] = useState<MedicalNote | null>(null);
   const [noteTitle, setNoteTitle] = useState('');
   const [noteType, setNoteType] = useState<MedicalNote['noteType']>('Prescription');
   const [diagnosis, setDiagnosis] = useState('');
@@ -113,6 +117,9 @@ export const MedicalStaffPage: React.FC = () => {
   ]);
   const [submittingNote, setSubmittingNote] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
+  const [noteActionMessage, setNoteActionMessage] = useState<string | null>(null);
+  const [noteActionBusyId, setNoteActionBusyId] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
 
   const fetchDoctorData = useCallback(async () => {
     try {
@@ -146,6 +153,13 @@ export const MedicalStaffPage: React.FC = () => {
     }, 30_000);
     return () => window.clearInterval(timer);
   }, [fetchDoctorData, isDoctor]);
+
+  useEffect(() => {
+    if (!isDoctor) return;
+
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, [isDoctor]);
 
   useEffect(() => {
     if (!isDoctor) return;
@@ -285,9 +299,54 @@ export const MedicalStaffPage: React.FC = () => {
     );
   };
 
+  const openNewNote = () => {
+    setEditingNote(null);
+    setNoteTitle('');
+    setNoteType('Prescription');
+    setDiagnosis('');
+    setClinicalNotes('');
+    setFollowUpDate('');
+    setPrescriptionRows([
+      { medicineName: '', dosage: '', frequency: '', duration: '', instructions: '', isCustom: false },
+    ]);
+    setNoteError(null);
+    setIsNoteModalOpen(true);
+  };
+
+  const openEditNote = (note: MedicalNote) => {
+    const patient = typeof note.patient === 'object' ? note.patient : selectedPatient;
+    if (!patient) {
+      setNoteActionMessage('Unable to edit this note because its patient details are unavailable.');
+      return;
+    }
+    setSelectedPatient(patient);
+    selectedPatientRef.current = patient;
+    setEditingNote(note);
+    setNoteTitle(note.title);
+    setNoteType(note.noteType);
+    setDiagnosis(note.diagnosis || '');
+    setClinicalNotes(note.clinicalNotes || '');
+    setFollowUpDate(note.followUpDate?.slice(0, 10) || '');
+    setPrescriptionRows(note.prescriptionItems.length
+      ? note.prescriptionItems.map((item) => ({
+          ...item,
+          isCustom: !MEDICATION_CATALOG.some((medication) => medication.name === item.medicineName),
+        }))
+      : [{ medicineName: '', dosage: '', frequency: '', duration: '', instructions: '', isCustom: false }]
+    );
+    setNoteError(null);
+    setIsNoteModalOpen(true);
+  };
+
+  const closeNoteModal = () => {
+    setIsNoteModalOpen(false);
+    setEditingNote(null);
+    setNoteError(null);
+  };
+
   const handleSaveNote = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPatient) {
+    if (!editingNote && !selectedPatient) {
       setNoteError('Please search and select a patient first.');
       return;
     }
@@ -309,18 +368,24 @@ export const MedicalStaffPage: React.FC = () => {
           duration: row.duration,
           instructions: row.instructions,
         }));
-      const res = await medicalStaffAPI.addClinicalNote({
-        patientMediVaultId: selectedPatient.mediVaultId,
+      const noteData = {
         noteType,
         title: noteTitle.trim(),
         diagnosis: diagnosis.trim(),
         prescriptionItems: validPrescriptions,
         clinicalNotes: clinicalNotes.trim(),
         followUpDate: followUpDate || undefined,
-      });
+      };
+      const res = editingNote
+        ? await medicalStaffAPI.updateClinicalNote(editingNote._id, noteData)
+        : await medicalStaffAPI.addClinicalNote({
+            patientMediVaultId: selectedPatient!.mediVaultId,
+            ...noteData,
+          });
 
       if (res.success) {
         setIsNoteModalOpen(false);
+        setEditingNote(null);
         setNoteTitle('');
         setDiagnosis('');
         setClinicalNotes('');
@@ -329,12 +394,47 @@ export const MedicalStaffPage: React.FC = () => {
         ]);
         fetchDoctorData();
         // Refresh overview if open
-        await loadPatientOverview(selectedPatient, true);
+        if (selectedPatient) await loadPatientOverview(selectedPatient, true);
       }
     } catch (err: any) {
       setNoteError(err.response?.data?.message || 'Failed to issue clinical note.');
     } finally {
       setSubmittingNote(false);
+    }
+  };
+
+  const handleRequestNoteDeletion = async (note: MedicalNote) => {
+    const reason = window.prompt('Why should this prescription or note be removed? The patient must approve the request.');
+    if (!reason?.trim()) return;
+    if (reason.trim().length < 5 || reason.trim().length > 500) {
+      setNoteActionMessage('Enter a deletion reason between 5 and 500 characters.');
+      return;
+    }
+
+    setNoteActionBusyId(note._id);
+    setNoteActionMessage(null);
+    try {
+      const response = await medicalStaffAPI.requestNoteDeletion(note._id, reason.trim());
+      setNoteActionMessage(response.message);
+      await fetchDoctorData();
+    } catch (err: any) {
+      setNoteActionMessage(err.response?.data?.message || 'Unable to request note deletion.');
+    } finally {
+      setNoteActionBusyId(null);
+    }
+  };
+
+  const handleNoteDeletionDecision = async (note: MedicalNote, decision: 'approved' | 'denied') => {
+    setNoteActionBusyId(note._id);
+    setNoteActionMessage(null);
+    try {
+      const response = await medicalStaffAPI.decideNoteDeletion(note._id, decision);
+      setNoteActionMessage(response.message);
+      await fetchDoctorData();
+    } catch (err: any) {
+      setNoteActionMessage(err.response?.data?.message || 'Unable to record your decision.');
+    } finally {
+      setNoteActionBusyId(null);
     }
   };
 
@@ -394,10 +494,7 @@ export const MedicalStaffPage: React.FC = () => {
           <div className="flex flex-col items-end gap-1">
             <button
               type="button"
-              onClick={() => {
-                setIsNoteModalOpen(true);
-                setNoteError(null);
-              }}
+              onClick={openNewNote}
               disabled={!selectedPatient || !patientOverview}
               title="Creates a prescription or clinical note on the selected patient's record"
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all disabled:opacity-50"
@@ -745,6 +842,12 @@ export const MedicalStaffPage: React.FC = () => {
           {isDoctor ? 'Recent Consultations Issued' : 'Verified Prescriptions Issued to You'}
         </h2>
 
+        {noteActionMessage && (
+          <p role="status" className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+            {noteActionMessage}
+          </p>
+        )}
+
         {loading ? (
           <div className="py-16 flex flex-col items-center justify-center text-slate-500 text-sm">
             <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-2" />
@@ -785,6 +888,61 @@ export const MedicalStaffPage: React.FC = () => {
                     </span>
                   )}
                 </div>
+
+                {note.deletedAt && isDoctor && (
+                  <p className="text-xs text-rose-700 dark:text-rose-300">Patient-approved removal completed. This record is retained for audit.</p>
+                )}
+                {note.deletionRequest?.status === 'pending' && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                    <p className="font-semibold">Deletion request awaiting patient approval</p>
+                    {note.deletionRequest.reason && <p className="mt-1">Reason: {note.deletionRequest.reason}</p>}
+                    {!isDoctor && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleNoteDeletionDecision(note, 'approved')}
+                          disabled={noteActionBusyId === note._id}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-rose-700 px-3 py-2 font-semibold text-white hover:bg-rose-600 disabled:opacity-50"
+                        >
+                          <Check className="h-3.5 w-3.5" /> Approve deletion
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleNoteDeletionDecision(note, 'denied')}
+                          disabled={noteActionBusyId === note._id}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 font-semibold text-slate-700 hover:bg-white disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          <X className="h-3.5 w-3.5" /> Keep prescription
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {isDoctor && !note.deletedAt && note.deletionRequest?.status !== 'pending' && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {currentTime < new Date(note.createdAt).getTime() + 60 * 60 * 1000 && (
+                      <button
+                        type="button"
+                        onClick={() => openEditNote(note)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/30"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        Edit ({Math.ceil((new Date(note.createdAt).getTime() + 60 * 60 * 1000 - currentTime) / 60_000)} min left)
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void handleRequestNoteDeletion(note)}
+                      disabled={noteActionBusyId === note._id}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/30"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Request deletion
+                    </button>
+                  </div>
+                )}
+                {isDoctor && note.deletionRequest?.status === 'denied' && (
+                  <p className="text-xs text-slate-500">The patient declined the deletion request. The note remains in the record.</p>
+                )}
 
                 {/* Prescription Line Items Table */}
                 {note.prescriptionItems && note.prescriptionItems.length > 0 && (
@@ -835,14 +993,14 @@ export const MedicalStaffPage: React.FC = () => {
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3 mb-4">
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Issue Digital Prescription &amp; Clinical Note
+                  {editingNote ? 'Edit Prescription & Clinical Note' : 'Issue Digital Prescription & Clinical Note'}
                 </h3>
                 <p className="text-xs text-slate-500">
                   Patient: {selectedPatient?.name}
                 </p>
               </div>
               <button
-                onClick={() => setIsNoteModalOpen(false)}
+                onClick={closeNoteModal}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
                 ✕
@@ -1034,7 +1192,7 @@ export const MedicalStaffPage: React.FC = () => {
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setIsNoteModalOpen(false)}
+                  onClick={closeNoteModal}
                   className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
                 >
                   Cancel
@@ -1045,7 +1203,7 @@ export const MedicalStaffPage: React.FC = () => {
                   className="px-4 py-2 text-sm font-semibold bg-blue-600 text-white hover:bg-blue-500 rounded-lg shadow-sm disabled:opacity-50 flex items-center gap-2"
                 >
                   {submittingNote && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Sign &amp; Issue Prescription
+                  {editingNote ? 'Save changes' : 'Sign & Issue Prescription'}
                 </button>
               </div>
             </form>

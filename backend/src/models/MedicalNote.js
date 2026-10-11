@@ -62,6 +62,19 @@ const medicalNoteSchema = new mongoose.Schema(
         ref: 'MedicalRecord',
       },
     ],
+    deletionRequest: {
+      status: {
+        type: String,
+        enum: ['pending', 'approved', 'denied'],
+      },
+      reason: { type: String, default: '' },
+      requestedAt: { type: Date },
+      reviewedAt: { type: Date },
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

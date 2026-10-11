@@ -111,6 +111,144 @@ export const addClinicalNote = async (req, res, next) => {
   }
 };
 
+// @route   PUT /api/medical-staff/notes/:noteId
+// @access  Private (Issuing Medical Staff, within one hour)
+export const updateClinicalNote = async (req, res, next) => {
+  try {
+    const note = await MedicalNote.findOne({ _id: req.params.noteId, doctor: req.user._id });
+    if (!note) {
+      return res.status(404).json({ success: false, message: 'Prescription or clinical note not found.' });
+    }
+    if (note.deletedAt || note.deletionRequest?.status === 'pending') {
+      return res.status(409).json({ success: false, message: 'This note is pending patient deletion approval or has been deleted.' });
+    }
+    if (Date.now() - note.createdAt.getTime() >= 60 * 60 * 1000) {
+      return res.status(403).json({ success: false, message: 'Prescriptions can only be edited within one hour of creation.' });
+    }
+    if (!(await requireActiveClinicalAccess(req.user._id, note.patient))) {
+      return res.status(403).json({ success: false, message: 'An active patient-specific clinical access grant is required.' });
+    }
+
+    const { noteType, title, diagnosis, prescriptionItems, clinicalNotes, followUpDate } = req.body;
+    if (typeof title !== 'string' || !title.trim()) {
+      return res.status(400).json({ success: false, message: 'Clinical note title is required.' });
+    }
+    if (noteType && !NOTE_TYPES.includes(noteType)) {
+      return res.status(400).json({ success: false, message: 'Invalid clinical note type.' });
+    }
+    if (prescriptionItems !== undefined && !Array.isArray(prescriptionItems)) {
+      return res.status(400).json({ success: false, message: 'Prescription items must be a list.' });
+    }
+
+    note.noteType = noteType || note.noteType;
+    note.title = title.trim();
+    note.diagnosis = typeof diagnosis === 'string' ? diagnosis.trim() : '';
+    note.prescriptionItems = prescriptionItems || [];
+    note.clinicalNotes = typeof clinicalNotes === 'string' ? clinicalNotes.trim() : '';
+    note.followUpDate = followUpDate ? new Date(followUpDate) : undefined;
+    await note.save();
+
+    await createAuditLog({
+      userId: note.patient,
+      performedBy: req.user._id,
+      action: 'CLINICAL_NOTE_UPDATED',
+      details: `Dr. ${req.user.name} updated clinical note: "${note.title}"`,
+      resourceId: note._id,
+      resourceType: 'MedicalNote',
+      req,
+    });
+
+    return res.status(200).json({ success: true, message: 'Clinical note updated.', note });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @route   POST /api/medical-staff/notes/:noteId/deletion-request
+// @access  Private (Issuing Medical Staff)
+export const requestClinicalNoteDeletion = async (req, res, next) => {
+  try {
+    const note = await MedicalNote.findOne({ _id: req.params.noteId, doctor: req.user._id });
+    if (!note) {
+      return res.status(404).json({ success: false, message: 'Prescription or clinical note not found.' });
+    }
+    if (note.deletedAt) {
+      return res.status(409).json({ success: false, message: 'This note has already been deleted with patient approval.' });
+    }
+    if (note.deletionRequest?.status === 'pending') {
+      return res.status(409).json({ success: false, message: 'A patient deletion decision is already pending.' });
+    }
+    if (!(await requireActiveClinicalAccess(req.user._id, note.patient))) {
+      return res.status(403).json({ success: false, message: 'An active patient-specific clinical access grant is required.' });
+    }
+
+    const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : '';
+    if (reason.length < 5 || reason.length > 500) {
+      return res.status(400).json({ success: false, message: 'Provide a deletion reason between 5 and 500 characters.' });
+    }
+
+    note.deletionRequest = { status: 'pending', reason, requestedAt: new Date() };
+    await note.save();
+    await createAuditLog({
+      userId: note.patient,
+      performedBy: req.user._id,
+      action: 'CLINICAL_NOTE_DELETION_REQUESTED',
+      details: `Dr. ${req.user.name} requested patient-approved deletion of "${note.title}": ${reason}`,
+      resourceId: note._id,
+      resourceType: 'MedicalNote',
+      req,
+    });
+
+    return res.status(200).json({ success: true, message: 'Deletion request sent to the patient.', note });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @route   PUT /api/medical-staff/notes/:noteId/deletion-decision
+// @access  Private (Patient who owns the note)
+export const decideClinicalNoteDeletion = async (req, res, next) => {
+  try {
+    const note = await MedicalNote.findById(req.params.noteId);
+    if (!note) {
+      return res.status(404).json({ success: false, message: 'Prescription or clinical note not found.' });
+    }
+    if (note.patient.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Only the patient can decide this deletion request.' });
+    }
+    if (note.deletionRequest?.status !== 'pending') {
+      return res.status(409).json({ success: false, message: 'There is no pending deletion request for this note.' });
+    }
+    const { decision } = req.body;
+    if (!['approved', 'denied'].includes(decision)) {
+      return res.status(400).json({ success: false, message: 'Decision must be approved or denied.' });
+    }
+
+    note.deletionRequest.status = decision;
+    note.deletionRequest.reviewedAt = new Date();
+    if (decision === 'approved') note.deletedAt = new Date();
+    await note.save();
+
+    await createAuditLog({
+      userId: note.patient,
+      performedBy: req.user._id,
+      action: 'CLINICAL_NOTE_DELETION_DECIDED',
+      details: `Patient ${req.user.name} ${decision} deletion of clinical note "${note.title}"`,
+      resourceId: note._id,
+      resourceType: 'MedicalNote',
+      req,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: decision === 'approved' ? 'Note deleted with patient approval.' : 'Deletion request denied.',
+      note,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Get clinical notes for a patient
 // @route   GET /api/medical-staff/patients/:patientId/notes
 // @access  Private
@@ -132,7 +270,7 @@ export const getPatientNotes = async (req, res, next) => {
       });
     }
 
-    const notes = await MedicalNote.find({ patient: patient._id })
+    const notes = await MedicalNote.find({ patient: patient._id, deletedAt: null })
       .populate('doctor', 'name email mediVaultId medicalStaffDetails')
       .populate('linkedRecords', 'title category recordDate')
       .sort({ createdAt: -1 });
@@ -180,7 +318,7 @@ export const getPatientClinicalOverview = async (req, res, next) => {
         .select(
           'user title category description recordDate fileName storedFileName fileType fileSize fileUrl metadata createdAt updatedAt'
         ),
-      MedicalNote.find({ patient: patientId })
+      MedicalNote.find({ patient: patientId, deletedAt: null })
         .populate('doctor', 'name mediVaultId medicalStaffDetails')
         .sort({ createdAt: -1 }),
     ]);

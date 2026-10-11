@@ -1,6 +1,9 @@
 import express from 'express';
 import {
   addClinicalNote,
+  updateClinicalNote,
+  requestClinicalNoteDeletion,
+  decideClinicalNoteDeletion,
   getPatientNotes,
   getPatientClinicalOverview,
   getDoctorConsultations,
@@ -14,6 +17,9 @@ router.use(protect);
 
 // Clinical actions
 router.post('/notes', authorize('medical_staff'), addClinicalNote);
+router.put('/notes/:noteId', authorize('medical_staff'), updateClinicalNote);
+router.post('/notes/:noteId/deletion-request', authorize('medical_staff'), requestClinicalNoteDeletion);
+router.put('/notes/:noteId/deletion-decision', authorize('patient'), decideClinicalNoteDeletion);
 router.get('/my-consultations', authorize('medical_staff'), getDoctorConsultations);
 router.get('/patients/search', authorize('medical_staff'), searchPatientsForClinicalAccess);
 router.get(

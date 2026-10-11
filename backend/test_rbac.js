@@ -513,6 +513,74 @@ async function runRBACTests() {
   if (patientNotesData.count < 1) throw new Error('Patient failed to view doctor note');
   console.log('✓ Patient retrieved clinical note authored by:', patientNotesData.notes[0].doctor.name, '\n');
 
+  // Doctor may edit the note during its first hour.
+  const updatedNoteRes = await fetch(`${BASE_URL}/medical-staff/notes/${addNoteData.note._id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${doctor.token}`,
+    },
+    body: JSON.stringify({
+      ...notePayload,
+      title: 'Updated Post-Angioplasty Medication & Lifestyle Plan',
+    }),
+  });
+  const updatedNoteData = await updatedNoteRes.json();
+  if (!updatedNoteData.success || updatedNoteData.note.title !== 'Updated Post-Angioplasty Medication & Lifestyle Plan') {
+    throw new Error('Doctor could not edit a prescription within the first hour');
+  }
+  console.log('âœ“ Doctor edited the prescription within the one-hour window');
+
+  const requestDeletion = async () => {
+    const response = await fetch(`${BASE_URL}/medical-staff/notes/${addNoteData.note._id}/deletion-request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${doctor.token}`,
+      },
+      body: JSON.stringify({ reason: 'Prescription entered in error during testing' }),
+    });
+    return response.json();
+  };
+
+  const firstDeletionRequest = await requestDeletion();
+  if (!firstDeletionRequest.success || firstDeletionRequest.note.deletionRequest?.status !== 'pending') {
+    throw new Error('Doctor deletion request was not recorded for patient review');
+  }
+
+  const decideDeletion = async (decision) => {
+    const response = await fetch(`${BASE_URL}/medical-staff/notes/${addNoteData.note._id}/deletion-decision`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${patient.token}`,
+      },
+      body: JSON.stringify({ decision }),
+    });
+    return response.json();
+  };
+
+  const deniedDeletion = await decideDeletion('denied');
+  if (!deniedDeletion.success || deniedDeletion.note.deletedAt) {
+    throw new Error('Patient denial should preserve the prescription');
+  }
+  const secondDeletionRequest = await requestDeletion();
+  if (!secondDeletionRequest.success) throw new Error('A new request after patient denial should be allowed');
+
+  const approvedDeletion = await decideDeletion('approved');
+  if (!approvedDeletion.success || !approvedDeletion.note.deletedAt) {
+    throw new Error('Patient approval did not soft-delete the prescription');
+  }
+  const notesAfterDeletionRes = await fetch(
+    `${BASE_URL}/medical-staff/patients/${patient.user.mediVaultId}/notes`,
+    { headers: { Authorization: `Bearer ${patient.token}` } }
+  );
+  const notesAfterDeletion = await notesAfterDeletionRes.json();
+  if (notesAfterDeletion.notes.some((note) => note._id === addNoteData.note._id)) {
+    throw new Error('Patient-approved deleted prescription remained in the patient view');
+  }
+  console.log('âœ“ Patient denied and later approved deletion; approved removal is soft-deleted\n');
+
   // 6. Administrator Governance Flow
   console.log('[TEST 6] Testing Admin User Governance & Platform Analytics...');
   // Non-admin tries to access admin stats -> should return 403 Forbidden

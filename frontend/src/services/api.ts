@@ -324,6 +324,37 @@ export const medicalStaffAPI = {
     return res.data;
   },
 
+  updateClinicalNote: async (
+    noteId: string,
+    data: {
+      noteType: string;
+      title: string;
+      diagnosis?: string;
+      prescriptionItems: MedicalNote['prescriptionItems'];
+      clinicalNotes?: string;
+      followUpDate?: string;
+    }
+  ): Promise<{ success: boolean; message: string; note: MedicalNote }> => {
+    const res = await api.put(`/medical-staff/notes/${noteId}`, data);
+    return res.data;
+  },
+
+  requestNoteDeletion: async (
+    noteId: string,
+    reason: string
+  ): Promise<{ success: boolean; message: string; note: MedicalNote }> => {
+    const res = await api.post(`/medical-staff/notes/${noteId}/deletion-request`, { reason });
+    return res.data;
+  },
+
+  decideNoteDeletion: async (
+    noteId: string,
+    decision: 'approved' | 'denied'
+  ): Promise<{ success: boolean; message: string; note: MedicalNote }> => {
+    const res = await api.put(`/medical-staff/notes/${noteId}/deletion-decision`, { decision });
+    return res.data;
+  },
+
   getPatientNotes: async (
     patientId: string
   ): Promise<{ success: boolean; count: number; notes: MedicalNote[] }> => {
