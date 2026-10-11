@@ -921,12 +921,15 @@ export const MedicalStaffPage: React.FC = () => {
                       <span className="text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium">
                         {note.noteType}
                       </span>
+                      {!isDoctor && note.noteType === 'Prescription' &&
+                        typeof note.doctor === 'object' && note.doctor?.name && (
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
+                            Prescribed by Dr. {note.doctor.name}
+                          </span>
+                        )}
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">
                       Issued on {new Date(note.createdAt).toLocaleDateString()}
-                      {typeof note.doctor === 'object' && note.doctor?.name && (
-                        <span> • Attending: Dr. {note.doctor.name}</span>
-                      )}
                     </p>
                   </div>
 

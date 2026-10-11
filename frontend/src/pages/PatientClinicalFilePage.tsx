@@ -274,9 +274,16 @@ export const PatientClinicalFilePage: React.FC = () => {
               <article key={note._id} className="surface-card p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
-                      {note.noteType}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
+                        {note.noteType}
+                      </span>
+                      {note.noteType === 'Prescription' && typeof note.doctor === 'object' && note.doctor?.name && (
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
+                          Prescribed by Dr. {note.doctor.name}
+                        </span>
+                      )}
+                    </div>
                     <h3 className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{note.title}</h3>
                   </div>
                   <time className="text-xs text-slate-500">{formatDate(note.createdAt)}</time>
