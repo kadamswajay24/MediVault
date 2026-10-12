@@ -9,6 +9,7 @@ import { adminAPI } from '../services/api';
 import type { User, UserRole, AdminStatsResponse, AuditLog } from '../types';
 import { MEDICAL_SPECIALIZATIONS } from '../constants/medicalSpecializations';
 import { HOSPITAL_AFFILIATIONS } from '../constants/hospitalAffiliations';
+import { INSURANCE_COMPANIES } from '../constants/insuranceCompanies';
 
 export const AdminPage: React.FC = () => {
   const [stats, setStats] = useState<AdminStatsResponse['stats'] | null>(null);
@@ -30,7 +31,7 @@ export const AdminPage: React.FC = () => {
   const [hospitalAffiliation, setHospitalAffiliation] = useState('');
   const [customHospitalAffiliation, setCustomHospitalAffiliation] = useState('');
   const [companyName, setCompanyName] = useState('');
-  const [agentId, setAgentId] = useState('');
+  const [customCompanyName, setCustomCompanyName] = useState('');
   const [updatingRole, setUpdatingRole] = useState(false);
   const [approvingUserId, setApprovingUserId] = useState<string | null>(null);
 
@@ -126,8 +127,10 @@ export const AdminPage: React.FC = () => {
     );
     setHospitalAffiliation(existingHospital && !isKnownHospital ? 'Other' : existingHospital);
     setCustomHospitalAffiliation(existingHospital && !isKnownHospital ? existingHospital : '');
-    setCompanyName(u.insuranceDetails?.companyName || '');
-    setAgentId(u.insuranceDetails?.agentId || '');
+    const existingCompany = u.insuranceDetails?.companyName || '';
+    const isKnownCompany = INSURANCE_COMPANIES.includes(existingCompany);
+    setCompanyName(existingCompany && !isKnownCompany ? 'Other' : existingCompany);
+    setCustomCompanyName(existingCompany && !isKnownCompany ? existingCompany : '');
   };
 
   const handleSaveRole = async (e: React.FormEvent) => {
@@ -150,7 +153,10 @@ export const AdminPage: React.FC = () => {
               ? customHospitalAffiliation.trim()
               : hospitalAffiliation,
         },
-        insuranceDetails: { companyName, agentId, licenseNumber },
+        insuranceDetails: {
+          companyName: companyName === 'Other' ? customCompanyName.trim() : companyName,
+          licenseNumber,
+        },
       });
 
       if (res.success) {
@@ -586,23 +592,33 @@ export const AdminPage: React.FC = () => {
                   </span>
                   <div>
                     <label className="block text-[11px] text-slate-600 dark:text-slate-400">Insurance Company Name</label>
-                    <input
-                      type="text"
+                    <select
                       value={companyName}
                       onChange={(e) => setCompanyName(e.target.value)}
-                      placeholder="e.g. Star Health"
                       className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded mt-0.5"
-                    />
+                    >
+                      <option value="">Select insurance company</option>
+                      {INSURANCE_COMPANIES.map((company) => (
+                        <option key={company} value={company}>{company}</option>
+                      ))}
+                      <option value="Other">Other</option>
+                    </select>
+                    {companyName === 'Other' && (
+                      <input
+                        type="text"
+                        required
+                        value={customCompanyName}
+                        onChange={(e) => setCustomCompanyName(e.target.value)}
+                        placeholder="Enter insurance company name"
+                        className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded mt-1"
+                      />
+                    )}
                   </div>
                   <div>
-                    <label className="block text-[11px] text-slate-600 dark:text-slate-400">Agent Identifier</label>
-                    <input
-                      type="text"
-                      value={agentId}
-                      onChange={(e) => setAgentId(e.target.value)}
-                      placeholder="e.g. AGT-STAR-881"
-                      className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded mt-0.5"
-                    />
+                    <label className="block text-[11px] text-slate-600 dark:text-slate-400">Portal-generated Agent ID</label>
+                    <p className="mt-1 font-mono text-xs text-slate-700 dark:text-slate-300">
+                      {editingUser?.insuranceDetails?.agentId || 'Generated when company is saved'}
+                    </p>
                   </div>
                 </div>
               )}

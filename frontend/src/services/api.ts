@@ -14,6 +14,8 @@ import type {
   UserRole,
   MedicalStaffDetails,
   InsuranceDetails,
+  InsurancePolicyPlan,
+  PolicyEnrollment,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
@@ -301,6 +303,46 @@ export const claimAPI = {
 
   downloadClaimRecordUrl: (claimId: string, recordId: string): string => {
     return `${API_BASE_URL}/claims/${claimId}/records/${recordId}/download`;
+  },
+};
+
+export const policyAPI = {
+  getPlans: async (): Promise<{
+    success: boolean;
+    plans: InsurancePolicyPlan[];
+    demoMode: boolean;
+  }> => {
+    const res = await api.get('/policies/plans');
+    return res.data;
+  },
+
+  getMyPolicies: async (): Promise<{
+    success: boolean;
+    policies: PolicyEnrollment[];
+    demoMode: boolean;
+  }> => {
+    const res = await api.get('/policies/mine');
+    return res.data;
+  },
+
+  enroll: async (planId: string): Promise<{
+    success: boolean;
+    message: string;
+    policy: PolicyEnrollment;
+    demoMode: boolean;
+  }> => {
+    const res = await api.post(`/policies/plans/${planId}/enroll`);
+    return res.data;
+  },
+
+  payMonthlyPremium: async (enrollmentId: string): Promise<{
+    success: boolean;
+    message: string;
+    policy: PolicyEnrollment;
+    demoMode: boolean;
+  }> => {
+    const res = await api.post(`/policies/mine/${enrollmentId}/payments`);
+    return res.data;
   },
 };
 

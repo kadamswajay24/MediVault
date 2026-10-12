@@ -1,6 +1,7 @@
 import MedicalRecord, { RECORD_CATEGORIES } from '../models/MedicalRecord.js';
 import HealthProfile from '../models/HealthProfile.js';
 import InsuranceClaim from '../models/InsuranceClaim.js';
+import MedicalNote from '../models/MedicalNote.js';
 import ProxyDelegation from '../models/ProxyDelegation.js';
 import User from '../models/User.js';
 
@@ -20,6 +21,8 @@ export const getDashboardStats = async (req, res, next) => {
       targetUser,
       claimsCount,
       proxiesCount,
+      prescriptionNotes,
+      prescriptionsCount,
     ] = await Promise.all([
       MedicalRecord.countDocuments({ user: userId }),
       MedicalRecord.find({ user: userId })
@@ -33,6 +36,11 @@ export const getDashboardStats = async (req, res, next) => {
       User.findById(userId).select('name email role'),
       InsuranceClaim.countDocuments({ patient: userId }),
       ProxyDelegation.countDocuments({ patient: userId, status: 'active' }),
+      MedicalNote.find({ patient: userId, noteType: 'Prescription', deletedAt: null })
+        .select('title prescriptionItems createdAt')
+        .sort({ createdAt: -1 })
+        .limit(5),
+      MedicalNote.countDocuments({ patient: userId, noteType: 'Prescription', deletedAt: null }),
     ]);
 
     // Format category breakdown with default zeroes for all categories
@@ -46,6 +54,7 @@ export const getDashboardStats = async (req, res, next) => {
         categoryMap[item._id] = item.count;
       }
     });
+    categoryMap.Prescription += prescriptionsCount;
 
     // Calculate profile completeness score
     let completenessScore = 20; // Basic account creation
@@ -79,6 +88,7 @@ export const getDashboardStats = async (req, res, next) => {
         completenessScore,
         claimsCount,
         proxiesCount,
+        prescriptionsCount,
       },
       healthProfile: healthProfile || {
         fullName: targetUser ? targetUser.name : req.user.name,
@@ -89,6 +99,7 @@ export const getDashboardStats = async (req, res, next) => {
         emergencyContact: { name: '', relationship: '', phone: '' },
       },
       recentRecords,
+      prescriptions: prescriptionNotes,
       timeline,
       isProxyContext: !!req.isProxyActing,
       targetUser: targetUser || null,

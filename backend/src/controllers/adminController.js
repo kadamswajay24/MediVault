@@ -5,6 +5,7 @@ import InsuranceClaim from '../models/InsuranceClaim.js';
 import AuditLog from '../models/AuditLog.js';
 import ProxyDelegation from '../models/ProxyDelegation.js';
 import { createAuditLog } from '../services/auditService.js';
+import { generateCompanyAgentId } from '../services/agentIdService.js';
 
 const isValidUserId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -77,6 +78,17 @@ export const updateUserRole = async (req, res, next) => {
       });
     }
 
+    if (
+      role === 'insurance_agent' &&
+      (!insuranceDetails || typeof insuranceDetails.companyName !== 'string' ||
+        !insuranceDetails.companyName.trim())
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Select an insurance company before assigning the insurance agent role.',
+      });
+    }
+
     const oldRole = user.role;
     user.role = role;
     if (oldRole !== role || (role === 'patient' && user.approvalStatus === 'pending')) {
@@ -93,9 +105,18 @@ export const updateUserRole = async (req, res, next) => {
     }
 
     if (insuranceDetails && typeof insuranceDetails === 'object') {
+      const companyName = String(insuranceDetails.companyName || '').trim();
+      const companyChanged =
+        user.insuranceDetails?.companyName?.trim().toLowerCase() !== companyName.toLowerCase();
+      const agentId =
+        role === 'insurance_agent'
+          ? companyChanged || !user.insuranceDetails?.agentId
+            ? generateCompanyAgentId(companyName)
+            : user.insuranceDetails.agentId
+          : '';
       user.insuranceDetails = {
-        companyName: insuranceDetails.companyName || '',
-        agentId: insuranceDetails.agentId || '',
+        companyName,
+        agentId,
         licenseNumber: insuranceDetails.licenseNumber || '',
       };
     }

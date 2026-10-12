@@ -23,6 +23,7 @@ import { AuditLogsPage } from './pages/AuditLogsPage';
 import { ClaimsPage } from './pages/ClaimsPage';
 import { CaregiversPage } from './pages/CaregiversPage';
 import { PatientLandingPage } from './pages/PatientLandingPage';
+import { PoliciesPage } from './pages/PoliciesPage';
 const MedicalStaffPage = React.lazy(() =>
   import('./pages/MedicalStaffPage').then((page) => ({ default: page.MedicalStaffPage }))
 );
@@ -149,6 +150,7 @@ export function App() {
                 </Route>
                 <Route element={<RoleRoute roles={['patient']} />}>
                   <Route path="/dashboard" element={<DashboardPage />} />
+                  <Route path="/policies" element={<PoliciesPage />} />
                   <Route path="/records" element={<RecordsPage />} />
                   <Route
                     path="/prescriptions"

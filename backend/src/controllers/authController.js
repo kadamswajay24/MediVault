@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import HealthProfile from '../models/HealthProfile.js';
 import { createAuditLog } from '../services/auditService.js';
+import { generateCompanyAgentId } from '../services/agentIdService.js';
 
 // Helper to sign JWT
 const generateToken = (id) => {
@@ -68,6 +69,17 @@ export const registerUser = async (req, res, next) => {
       });
     }
 
+    if (
+      role === 'insurance_agent' &&
+      (!insuranceDetails || typeof insuranceDetails.companyName !== 'string' ||
+        !insuranceDetails.companyName.trim())
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please select an insurance company for the agent account.',
+      });
+    }
+
     const normalizedPhone = String(phone || '').replace(/[\s()-]/g, '');
     const phoneMatch = normalizedPhone.match(/^\+?91([6-9]\d{9})$/);
     if (!phoneMatch) {
@@ -107,8 +119,11 @@ export const registerUser = async (req, res, next) => {
 
     if (insuranceDetails && typeof insuranceDetails === 'object') {
       userData.insuranceDetails = {
-        companyName: insuranceDetails.companyName || '',
-        agentId: insuranceDetails.agentId || '',
+        companyName: String(insuranceDetails.companyName || '').trim(),
+        agentId:
+          role === 'insurance_agent'
+            ? generateCompanyAgentId(insuranceDetails.companyName)
+            : '',
         licenseNumber: insuranceDetails.licenseNumber || '',
       };
     }

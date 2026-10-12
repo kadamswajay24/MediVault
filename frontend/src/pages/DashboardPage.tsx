@@ -88,6 +88,14 @@ export const DashboardPage: React.FC = () => {
   }
 
   const { stats, healthProfile, recentRecords } = data;
+  const prescribedMedications = Array.from(
+    new Set([
+      ...(healthProfile.medications || []),
+      ...data.prescriptions.flatMap((prescription) =>
+        prescription.prescriptionItems.map((item) => item.medicineName)
+      ),
+    ])
+  );
   const activeName = activeDependent ? activeDependent.name : healthProfile.fullName || user?.name || 'Patient';
 
   return (
@@ -281,10 +289,10 @@ export const DashboardPage: React.FC = () => {
             </div>
 
             <div>
-              <span className="text-[11px] font-semibold text-slate-500 block mb-1">Active Medications:</span>
-              {healthProfile.medications && healthProfile.medications.length > 0 ? (
+              <span className="text-[11px] font-semibold text-slate-500 block mb-1">Prescribed Medications:</span>
+              {prescribedMedications.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
-                  {healthProfile.medications.map((m, i) => (
+                  {prescribedMedications.map((m, i) => (
                     <span
                       key={i}
                       className="text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-medium"
@@ -294,7 +302,7 @@ export const DashboardPage: React.FC = () => {
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-slate-400 italic">No ongoing prescriptions recorded</p>
+                <p className="text-xs text-slate-400 italic">No prescriptions recorded</p>
               )}
             </div>
           </div>

@@ -15,6 +15,7 @@ import { useAuth } from '../context/useAuth';
 import type { UserRole } from '../types';
 import { MEDICAL_SPECIALIZATIONS } from '../constants/medicalSpecializations';
 import { HOSPITAL_AFFILIATIONS } from '../constants/hospitalAffiliations';
+import { INSURANCE_COMPANIES } from '../constants/insuranceCompanies';
 
 type RegistrationPortal = 'patient' | 'clinical' | 'insurance';
 
@@ -42,12 +43,13 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
   const [hospitalAffiliation, setHospitalAffiliation] = useState('');
   const [customHospitalAffiliation, setCustomHospitalAffiliation] = useState('');
   const [companyName, setCompanyName] = useState('');
-  const [agentId, setAgentId] = useState('');
+  const [customCompanyName, setCustomCompanyName] = useState('');
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [registrationPending, setRegistrationPending] = useState(false);
   const [issuedMediVaultId, setIssuedMediVaultId] = useState<string | null>(null);
+  const [issuedAgentId, setIssuedAgentId] = useState<string | null>(null);
 
   const { register } = useAuth();
   const navigate = useNavigate();
@@ -81,6 +83,16 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
       return;
     }
 
+    if (role === 'insurance_agent' && !companyName) {
+      setError('Select your insurance company.');
+      return;
+    }
+
+    if (role === 'insurance_agent' && companyName === 'Other' && !customCompanyName.trim()) {
+      setError('Enter the name of your insurance company.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -105,12 +117,17 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
             : undefined,
         insuranceDetails:
           role === 'insurance_agent'
-            ? { companyName, agentId, licenseNumber }
+            ? {
+                companyName:
+                  companyName === 'Other' ? customCompanyName.trim() : companyName,
+                licenseNumber,
+              }
             : undefined,
       });
 
       if (result.pendingApproval) {
         setIssuedMediVaultId(result.user.mediVaultId);
+        setIssuedAgentId(result.user.insuranceDetails?.agentId || null);
         setRegistrationPending(true);
         return;
       }
@@ -161,6 +178,11 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
             {issuedMediVaultId && (
               <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-950 dark:text-slate-300">
                 Your MediVault ID: <span className="font-mono font-semibold">{issuedMediVaultId}</span>
+              </p>
+            )}
+            {issuedAgentId && (
+              <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-950 dark:text-slate-300">
+                Portal-generated agent ID: <span className="font-mono font-semibold">{issuedAgentId}</span>
               </p>
             )}
             <Link
@@ -355,21 +377,33 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
                   Insurance Provider Affiliation
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  <input
-                    type="text"
-                    placeholder="Insurance Company (e.g. Star Health)"
+                  <select
+                    required
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
-                    className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Agent Identifier / Code"
-                    value={agentId}
-                    onChange={(e) => setAgentId(e.target.value)}
-                    className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded"
-                  />
+                    aria-label="Insurance company"
+                    className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded text-slate-700 dark:text-slate-300"
+                  >
+                    <option value="">Select insurance company</option>
+                    {INSURANCE_COMPANIES.map((company) => (
+                      <option key={company} value={company}>{company}</option>
+                    ))}
+                    <option value="Other">Other</option>
+                  </select>
+                  {companyName === 'Other' && (
+                    <input
+                      type="text"
+                      required
+                      placeholder="Enter insurance company name"
+                      value={customCompanyName}
+                      onChange={(e) => setCustomCompanyName(e.target.value)}
+                      className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded"
+                    />
+                  )}
                 </div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                  MediVault will generate a company-specific agent ID for you.
+                </p>
               </div>
             )}
 

@@ -93,6 +93,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
           { name: 'Medical Records', path: '/records', icon: FileText },
           { name: 'Prescriptions', path: '/prescriptions', icon: Pill },
           { name: 'Insurance Claims', path: '/claims', icon: FileCheck2 },
+          { name: 'My Policies', path: '/policies', icon: ShieldCheck },
           { name: 'Caregivers', path: '/caregivers', icon: Users },
           { name: 'Health Profile', path: '/profile', icon: User },
           { name: 'Staff Access', path: '/access-requests', icon: KeyRound },

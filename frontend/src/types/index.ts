@@ -139,6 +139,35 @@ export interface InsuranceClaim {
   updatedAt: string;
 }
 
+export interface InsurancePolicyPlan {
+  id: string;
+  name: string;
+  provider: string;
+  description: string;
+  coverageAmount: number;
+  monthlyPremium: number;
+  highlights: string[];
+}
+
+export interface PolicyEnrollment {
+  _id: string;
+  planId: string;
+  planName: string;
+  provider: string;
+  coverageAmount: number;
+  monthlyPremium: number;
+  policyNumber: string;
+  status: 'demo_active';
+  nextPremiumDue: string;
+  payments: {
+    _id: string;
+    amount: number;
+    paidAt: string;
+    mode: 'demo';
+  }[];
+  createdAt: string;
+}
+
 export interface ProxyDelegation {
   _id: string;
   patient: User;
@@ -226,6 +255,7 @@ export interface DashboardStats {
   completenessScore: number;
   claimsCount?: number;
   proxiesCount?: number;
+  prescriptionsCount?: number;
 }
 
 export interface DashboardResponse {
@@ -233,6 +263,12 @@ export interface DashboardResponse {
   stats: DashboardStats;
   healthProfile: HealthProfile;
   recentRecords: MedicalRecord[];
+  prescriptions: {
+    _id: string;
+    title: string;
+    prescriptionItems: PrescriptionItem[];
+    createdAt: string;
+  }[];
   timeline: {
     _id: string;
     title: string;
