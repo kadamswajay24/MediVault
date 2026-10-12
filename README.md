@@ -57,12 +57,18 @@ MediVault is a secure, personal health management platform designed for patients
    - Recent records list with one-click preview.
    - Basic chronological health record timeline.
 
-7. **Insurance Policy Marketplace**:
+7. **Hospital Appointments**:
+   - Patients and full-access proxies can select a hospital, doctor, date, and available slot from approved staff profiles.
+   - Medical staff configure their own working days, hours, and appointment lengths; listed free slots are confirmed immediately.
+   - Booked slots are unavailable and alternative open times are offered. Requests for other times during configured working hours are sent to the doctor or their assigned staff approvers.
+   - Doctors can assign other approved medical staff at their hospital to review appointment requests.
+
+8. **Insurance Policy Marketplace**:
    - Patients can browse illustrative plan options and keep their demo enrollments together in the Policies area.
    - Monthly premium dates and simulated payment history are recorded for each demo enrollment.
    - Marketplace plans, prices, and payments are demonstrations only; they do not bind insurance coverage or charge money.
 
-8. **System & Clinical Audit Logs**:
+9. **System & Clinical Audit Logs**:
    - Automatic background logging for:
      - `LOGIN`
      - `ACCESS_REQUESTED` / `ACCESS_REQUEST_DECIDED` / `ACCESS_REVOKED`
@@ -70,16 +76,17 @@ MediVault is a secure, personal health management platform designed for patients
      - `RECORD_UPLOAD`
      - `RECORD_VIEW` / Download
      - `RECORD_DELETE`
+     - `APPOINTMENT_BOOKED` / `APPOINTMENT_REVIEWED`
    - Complete trace with timestamps, IP addresses, and resource details.
 
-9. **Strict User-Level Authorization & Security**:
+10. **Strict User-Level Authorization & Security**:
    - Patients can access their own records; proxies and clinicians can access patient data only through authorized, patient-specific grants.
    - Unauthorized attempts by other users return `403 Forbidden`.
    - Medical staff request access to one identified patient, state a clinical purpose, and request an access end time.
    - The patient, their authorized full-access proxy, or an administrator may approve for a chosen end time or deny the request.
    - Patients, proxies, staff, or administrators may revoke an active grant; approved access expires automatically and is enforced by the API.
 
-10. **Architectural Readiness for Future Milestones**:
+11. **Architectural Readiness for Future Milestones**:
    - Future hook interfaces in `recordService.js` for:
      - Blockchain hash anchoring
      - IPFS decentralized file pinning
@@ -103,6 +110,7 @@ medivault/
 │   │   │   ├── profileController.js  # Health profile CRUD
 │   │   │   ├── recordController.js   # File upload, download, query, delete
 │   │   │   ├── dashboardController.js# Aggregate statistics & timeline
+│   │   │   ├── appointmentController.js # Hospital availability, bookings & approvals
 │   │   │   ├── policyController.js   # Demo policy catalog, enrollment & premium history
 │   │   │   └── auditController.js    # Security & clinical audit trail
 │   │   ├── middleware/
@@ -115,6 +123,7 @@ medivault/
 │   │   │   ├── MedicalRecord.js      # Documents & future metadata placeholders
 │   │   │   ├── PolicyEnrollment.js   # Patient demo policy enrollments and payments
 │   │   │   ├── ClinicalAccessRequest.js # Patient-specific, expiring staff access grants
+│   │   │   ├── Appointment.js       # Hospital appointment requests and confirmed slots
 │   │   │   └── AuditLog.js           # Immutable event logging
 │   │   ├── routes/
 │   │   │   ├── authRoutes.js
@@ -124,6 +133,7 @@ medivault/
 │   │   │   ├── auditRoutes.js
 │   │   │   ├── clinicalAccessRoutes.js
 │   │   │   ├── policyRoutes.js
+│   │   │   ├── appointmentRoutes.js
 │   │   ├── services/
 │   │   │   ├── auditService.js       # Asynchronous audit event logger
 │   │   │   ├── agentIdService.js     # Company-prefixed insurance agent IDs
@@ -140,7 +150,8 @@ medivault/
 │   │   │   ├── Navbar.tsx            # Navigation, branding & user status
 │   │   │   ├── ProtectedRoute.tsx    # Auth route guard
 │   │   │   ├── UploadModal.tsx       # Document upload modal with drag & drop
-│   │   │   └── RecordViewerModal.tsx # In-modal preview, download & delete
+│   │   │   ├── RecordViewerModal.tsx # In-modal preview, download & delete
+│   │   │   └── AppointmentsPanel.tsx # Patient booking and staff scheduling/approvals
 │   │   ├── context/
 │   │   │   └── AuthContext.tsx       # Authentication state & session sync
 │   │   ├── pages/

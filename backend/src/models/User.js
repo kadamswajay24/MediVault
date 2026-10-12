@@ -2,6 +2,16 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 
+const appointmentScheduleSchema = new mongoose.Schema(
+  {
+    dayOfWeek: { type: Number, min: 0, max: 6, required: true },
+    startTime: { type: String, match: /^([01]\d|2[0-3]):[0-5]\d$/, required: true },
+    endTime: { type: String, match: /^([01]\d|2[0-3]):[0-5]\d$/, required: true },
+    slotDurationMinutes: { type: Number, enum: [15, 30, 45, 60], required: true },
+  },
+  { _id: false }
+);
+
 const userSchema = new mongoose.Schema(
   {
     name: {
@@ -61,6 +71,14 @@ const userSchema = new mongoose.Schema(
       licenseNumber: { type: String, trim: true, default: '' },
       specialization: { type: String, trim: true, default: '' },
       hospitalAffiliation: { type: String, trim: true, default: '' },
+      appointmentSchedule: {
+        type: [appointmentScheduleSchema],
+        default: [],
+      },
+      appointmentManagers: {
+        type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+        default: [],
+      },
     },
     insuranceDetails: {
       companyName: { type: String, trim: true, default: '' },

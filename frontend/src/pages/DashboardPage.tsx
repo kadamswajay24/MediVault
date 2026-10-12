@@ -11,12 +11,14 @@ import {
   Loader2,
   FileCheck2,
   AlertCircle,
+  Pill,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { dashboardAPI } from '../services/api';
 import type { DashboardResponse, MedicalRecord } from '../types';
 import { UploadModal } from '../components/UploadModal';
 import { RecordViewerModal } from '../components/RecordViewerModal';
+import { AppointmentsPanel } from '../components/AppointmentsPanel';
 
 export const DashboardPage: React.FC = () => {
   const { user, activeDependent } = useAuth();
@@ -236,6 +238,77 @@ export const DashboardPage: React.FC = () => {
           ))}
         </div>
       </div>
+
+      <section className="surface-card space-y-4 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 dark:border-slate-800">
+          <h2 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+            <Pill className="h-4 w-4 text-blue-500" />
+            Recent Prescriptions
+          </h2>
+          <Link to="/prescriptions" className="text-xs text-emerald-600 hover:underline">
+            View all prescriptions
+          </Link>
+        </div>
+        {data.prescriptions.length === 0 && data.prescriptionRecords.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-500">No prescriptions recorded yet.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Digital prescriptions</h3>
+              {data.prescriptions.length === 0 ? (
+                <p className="text-xs text-slate-500">No digital prescriptions from your care team.</p>
+              ) : data.prescriptions.map((prescription) => (
+                <article key={prescription._id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-900 dark:text-white">{prescription.title}</h4>
+                      <p className="mt-0.5 text-xs text-slate-500">{new Date(prescription.createdAt).toLocaleDateString()}</p>
+                    </div>
+                    <span className="rounded-full bg-blue-500/10 px-2 py-1 text-[10px] font-semibold text-blue-700 dark:text-blue-300">Digital Rx</span>
+                  </div>
+                  {prescription.prescriptionItems.length > 0 ? (
+                    <ul className="mt-2 space-y-1.5">
+                      {prescription.prescriptionItems.map((item, index) => (
+                        <li key={`${prescription._id}-${index}`} className="text-xs text-slate-600 dark:text-slate-400">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{item.medicineName}</span>
+                          {[item.dosage, item.frequency, item.duration].filter(Boolean).length > 0 && (
+                            <span> - {[item.dosage, item.frequency, item.duration].filter(Boolean).join(' - ')}</span>
+                          )}
+                          {item.instructions && <span className="block text-slate-500">{item.instructions}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-xs text-slate-500">No medicine details recorded.</p>
+                  )}
+                </article>
+              ))}
+            </div>
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Prescription documents</h3>
+              {data.prescriptionRecords.length === 0 ? (
+                <p className="text-xs text-slate-500">No uploaded prescription documents.</p>
+              ) : data.prescriptionRecords.map((record) => (
+                <div key={record._id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{record.title}</p>
+                    <p className="text-xs text-slate-500">{new Date(record.recordDate).toLocaleDateString()}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRecord(record)}
+                    className="shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    View
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <AppointmentsPanel />
 
       {/* Split Grid: Allergies / Conditions & Recent Documents */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

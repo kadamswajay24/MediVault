@@ -9,6 +9,7 @@ import {
   Loader2,
   Heart,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/useAuth';
 import { proxyAPI } from '../services/api';
 import type { ProxyDelegation } from '../types';
@@ -161,6 +162,22 @@ export const CaregiversPage: React.FC = () => {
           </button>
         </div>
       )}
+
+      <div className="flex flex-col justify-between gap-3 rounded-xl border border-indigo-200 bg-indigo-50/70 p-4 dark:border-indigo-900/60 dark:bg-indigo-950/20 sm:flex-row sm:items-center">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Review clinical access requests</h2>
+          <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+            Full-access proxies can approve or deny medical staff requests for the patients they manage.
+          </p>
+        </div>
+        <Link
+          to="/access-requests"
+          className="inline-flex w-fit items-center gap-2 rounded-lg border border-indigo-300 px-3.5 py-2 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 dark:border-indigo-800 dark:text-indigo-200 dark:hover:bg-indigo-950/50"
+        >
+          <ShieldCheck className="h-4 w-4" />
+          Review requests
+        </Link>
+      </div>
 
       {error && (
         <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/80 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300 text-sm">

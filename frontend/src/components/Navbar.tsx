@@ -127,7 +127,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
               icon: Users,
               items: [
                 { name: 'Caregivers', path: '/caregivers', icon: Users },
-                { name: 'Staff Access', path: '/access-requests', icon: KeyRound },
+                { name: 'Access Approvals', path: '/access-requests', icon: KeyRound },
                 { name: 'Audit Trail', path: '/audit-logs', icon: History },
               ],
             },

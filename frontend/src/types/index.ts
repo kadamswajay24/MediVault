@@ -240,6 +240,8 @@ export interface AuditLog {
     | 'ACCESS_REQUESTED'
     | 'ACCESS_REQUEST_DECIDED'
     | 'ACCESS_REVOKED'
+    | 'APPOINTMENT_BOOKED'
+    | 'APPOINTMENT_REVIEWED'
     | 'ADMIN_USER_UPDATED';
   details: string;
   resourceId?: string | null;
@@ -269,6 +271,7 @@ export interface DashboardResponse {
     prescriptionItems: PrescriptionItem[];
     createdAt: string;
   }[];
+  prescriptionRecords: MedicalRecord[];
   timeline: {
     _id: string;
     title: string;

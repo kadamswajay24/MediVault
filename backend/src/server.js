@@ -16,6 +16,7 @@ import medicalStaffRoutes from './routes/medicalStaffRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import clinicalAccessRoutes from './routes/clinicalAccessRoutes.js';
 import policyRoutes from './routes/policyRoutes.js';
+import appointmentRoutes from './routes/appointmentRoutes.js';
 
 // Initialize database and assign MediVault IDs to any existing accounts before serving requests.
 await connectDB();
@@ -98,6 +99,7 @@ app.use('/api/medical-staff', medicalStaffRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/clinical-access', clinicalAccessRoutes);
 app.use('/api/policies', policyRoutes);
+app.use('/api/appointments', appointmentRoutes);
 
 // Error Handling
 app.use(notFound);

@@ -219,6 +219,107 @@ export interface ClinicalAccessRequest {
   createdAt: string;
 }
 
+export interface AppointmentScheduleDay {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  slotDurationMinutes: 15 | 30 | 45 | 60;
+}
+
+export interface AppointmentEntry {
+  _id: string;
+  patient: User | string;
+  doctor: User | string;
+  hospitalName: string;
+  appointmentDate: string;
+  time: string;
+  durationMinutes: number;
+  status: 'confirmed' | 'pending' | 'declined' | 'cancelled';
+  createdAt: string;
+}
+
+export const appointmentsAPI = {
+  getHospitals: async (): Promise<{
+    success: boolean;
+    hospitals: {
+      name: string;
+      doctors: {
+        id: string;
+        name: string;
+        specialization: string;
+        schedule: AppointmentScheduleDay[];
+      }[];
+    }[];
+  }> => {
+    const res = await api.get('/appointments/hospitals');
+    return res.data;
+  },
+
+  getAvailability: async (doctorId: string, date: string): Promise<{
+    success: boolean;
+    schedule: AppointmentScheduleDay | null;
+    slots: { time: string; status: 'available' | 'booked' }[];
+    alternatives: string[];
+  }> => {
+    const res = await api.get('/appointments/availability', { params: { doctorId, date } });
+    return res.data;
+  },
+
+  getMine: async (): Promise<{ success: boolean; appointments: AppointmentEntry[] }> => {
+    const res = await api.get('/appointments/mine');
+    return res.data;
+  },
+
+  book: async (data: {
+    doctorId: string;
+    appointmentDate: string;
+    time: string;
+    timeZoneOffsetMinutes: number;
+  }): Promise<{ success: boolean; message: string; appointment: AppointmentEntry }> => {
+    const res = await api.post('/appointments', data);
+    return res.data;
+  },
+
+  getMySchedule: async (): Promise<{
+    success: boolean;
+    schedule: AppointmentScheduleDay[];
+    managerIds: string[];
+    availableManagers: Pick<User, 'id' | 'name' | 'medicalStaffDetails'>[];
+  }> => {
+    const res = await api.get('/appointments/mine/schedule');
+    return res.data;
+  },
+
+  updateMySchedule: async (
+    schedule: AppointmentScheduleDay[],
+    managerIds: string[]
+  ): Promise<{
+    success: boolean;
+    message: string;
+    schedule: AppointmentScheduleDay[];
+    managerIds: string[];
+  }> => {
+    const res = await api.put('/appointments/mine/schedule', { schedule, managerIds });
+    return res.data;
+  },
+
+  getMyRequests: async (): Promise<{
+    success: boolean;
+    appointments: AppointmentEntry[];
+  }> => {
+    const res = await api.get('/appointments/mine/requests');
+    return res.data;
+  },
+
+  decide: async (
+    id: string,
+    decision: 'confirmed' | 'declined'
+  ): Promise<{ success: boolean; message: string; appointment: AppointmentEntry }> => {
+    const res = await api.put(`/appointments/${id}/decision`, { decision });
+    return res.data;
+  },
+};
+
 export const clinicalAccessAPI = {
   getRequests: async (): Promise<{ success: boolean; requests: ClinicalAccessRequest[] }> => {
     const res = await api.get('/clinical-access');

@@ -23,6 +23,7 @@ export const getDashboardStats = async (req, res, next) => {
       proxiesCount,
       prescriptionNotes,
       prescriptionsCount,
+      prescriptionRecords,
     ] = await Promise.all([
       MedicalRecord.countDocuments({ user: userId }),
       MedicalRecord.find({ user: userId })
@@ -41,6 +42,9 @@ export const getDashboardStats = async (req, res, next) => {
         .sort({ createdAt: -1 })
         .limit(5),
       MedicalNote.countDocuments({ patient: userId, noteType: 'Prescription', deletedAt: null }),
+      MedicalRecord.find({ user: userId, category: 'Prescription' })
+        .sort({ recordDate: -1, createdAt: -1 })
+        .limit(5),
     ]);
 
     // Format category breakdown with default zeroes for all categories
@@ -100,6 +104,7 @@ export const getDashboardStats = async (req, res, next) => {
       },
       recentRecords,
       prescriptions: prescriptionNotes,
+      prescriptionRecords,
       timeline,
       isProxyContext: !!req.isProxyActing,
       targetUser: targetUser || null,
