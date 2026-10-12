@@ -15,11 +15,13 @@ import {
   FileCheck2,
   Pill,
   Users,
+  Heart,
   Stethoscope,
   Shield,
   ArrowRightLeft,
   XCircle,
   KeyRound,
+  ChevronDown,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { useTheme } from '../context/useTheme';
@@ -34,6 +36,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openNavGroup, setOpenNavGroup] = useState<string | null>(null);
   const isRegistrationPage = location.pathname.endsWith('/register');
   const guestPortal = location.pathname.startsWith('/clinical/')
     ? {
@@ -64,45 +67,78 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
     navigate('/');
   };
 
-  // Determine role-specific nav items
+  // Keep patient navigation focused by grouping related destinations under a few clear headings.
   const getNavItems = () => {
-    if (!user) return [];
+    if (!user) return { primary: [], groups: [] };
 
     switch (user.role) {
       case 'insurance_agent':
-        return [
-          { name: 'Claims Queue', path: '/claims', icon: FileCheck2 },
-          { name: 'Audit Trail', path: '/audit-logs', icon: History },
-        ];
+        return {
+          primary: [
+            { name: 'Claims Queue', path: '/claims', icon: FileCheck2 },
+            { name: 'Audit Trail', path: '/audit-logs', icon: History },
+          ],
+          groups: [],
+        };
       case 'medical_staff':
-        return [
-          { name: 'Clinical Consultations', path: '/medical-staff', icon: Stethoscope },
-          { name: 'Patient Access', path: '/access-requests', icon: KeyRound },
-          { name: 'Audit Trail', path: '/audit-logs', icon: History },
-        ];
+        return {
+          primary: [
+            { name: 'Clinical Consultations', path: '/medical-staff', icon: Stethoscope },
+            { name: 'Patient Access', path: '/access-requests', icon: KeyRound },
+            { name: 'Audit Trail', path: '/audit-logs', icon: History },
+          ],
+          groups: [],
+        };
       case 'admin':
-        return [
-          { name: 'Governance', path: '/admin', icon: Shield },
-          { name: 'Access Requests', path: '/access-requests', icon: KeyRound },
-          { name: 'Audit Trail', path: '/audit-logs', icon: History },
-        ];
+        return {
+          primary: [
+            { name: 'Governance', path: '/admin', icon: Shield },
+            { name: 'Access Requests', path: '/access-requests', icon: KeyRound },
+            { name: 'Audit Trail', path: '/audit-logs', icon: History },
+          ],
+          groups: [],
+        };
       case 'patient':
       default:
-        return [
-          { name: 'Dashboard', path: '/dashboard', icon: Activity },
-          { name: 'Medical Records', path: '/records', icon: FileText },
-          { name: 'Prescriptions', path: '/prescriptions', icon: Pill },
-          { name: 'Insurance Claims', path: '/claims', icon: FileCheck2 },
-          { name: 'My Policies', path: '/policies', icon: ShieldCheck },
-          { name: 'Caregivers', path: '/caregivers', icon: Users },
-          { name: 'Health Profile', path: '/profile', icon: User },
-          { name: 'Staff Access', path: '/access-requests', icon: KeyRound },
-          { name: 'Audit Trail', path: '/audit-logs', icon: History },
-        ];
+        return {
+          primary: [
+            { name: 'Dashboard', path: '/dashboard', icon: Activity },
+          ],
+          groups: [
+            {
+              name: 'My Health',
+              icon: Heart,
+              items: [
+                { name: 'Medical Records', path: '/records', icon: FileText },
+                { name: 'Prescriptions', path: '/prescriptions', icon: Pill },
+                { name: 'Health Profile', path: '/profile', icon: User },
+              ],
+            },
+            {
+              name: 'Insurance',
+              icon: ShieldCheck,
+              items: [
+                { name: 'Insurance Claims', path: '/claims', icon: FileCheck2 },
+                { name: 'My Policies', path: '/policies', icon: ShieldCheck },
+              ],
+            },
+            {
+              name: 'Care & Access',
+              icon: Users,
+              items: [
+                { name: 'Caregivers', path: '/caregivers', icon: Users },
+                { name: 'Staff Access', path: '/access-requests', icon: KeyRound },
+                { name: 'Audit Trail', path: '/audit-logs', icon: History },
+              ],
+            },
+          ],
+        };
     }
   };
 
   const navItems = getNavItems();
+  const primaryNavItems = navItems.primary;
+  const navGroups = navItems.groups;
 
   const getRoleBadge = (role?: string) => {
     switch (role) {
@@ -169,7 +205,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
           {/* Desktop Nav Links */}
           {isAuthenticated && (
             <nav className="hidden lg:flex items-center gap-1">
-              {navItems.map((item) => {
+              {primaryNavItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.path;
                 return (
@@ -185,6 +221,55 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
                     <Icon className="w-3.5 h-3.5 text-slate-400" />
                     {item.name}
                   </Link>
+                );
+              })}
+
+              {navGroups.map((group) => {
+                const GroupIcon = group.icon;
+                const isGroupActive = group.items.some((item) => location.pathname === item.path);
+                const isOpen = openNavGroup === group.name;
+
+                return (
+                  <div key={group.name} className="relative">
+                    <button
+                      type="button"
+                      aria-expanded={isOpen}
+                      onClick={() => setOpenNavGroup(isOpen ? null : group.name)}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        isGroupActive
+                          ? 'bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white'
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      <GroupIcon className="h-3.5 w-3.5 text-slate-400" />
+                      {group.name}
+                      <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {isOpen && (
+                      <div className="absolute left-0 top-full z-50 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-950">
+                        {group.items.map((item) => {
+                        const Icon = item.icon;
+                        const isActive = location.pathname === item.path;
+                        return (
+                          <Link
+                            key={item.path}
+                            to={item.path}
+                            onClick={() => setOpenNavGroup(null)}
+                            className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold ${
+                              isActive
+                                ? 'bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white'
+                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100'
+                            }`}
+                          >
+                            <Icon className="h-3.5 w-3.5 text-slate-400" />
+                            {item.name}
+                          </Link>
+                        );
+                      })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </nav>
@@ -278,23 +363,79 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
           <p className="px-3 py-2 text-xs font-mono text-slate-500">
             Your MediVault ID: <span className="font-semibold text-slate-700 dark:text-slate-300">{user?.mediVaultId}</span>
           </p>
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location.pathname === item.path;
+
+          <div className="space-y-1">
+            {primaryNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = location.pathname === item.path;
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold ${
+                    isActive
+                      ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  <Icon className="w-4 h-4 text-slate-400" />
+                  {item.name}
+                </Link>
+              );
+            })}
+          </div>
+
+          {navGroups.map((group) => {
+            const GroupIcon = group.icon;
+            const isGroupActive = group.items.some((item) => location.pathname === item.path);
+            const isOpen = openNavGroup === group.name;
+
             return (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold ${
-                  isActive
-                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'
-                    : 'text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                <Icon className="w-4 h-4 text-slate-400" />
-                {item.name}
-              </Link>
+              <div key={group.name} className="border-t border-slate-200 pt-1 dark:border-slate-800">
+                <button
+                  type="button"
+                  aria-expanded={isOpen}
+                  onClick={() => setOpenNavGroup(isOpen ? null : group.name)}
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs font-semibold ${
+                    isGroupActive
+                      ? 'text-slate-900 dark:text-white'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <GroupIcon className="h-4 w-4 text-slate-400" />
+                    {group.name}
+                  </span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {isOpen && (
+                  <div className="ml-5 border-l border-slate-200 pl-2 dark:border-slate-800">
+                    {group.items.map((item) => {
+                      const Icon = item.icon;
+                      const isActive = location.pathname === item.path;
+                      return (
+                        <Link
+                          key={item.path}
+                          to={item.path}
+                          onClick={() => {
+                            setMobileMenuOpen(false);
+                            setOpenNavGroup(null);
+                          }}
+                          className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold ${
+                            isActive
+                              ? 'bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white'
+                              : 'text-slate-600 dark:text-slate-400'
+                          }`}
+                        >
+                          <Icon className="h-4 w-4 text-slate-400" />
+                          {item.name}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
