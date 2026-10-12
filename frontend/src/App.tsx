@@ -7,6 +7,7 @@ import {
   Outlet,
   useLocation,
 } from 'react-router-dom';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/useAuth';
 import { ThemeProvider } from './context/ThemeContext';
@@ -118,6 +119,7 @@ export function App() {
     <ThemeProvider>
       <AuthProvider>
         <Router>
+          <SpeedInsights />
           <Routes>
             <Route element={<AppLayout />}>
               {/* Public Routes */}
