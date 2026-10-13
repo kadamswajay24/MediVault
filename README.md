@@ -64,9 +64,10 @@ MediVault is a secure, personal health management platform designed for patients
    - Doctors can assign other approved medical staff at their hospital to review appointment requests.
 
 8. **Insurance Policy Marketplace**:
-   - Patients can browse illustrative plan options and keep their demo enrollments together in the Policies area.
-   - Monthly premium dates and simulated payment history are recorded for each demo enrollment.
-   - Marketplace plans, prices, and payments are demonstrations only; they do not bind insurance coverage or charge money.
+   - Administrators can create and edit custom illustrative plans, then publish, unpublish, or archive listings from the administration area.
+   - New plans are saved as drafts; patients see only published plans and can keep demo enrollments together in the Policies area.
+   - Monthly premium dates and simulated payment history are recorded for demo enrollments. Listings and payments do not bind insurance coverage or charge money.
+   - Remove existing enrollments for the built-in sample plans with `npm run policies:clear-legacy-demo -- --confirm` from `backend`. This only deletes enrollments whose plan IDs are `essential`, `family`, or `plus`; remote MongoDB targets additionally require `--allow-remote`.
 
 9. **System & Clinical Audit Logs**:
    - Automatic background logging for:
@@ -383,6 +384,10 @@ The sign-in forms accept only the account roles assigned to their portal. Backen
 | `PUT` | `/api/admin/users/:id/status` | Activate or deactivate user account | Admin |
 | `GET` | `/api/admin/stats` | Platform-wide analytics (users by role, records, claims) | Admin |
 | `GET` | `/api/admin/audit-logs` | Global immutable compliance audit trail across all stakeholders | Admin |
+| `GET` | `/api/admin/policy-plans` | List custom marketplace plans, including drafts and archived listings | Admin |
+| `POST` | `/api/admin/policy-plans` | Create a custom plan as a draft | Admin |
+| `PUT` | `/api/admin/policy-plans/:planId` | Edit, publish, unpublish, or archive a custom plan | Admin |
+| `GET` | `/api/policies/plans` | Browse published custom marketplace listings | Patient |
 | `GET` | `/api/health` | Service health status check | Public |
 
 ---

@@ -10,6 +10,7 @@ import type { User, UserRole, AdminStatsResponse, AuditLog } from '../types';
 import { MEDICAL_SPECIALIZATIONS } from '../constants/medicalSpecializations';
 import { HOSPITAL_AFFILIATIONS } from '../constants/hospitalAffiliations';
 import { INSURANCE_COMPANIES } from '../constants/insuranceCompanies';
+import { AdminPolicyPlans } from '../components/AdminPolicyPlans';
 
 export const AdminPage: React.FC = () => {
   const [stats, setStats] = useState<AdminStatsResponse['stats'] | null>(null);
@@ -18,7 +19,7 @@ export const AdminPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   // Filters
-  const [activeTab, setActiveTab] = useState<'users' | 'audit'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'policies' | 'audit'>('users');
   const [roleFilter, setRoleFilter] = useState('All');
   const [userSearch, setUserSearch] = useState('');
 
@@ -258,6 +259,16 @@ export const AdminPage: React.FC = () => {
         >
           Global Audit Trail
         </button>
+        <button
+          onClick={() => setActiveTab('policies')}
+          className={`pb-3 px-1 text-sm font-semibold transition-colors border-b-2 ${
+            activeTab === 'policies'
+              ? 'border-purple-600 text-purple-600 dark:text-purple-400'
+              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          Marketplace Plans
+        </button>
       </div>
 
       {activeTab === 'users' ? (
@@ -429,6 +440,8 @@ export const AdminPage: React.FC = () => {
             </div>
           )}
         </div>
+      ) : activeTab === 'policies' ? (
+        <AdminPolicyPlans />
       ) : (
         /* Global Compliance Audit Log */
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">

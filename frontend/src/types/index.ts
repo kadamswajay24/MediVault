@@ -149,6 +149,14 @@ export interface InsurancePolicyPlan {
   highlights: string[];
 }
 
+export interface ManagedInsurancePolicyPlan extends Omit<InsurancePolicyPlan, 'id'> {
+  _id: string;
+  planId: string;
+  status: 'draft' | 'published' | 'archived';
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PolicyEnrollment {
   _id: string;
   planId: string;

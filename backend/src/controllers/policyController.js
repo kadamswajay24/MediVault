@@ -1,35 +1,6 @@
 import { randomBytes } from 'crypto';
 import PolicyEnrollment from '../models/PolicyEnrollment.js';
-
-export const POLICY_PLANS = [
-  {
-    id: 'essential',
-    name: 'Essential Care',
-    provider: 'MediVault Demo Insurance',
-    description: 'An illustrative individual health plan for everyday care needs.',
-    coverageAmount: 500000,
-    monthlyPremium: 799,
-    highlights: ['Hospitalization cover (illustrative)', 'Digital policy overview', 'Monthly billing example'],
-  },
-  {
-    id: 'family',
-    name: 'Family Health',
-    provider: 'MediVault Demo Insurance',
-    description: 'An illustrative shared-coverage plan for a family.',
-    coverageAmount: 1000000,
-    monthlyPremium: 1499,
-    highlights: ['Family coverage example', 'Digital policy overview', 'Monthly billing example'],
-  },
-  {
-    id: 'plus',
-    name: 'Health Plus',
-    provider: 'MediVault Demo Insurance',
-    description: 'An illustrative higher-coverage plan with a larger example limit.',
-    coverageAmount: 2000000,
-    monthlyPremium: 2299,
-    highlights: ['Higher coverage example', 'Digital policy overview', 'Monthly billing example'],
-  },
-];
+import PolicyPlan from '../models/PolicyPlan.js';
 
 const addOneMonth = (date) => {
   const nextDate = new Date(date);
@@ -41,12 +12,20 @@ const addOneMonth = (date) => {
   return nextDate;
 };
 
-export const getPolicyPlans = (_req, res) => {
-  return res.status(200).json({
-    success: true,
-    plans: POLICY_PLANS,
-    demoMode: true,
-  });
+export const getPolicyPlans = async (_req, res, next) => {
+  try {
+    const customPlans = await PolicyPlan.find({ status: 'published' })
+      .select('planId name provider description coverageAmount monthlyPremium highlights')
+      .sort({ createdAt: -1 })
+      .lean();
+    return res.status(200).json({
+      success: true,
+      plans: customPlans.map(({ planId, ...plan }) => ({ id: planId, ...plan })),
+      demoMode: true,
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const getMyPolicies = async (req, res, next) => {
@@ -60,7 +39,13 @@ export const getMyPolicies = async (req, res, next) => {
 
 export const enrollInPolicy = async (req, res, next) => {
   try {
-    const plan = POLICY_PLANS.find((candidate) => candidate.id === req.params.planId);
+    const customPlan = await PolicyPlan.findOne({
+      planId: req.params.planId,
+      status: 'published',
+    })
+      .select('planId name provider coverageAmount monthlyPremium')
+      .lean();
+    const plan = customPlan ? { ...customPlan, id: customPlan.planId } : null;
     if (!plan) {
       return res.status(404).json({ success: false, message: 'Policy plan not found.' });
     }

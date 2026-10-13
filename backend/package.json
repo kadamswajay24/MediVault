@@ -10,7 +10,8 @@
     "test": "node test_mvp.js",
     "test:rbac": "node test_rbac.js",
     "test:all": "node test_mvp.js && node test_rbac.js",
-    "admin:promote": "node src/scripts/promoteAdmin.js"
+    "admin:promote": "node src/scripts/promoteAdmin.js",
+    "policies:clear-legacy-demo": "node src/scripts/clearLegacyDemoPolicyEnrollments.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

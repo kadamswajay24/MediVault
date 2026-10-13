@@ -199,6 +199,17 @@ export const PoliciesPage: React.FC = () => {
             );
           })}
         </div>
+        {plans.length === 0 && (
+          <div className="surface-card p-8 text-center">
+            <ShieldCheck className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+              No plans are available right now
+            </p>
+            <p className="text-xs text-slate-500 mt-1">
+              Check back later for published marketplace listings.
+            </p>
+          </div>
+        )}
       </section>
 
       <section className="space-y-4">

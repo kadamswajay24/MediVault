@@ -15,6 +15,7 @@ import type {
   MedicalStaffDetails,
   InsuranceDetails,
   InsurancePolicyPlan,
+  ManagedInsurancePolicyPlan,
   PolicyEnrollment,
 } from '../types';
 
@@ -532,6 +533,37 @@ export const medicalStaffAPI = {
 };
 
 export const adminAPI = {
+  getPolicyPlans: async (): Promise<{
+    success: boolean;
+    plans: ManagedInsurancePolicyPlan[];
+  }> => {
+    const res = await api.get('/admin/policy-plans');
+    return res.data;
+  },
+
+  createPolicyPlan: async (data: Omit<InsurancePolicyPlan, 'id'>): Promise<{
+    success: boolean;
+    message: string;
+    plan: ManagedInsurancePolicyPlan;
+  }> => {
+    const res = await api.post('/admin/policy-plans', data);
+    return res.data;
+  },
+
+  updatePolicyPlan: async (
+    planId: string,
+    data: Partial<Omit<InsurancePolicyPlan, 'id'>> & {
+      status?: ManagedInsurancePolicyPlan['status'];
+    }
+  ): Promise<{
+    success: boolean;
+    message: string;
+    plan: ManagedInsurancePolicyPlan;
+  }> => {
+    const res = await api.put(`/admin/policy-plans/${planId}`, data);
+    return res.data;
+  },
+
   getUsers: async (params?: {
     role?: string;
     status?: string;

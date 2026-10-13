@@ -22,6 +22,8 @@ export const AUDIT_ACTIONS = [
   'APPOINTMENT_BOOKED',
   'APPOINTMENT_REVIEWED',
   'ADMIN_USER_UPDATED',
+  'POLICY_PLAN_CREATED',
+  'POLICY_PLAN_UPDATED',
 ];
 
 const auditLogSchema = new mongoose.Schema(
