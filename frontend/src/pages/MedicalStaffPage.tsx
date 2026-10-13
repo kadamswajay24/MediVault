@@ -29,7 +29,6 @@ import type {
   User as UserType,
 } from '../types';
 import type { ClinicalAccessRequest } from '../services/api';
-import { AppointmentsPanel } from '../components/AppointmentsPanel';
 
 const MEDICATION_CATALOG = [
   {
@@ -562,8 +561,6 @@ export const MedicalStaffPage: React.FC = () => {
           </div>
         )}
       </div>
-
-      {isDoctor && <AppointmentsPanel />}
 
       {/* Doctor Patient Lookup Bar */}
       {isDoctor && (

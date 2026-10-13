@@ -376,6 +376,45 @@ export const getMyPendingAppointments = async (req, res, next) => {
   }
 };
 
+export const getMyStaffAppointments = async (req, res, next) => {
+  try {
+    const { date, time } = req.query;
+    if (!isValidDate(date) || !isValidTime(time)) {
+      return res.status(400).json({ success: false, message: 'Choose a valid date and time.' });
+    }
+
+    const [upcoming, recent] = await Promise.all([
+      Appointment.find({
+        doctor: req.user._id,
+        $or: [
+          { appointmentDate: { $gt: date } },
+          { appointmentDate: date, time: { $gte: time } },
+        ],
+        status: 'confirmed',
+      })
+        .select('-assignedApprovers -reservedBlocks -slotReserved')
+        .populate('patient', 'name mediVaultId')
+        .sort({ appointmentDate: 1, time: 1 })
+        .limit(100),
+      Appointment.find({
+        doctor: req.user._id,
+        $or: [
+          { appointmentDate: { $lt: date } },
+          { appointmentDate: date, time: { $lt: time } },
+        ],
+      })
+        .select('-assignedApprovers -reservedBlocks -slotReserved')
+        .populate('patient', 'name mediVaultId')
+        .sort({ appointmentDate: -1, time: -1 })
+        .limit(50),
+    ]);
+
+    return res.status(200).json({ success: true, upcoming, recent });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const decideAppointment = async (req, res, next) => {
   try {
     const { decision } = req.body;

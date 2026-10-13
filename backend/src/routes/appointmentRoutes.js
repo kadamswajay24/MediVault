@@ -6,6 +6,7 @@ import {
   getHospitalsAndDoctors,
   getMyAppointments,
   getMyPendingAppointments,
+  getMyStaffAppointments,
   getMySchedule,
   updateMySchedule,
 } from '../controllers/appointmentController.js';
@@ -21,6 +22,7 @@ router.post('/', authorize('patient'), resolvePatientContext, createAppointment)
 router.get('/mine/schedule', authorize('medical_staff'), getMySchedule);
 router.put('/mine/schedule', authorize('medical_staff'), updateMySchedule);
 router.get('/mine/requests', authorize('medical_staff'), getMyPendingAppointments);
+router.get('/mine/calendar', authorize('medical_staff'), getMyStaffAppointments);
 router.put('/:id/decision', authorize('medical_staff'), decideAppointment);
 
 export default router;

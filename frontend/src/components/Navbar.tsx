@@ -22,6 +22,7 @@ import {
   XCircle,
   KeyRound,
   ChevronDown,
+  CalendarDays,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { useTheme } from '../context/useTheme';
@@ -84,6 +85,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
         return {
           primary: [
             { name: 'Clinical Consultations', path: '/medical-staff', icon: Stethoscope },
+            { name: 'Appointments', path: '/medical-staff/appointments', icon: CalendarDays },
             { name: 'Patient Access', path: '/access-requests', icon: KeyRound },
             { name: 'Audit Trail', path: '/audit-logs', icon: History },
           ],

@@ -27,6 +27,9 @@ import { PoliciesPage } from './pages/PoliciesPage';
 const MedicalStaffPage = React.lazy(() =>
   import('./pages/MedicalStaffPage').then((page) => ({ default: page.MedicalStaffPage }))
 );
+const AppointmentsPage = React.lazy(() =>
+  import('./pages/AppointmentsPage').then((page) => ({ default: page.AppointmentsPage }))
+);
 const PatientClinicalFilePage = React.lazy(() =>
   import('./pages/PatientClinicalFilePage').then((page) => ({
     default: page.PatientClinicalFilePage,
@@ -164,6 +167,14 @@ export function App() {
                   <Route path="/caregivers" element={<CaregiversPage />} />
                 </Route>
                 <Route element={<RoleRoute roles={['medical_staff']} />}>
+                  <Route
+                    path="/medical-staff/appointments"
+                    element={
+                      <React.Suspense fallback={<PageLoading />}>
+                        <AppointmentsPage />
+                      </React.Suspense>
+                    }
+                  />
                   <Route
                     path="/medical-staff"
                     element={

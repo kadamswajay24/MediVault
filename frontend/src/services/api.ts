@@ -311,6 +311,15 @@ export const appointmentsAPI = {
     return res.data;
   },
 
+  getMyStaffAppointments: async (date: string, time: string): Promise<{
+    success: boolean;
+    upcoming: AppointmentEntry[];
+    recent: AppointmentEntry[];
+  }> => {
+    const res = await api.get('/appointments/mine/calendar', { params: { date, time } });
+    return res.data;
+  },
+
   decide: async (
     id: string,
     decision: 'confirmed' | 'declined'

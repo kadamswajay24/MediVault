@@ -15,6 +15,11 @@ const getLocalDate = () => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
 
+const getLocalTime = () => {
+  const date = new Date();
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+};
+
 const getError = (error: unknown, fallback: string) =>
   axios.isAxiosError<{ message?: string }>(error)
     ? error.response?.data?.message || fallback
@@ -34,6 +39,7 @@ const formatTime = (time: string) => {
 };
 
 type ScheduleFormDay = AppointmentScheduleDay & { enabled: boolean };
+type StaffAppointmentsTab = 'upcoming' | 'approvals' | 'schedule' | 'recent';
 
 const emptySchedule = (): ScheduleFormDay[] =>
   DAY_NAMES.map((_, dayOfWeek) => ({
@@ -81,6 +87,9 @@ export const AppointmentsPanel: React.FC = () => {
   const [managerIds, setManagerIds] = useState<string[]>([]);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [requests, setRequests] = useState<AppointmentEntry[]>([]);
+  const [upcomingAppointments, setUpcomingAppointments] = useState<AppointmentEntry[]>([]);
+  const [recentAppointments, setRecentAppointments] = useState<AppointmentEntry[]>([]);
+  const [staffTab, setStaffTab] = useState<StaffAppointmentsTab>('upcoming');
   const [busyRequest, setBusyRequest] = useState('');
 
   const refreshAppointments = useCallback(async () => {
@@ -89,9 +98,10 @@ export const AppointmentsPanel: React.FC = () => {
   }, []);
 
   const refreshStaffData = useCallback(async () => {
-    const [scheduleResponse, requestsResponse] = await Promise.all([
+    const [scheduleResponse, requestsResponse, calendarResponse] = await Promise.all([
       appointmentsAPI.getMySchedule(),
       appointmentsAPI.getMyRequests(),
+      appointmentsAPI.getMyStaffAppointments(getLocalDate(), getLocalTime()),
     ]);
     const configuredDays = new Map(
       scheduleResponse.schedule.map((entry) => [entry.dayOfWeek, entry])
@@ -103,6 +113,8 @@ export const AppointmentsPanel: React.FC = () => {
       return configured ? { ...configured, enabled: true } : day;
     }));
     setRequests(requestsResponse.appointments);
+    setUpcomingAppointments(calendarResponse.upcoming);
+    setRecentAppointments(calendarResponse.recent);
   }, []);
 
   useEffect(() => {
@@ -303,7 +315,31 @@ export const AppointmentsPanel: React.FC = () => {
 
       {isStaff ? (
         <>
-          <div className="space-y-3">
+          <div role="tablist" aria-label="Appointment management views" className="flex flex-wrap gap-2 border-b border-slate-200 pb-3 dark:border-slate-800">
+            {([
+              ['upcoming', `Upcoming (${upcomingAppointments.length})`],
+              ['approvals', `Approvals (${requests.length})`],
+              ['schedule', 'Working hours'],
+              ['recent', `Recent past (${recentAppointments.length})`],
+            ] as const).map(([tab, label]) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={staffTab === tab}
+                onClick={() => setStaffTab(tab)}
+                className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                  staffTab === tab
+                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {staffTab === 'schedule' && <div className="space-y-3">
             <div>
               <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Weekly working hours</h3>
               <p className="text-xs text-slate-500">Patients can book available listed slots. Requests between slots need your approval.</p>
@@ -404,9 +440,9 @@ export const AppointmentsPanel: React.FC = () => {
               {savingSchedule && <Loader2 className="h-4 w-4 animate-spin" />}
               Save working hours
             </button>
-          </div>
+          </div>}
 
-          <div className="space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800">
+          {staffTab === 'approvals' && <div className="space-y-3">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
               Requests awaiting your approval ({requests.length})
             </h3>
@@ -450,7 +486,49 @@ export const AppointmentsPanel: React.FC = () => {
                 </div>
               </div>
             ))}
-          </div>
+          </div>}
+
+          {(staffTab === 'upcoming' || staffTab === 'recent') && (() => {
+            const entries = staffTab === 'upcoming' ? upcomingAppointments : recentAppointments;
+            return (
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                  {staffTab === 'upcoming' ? 'Upcoming appointments' : 'Recent past appointments'}
+                </h3>
+                {entries.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500 dark:border-slate-700">
+                    {staffTab === 'upcoming' ? 'No upcoming confirmed appointments.' : 'No past appointments to show.'}
+                  </p>
+                ) : (
+                  <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                    {entries.map((appointment) => (
+                      <div key={appointment._id} className="flex flex-col justify-between gap-2 py-3 sm:flex-row sm:items-center">
+                        <div>
+                          <p className="font-semibold text-slate-900 dark:text-white">
+                            {typeof appointment.patient === 'object' ? appointment.patient.name : 'Patient'}
+                          </p>
+                          <p className="text-sm text-slate-600 dark:text-slate-400">{appointment.hospitalName}</p>
+                          <p className="text-xs text-slate-500">
+                            {formatDate(appointment.appointmentDate)} at {formatTime(appointment.time)}
+                            {' · '}{appointment.durationMinutes} minutes
+                          </p>
+                        </div>
+                        <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          appointment.status === 'confirmed'
+                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                            : appointment.status === 'pending'
+                              ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                        }`}>
+                          {getAppointmentStatus(appointment.status)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </>
       ) : (
         <>
