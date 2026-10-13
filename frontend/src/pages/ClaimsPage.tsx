@@ -13,9 +13,10 @@ import {
   TrendingUp,
   History,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/useAuth';
-import { claimAPI, recordAPI } from '../services/api';
-import type { InsuranceClaim, MedicalRecord, ClaimStatus, ClaimType } from '../types';
+import { claimAPI, policyAPI } from '../services/api';
+import type { InsuranceClaim, MedicalRecord, ClaimStatus, ClaimType, PolicyEnrollment } from '../types';
 import { RecordViewerModal } from '../components/RecordViewerModal';
 
 const CLAIM_TYPES: ClaimType[] = [
@@ -53,17 +54,12 @@ export const ClaimsPage: React.FC = () => {
   const [selectedRecordToView, setSelectedRecordToView] = useState<MedicalRecord | null>(null);
 
   // Submit Claim Form State (Patient)
-  const [availableRecords, setAvailableRecords] = useState<MedicalRecord[]>([]);
+  const [availablePolicies, setAvailablePolicies] = useState<PolicyEnrollment[]>([]);
+  const [loadingPolicies, setLoadingPolicies] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [policyNumber, setPolicyNumber] = useState('');
-  const [insuranceCompany, setInsuranceCompany] = useState(
-    isAgent && user?.insuranceDetails?.companyName ? user.insuranceDetails.companyName : ''
-  );
+  const [selectedPolicyId, setSelectedPolicyId] = useState('');
   const [claimType, setClaimType] = useState<ClaimType>('Hospitalization');
   const [claimAmount, setClaimAmount] = useState('');
-  const [hospitalName, setHospitalName] = useState('');
-  const [patientNotes, setPatientNotes] = useState('');
-  const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
 
   // Review Form State (Agent)
@@ -78,6 +74,8 @@ export const ClaimsPage: React.FC = () => {
   const [supplementReason, setSupplementReason] = useState('');
   const [supplementing, setSupplementing] = useState(false);
   const [supplementError, setSupplementError] = useState<string | null>(null);
+
+  const selectedPolicy = availablePolicies.find((policy) => policy._id === selectedPolicyId);
 
   const fetchClaims = useCallback(async () => {
     try {
@@ -103,30 +101,32 @@ export const ClaimsPage: React.FC = () => {
     return () => clearTimeout(timer);
   }, [activeDependent, fetchClaims]);
 
-  // Load patient's medical records for attaching to claim
+  // Load the patient's enrolled policies for selecting a policy on the claim.
   const handleOpenSubmitModal = async () => {
     setIsSubmitModalOpen(true);
     setFormError(null);
+    setSelectedPolicyId('');
+    setClaimAmount('');
+    setClaimType('Hospitalization');
+    setLoadingPolicies(true);
     try {
-      const res = await recordAPI.getRecords();
+      const res = await policyAPI.getMyPolicies();
       if (res.success) {
-        setAvailableRecords(res.records);
+        setAvailablePolicies(res.policies);
+      } else {
+        setFormError('Unable to load your policies. Please try again.');
       }
-    } catch {
-      // Fallback
+    } catch (err: any) {
+      setFormError(err.response?.data?.message || 'Unable to load your policies. Please try again.');
+    } finally {
+      setLoadingPolicies(false);
     }
-  };
-
-  const handleToggleRecordSelection = (recordId: string) => {
-    setSelectedRecordIds((prev) =>
-      prev.includes(recordId) ? prev.filter((id) => id !== recordId) : [...prev, recordId]
-    );
   };
 
   const handleSubmitClaim = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!policyNumber || !insuranceCompany || !claimAmount) {
-      setFormError('Policy Number, Insurance Company, and Claim Amount are required.');
+    if (!selectedPolicy || !claimAmount) {
+      setFormError('Please select a policy and enter a claim amount.');
       return;
     }
 
@@ -141,23 +141,18 @@ export const ClaimsPage: React.FC = () => {
 
     try {
       const res = await claimAPI.submitClaim({
-        policyNumber: policyNumber.trim(),
-        insuranceCompany: insuranceCompany.trim(),
+        policyNumber: selectedPolicy.policyNumber,
+        insuranceCompany: selectedPolicy.provider,
         claimType,
         claimAmount: numericAmount,
-        records: selectedRecordIds,
-        hospitalName: hospitalName.trim(),
-        patientNotes: patientNotes.trim(),
       });
 
       if (res.success) {
         setIsSubmitModalOpen(false);
         // Reset form
-        setPolicyNumber('');
+        setSelectedPolicyId('');
+        setClaimType('Hospitalization');
         setClaimAmount('');
-        setHospitalName('');
-        setPatientNotes('');
-        setSelectedRecordIds([]);
         fetchClaims();
       }
     } catch (err: any) {
@@ -520,7 +515,7 @@ export const ClaimsPage: React.FC = () => {
                   File Health Insurance Claim
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Attach clinical documents directly from your MediVault records.
+                  Select one of your policies and enter the claim details.
                 </p>
               </div>
               <button
@@ -538,126 +533,87 @@ export const ClaimsPage: React.FC = () => {
             )}
 
             <form onSubmit={handleSubmitClaim} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Policy Number *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={policyNumber}
-                    onChange={(e) => setPolicyNumber(e.target.value)}
-                    placeholder="e.g. POL-9920184-IN"
-                    className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg"
-                  />
+              {availablePolicies.length === 0 && !loadingPolicies ? (
+                <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+                  You do not have any policies yet. Visit{' '}
+                  <Link to="/policies" className="font-semibold underline">
+                    My Policies
+                  </Link>{' '}
+                  to enroll before filing a claim.
                 </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Insurance Provider *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={insuranceCompany}
-                    onChange={(e) => setInsuranceCompany(e.target.value)}
-                    placeholder="e.g. Star Health, Aetna, Cigna"
-                    className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Claim Type
-                  </label>
-                  <select
-                    value={claimType}
-                    onChange={(e) => setClaimType(e.target.value as ClaimType)}
-                    className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg"
-                  >
-                    {CLAIM_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
+              ) : (
+                <>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300">
+                      Policy Number *
+                    </label>
+                    <select
+                      required
+                      value={selectedPolicyId}
+                      onChange={(e) => setSelectedPolicyId(e.target.value)}
+                      disabled={loadingPolicies}
+                      className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                    >
+                      <option value="">
+                        {loadingPolicies ? 'Loading your policies...' : 'Select a policy'}
                       </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Claim Amount (INR) *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    step="0.01"
-                    required
-                    value={claimAmount}
-                    onChange={(e) => setClaimAmount(e.target.value)}
-                    placeholder="4500"
-                    className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Hospital / Diagnostic Center Name
-                </label>
-                <input
-                  type="text"
-                  value={hospitalName}
-                  onChange={(e) => setHospitalName(e.target.value)}
-                  placeholder="e.g. Metro Specialty Hospital"
-                  className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg"
-                />
-              </div>
-
-              {/* Attach Medical Records from Vault */}
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-2">
-                  Attach Medical Records from Vault ({selectedRecordIds.length} selected)
-                </label>
-                {availableRecords.length === 0 ? (
-                  <p className="text-xs text-slate-500 italic">No records uploaded yet.</p>
-                ) : (
-                  <div className="max-h-40 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-lg divide-y divide-slate-100 dark:divide-slate-800">
-                    {availableRecords.map((rec) => (
-                      <label
-                        key={rec._id}
-                        className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer text-xs"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedRecordIds.includes(rec._id)}
-                          onChange={() => handleToggleRecordSelection(rec._id)}
-                          className="rounded text-emerald-600 focus:ring-emerald-500"
-                        />
-                        <span className="font-medium text-slate-800 dark:text-slate-200 flex-1 truncate">
-                          {rec.title}
-                        </span>
-                        <span className="text-[10px] text-slate-500 uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
-                          {rec.category}
-                        </span>
-                      </label>
-                    ))}
+                      {availablePolicies.map((policy) => (
+                        <option key={policy._id} value={policy._id}>
+                          {policy.policyNumber} · {policy.planName}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                )}
-              </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Patient Notes &amp; Medical Diagnosis
-                </label>
-                <textarea
-                  rows={3}
-                  value={patientNotes}
-                  onChange={(e) => setPatientNotes(e.target.value)}
-                  placeholder="Include discharge details or treatment summary..."
-                  className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg"
-                />
-              </div>
+                  {selectedPolicy && (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-slate-800 dark:bg-slate-950">
+                      <p className="text-xs text-slate-500">Insurance Provider</p>
+                      <p className="font-medium text-slate-900 dark:text-slate-100">
+                        {selectedPolicy.provider}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {selectedPolicy.planName} · Coverage {formatINR(selectedPolicy.coverageAmount)}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300">
+                        Claim For *
+                      </label>
+                      <select
+                        required
+                        value={claimType}
+                        onChange={(e) => setClaimType(e.target.value as ClaimType)}
+                        className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      >
+                        {CLAIM_TYPES.map((type) => (
+                          <option key={type} value={type}>
+                            {type}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300">
+                        Claim Amount (INR) *
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        step="0.01"
+                        required
+                        value={claimAmount}
+                        onChange={(e) => setClaimAmount(e.target.value)}
+                        placeholder="4500"
+                        className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
                 <button
@@ -669,7 +625,7 @@ export const ClaimsPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || loadingPolicies || availablePolicies.length === 0}
                   className="button-primary px-4 py-2 text-sm font-semibold rounded-lg shadow-sm disabled:opacity-50 flex items-center gap-2"
                 >
                   {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
