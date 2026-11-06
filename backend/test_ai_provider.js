@@ -23,7 +23,7 @@ const request = { system: 'test', prompt: 'Synthetic text', format: { type: 'obj
 
 test('saved key selects Gemini; explicit Ollama and model overrides remain available without exposing secrets', (t) => {
   setup(t);
-  assert.deepEqual(getAiConfig(), { provider: 'gemini', model: 'gemini-2.5-flash-lite', externalProcessing: true });
+  assert.deepEqual(getAiConfig(), { provider: 'gemini', model: 'gemini-3.5-flash-lite', externalProcessing: true });
   process.env.GEMINI_MODEL = 'gemini-test';
   assert.equal(getAiConfig().model, 'gemini-test');
   process.env.AI_PROVIDER = 'ollama';
@@ -35,11 +35,12 @@ test('saved key selects Gemini; explicit Ollama and model overrides remain avail
 test('Gemini summary sends structured text to the fixed endpoint with key only in the header', async (t) => {
   setup(t);
   t.mock.method(globalThis, 'fetch', async (url, options) => {
-    assert.equal(url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent');
+    assert.equal(url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent');
     assert.equal(options.headers['x-goog-api-key'], process.env.GEMINI_API_KEY);
     assert.equal(options.redirect, 'error');
     const body = JSON.parse(options.body);
     assert.equal(body.generationConfig.responseMimeType, 'application/json');
+    assert.ok(!Object.hasOwn(body.generationConfig, 'temperature'));
     assert.ok(body.generationConfig.responseJsonSchema.required.includes('summary'));
     assert.match(body.systemInstruction.parts[0].text, /treating clinician/);
     assert.match(body.contents[0].parts[0].text, /Synthetic report/);

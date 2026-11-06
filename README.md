@@ -525,7 +525,7 @@ The root `.gitignore` excludes dependencies, local environment files, build outp
 Save `GEMINI_API_KEY` as a backend secret in Vercel and redeploy. With no explicit
 `AI_PROVIDER`, a nonempty Gemini key selects Gemini; otherwise the app uses local
 Ollama. `AI_PROVIDER=gemini` or `AI_PROVIDER=ollama` overrides this selection.
-`GEMINI_MODEL` defaults to `gemini-2.5-flash-lite`. Confirm that this model has free
+`GEMINI_MODEL` defaults to `gemini-3.5-flash-lite`. Confirm that this model has free
 quota in your Google AI Studio project. The app does not enable billing, change your
 Google account tier, or fall back to another provider/model. Actual availability,
 pricing and quota are controlled by Google, not these environment variables.

@@ -13,7 +13,7 @@ export const getAiConfig = () => {
   return {
     provider,
     model: provider === 'gemini'
-      ? process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash-lite'
+      ? process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite'
       : process.env.OLLAMA_MODEL?.trim() || 'qwen2.5:3b',
     externalProcessing: provider === 'gemini',
   };
@@ -82,7 +82,6 @@ export const requestStructuredAi = async ({ system, prompt, format, options, tim
         systemInstruction: { parts: [{ text: system }] },
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
-          temperature: options.temperature,
           maxOutputTokens: Math.min(options.num_predict * 2, 2400),
           responseMimeType: 'application/json', responseJsonSchema: format,
         },
