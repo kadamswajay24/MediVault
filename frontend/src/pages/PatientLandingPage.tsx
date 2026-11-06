@@ -112,14 +112,6 @@ export const PatientLandingPage: React.FC = () => (
         </section>
       </section>
 
-      <section className="portal-home__support" aria-label="MediVault portal access">
-        <nav className="portal-home__professional" aria-label="Professional portals">
-          <span>Professional portals</span>
-          <Link to="/clinical/login">Medical staff</Link>
-          <Link to="/insurance/login">Insurance</Link>
-          <Link to="/admin/login">Administrator</Link>
-        </nav>
-      </section>
     </div>
   </main>
 );
