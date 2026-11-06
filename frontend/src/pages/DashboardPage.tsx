@@ -149,6 +149,23 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
+      <section className="surface-card dashboard-attention p-5 space-y-3" aria-labelledby="attention-title">
+        <h2 id="attention-title" className="text-base font-semibold text-slate-900 dark:text-white">Needs your attention</h2>
+        {!attention ? <p className="text-sm text-slate-500">Attention updates are unavailable.</p> : <>
+          {!readOnly && attention.pendingAccessRequests > 0 && <Link to="/access-requests" className="block rounded-lg border border-amber-200 p-3 text-sm dark:border-amber-800">
+            {attention.pendingAccessRequests} access request{attention.pendingAccessRequests === 1 ? '' : 's'} awaiting your decision <span className="font-semibold">Review requests</span>
+          </Link>}
+          {attention.claimsNeedingInformation > 0 && <Link to="/claims" className="block rounded-lg border border-amber-200 p-3 text-sm dark:border-amber-800">
+            {attention.claimsNeedingInformation} claim{attention.claimsNeedingInformation === 1 ? '' : 's'} need more information <span className="font-semibold">View claims</span>
+          </Link>}
+          {upcoming.map((appointment) => <Link key={appointment._id} to="/appointments" className="block rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700">
+            <span className="font-semibold">{appointment.hospitalName}</span>
+            <span className="block mt-1 text-slate-500">{new Date(`${appointment.appointmentDate}T12:00:00+05:30`).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' })} at {appointment.time} IST - {appointment.status === 'confirmed' ? 'Confirmed' : 'Awaiting confirmation'}</span>
+          </Link>)}
+          {(!attention.pendingAccessRequests || readOnly) && !attention.claimsNeedingInformation && !upcoming.length && <p className="text-sm text-slate-500">You are all caught up. No pending actions or upcoming appointments.</p>}
+        </>}
+      </section>
+
       <div className="dashboard-shortcuts">
         <Link to="/appointments"><span className="dashboard-shortcut-icon"><CalendarDays /></span><span><strong>Appointments</strong><small>Book or manage visits</small></span><ArrowUpRight className="h-4 w-4" /></Link>
         <Link to="/access-requests"><span className="dashboard-shortcut-icon"><ShieldCheck /></span><span><strong>Record access</strong><small>Review who can view your records</small></span><ArrowUpRight className="h-4 w-4" /></Link>
@@ -222,23 +239,6 @@ export const DashboardPage: React.FC = () => {
           ))}
         </div>
       </div>
-
-      <section className="surface-card dashboard-attention p-5 space-y-3" aria-labelledby="attention-title">
-        <h2 id="attention-title" className="text-base font-semibold text-slate-900 dark:text-white">Needs your attention</h2>
-        {!attention ? <p className="text-sm text-slate-500">Attention updates are unavailable.</p> : <>
-          {!readOnly && attention.pendingAccessRequests > 0 && <Link to="/access-requests" className="block rounded-lg border border-amber-200 p-3 text-sm dark:border-amber-800">
-            {attention.pendingAccessRequests} access request{attention.pendingAccessRequests === 1 ? '' : 's'} awaiting your decision <span className="font-semibold">Review requests</span>
-          </Link>}
-          {attention.claimsNeedingInformation > 0 && <Link to="/claims" className="block rounded-lg border border-amber-200 p-3 text-sm dark:border-amber-800">
-            {attention.claimsNeedingInformation} claim{attention.claimsNeedingInformation === 1 ? '' : 's'} need more information <span className="font-semibold">View claims</span>
-          </Link>}
-          {upcoming.map((appointment) => <Link key={appointment._id} to="/appointments" className="block rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700">
-            <span className="font-semibold">{appointment.hospitalName}</span>
-            <span className="block mt-1 text-slate-500">{new Date(`${appointment.appointmentDate}T12:00:00+05:30`).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' })} at {appointment.time} IST - {appointment.status === 'confirmed' ? 'Confirmed' : 'Awaiting confirmation'}</span>
-          </Link>)}
-          {(!attention.pendingAccessRequests || readOnly) && !attention.claimsNeedingInformation && !upcoming.length && <p className="text-sm text-slate-500">You are all caught up. No pending actions or upcoming appointments.</p>}
-        </>}
-      </section>
 
       <section className="surface-card dashboard-section space-y-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 dark:border-slate-800">

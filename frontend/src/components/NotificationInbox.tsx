@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import api from '../services/api';
@@ -11,6 +11,7 @@ export function NotificationInbox() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
   const [version, setVersion] = useState(0);
+  const markAllRef = useRef<HTMLInputElement>(null);
   const readOnly = activeDependent?.accessLevel === 'read_only';
   useEffect(() => {
     let current = true;
@@ -32,10 +33,39 @@ export function NotificationInbox() {
     finally { setBusy(''); }
   };
   const unread = items.filter(item => !item.read).length;
+  const allRead = items.length > 0 && unread === 0;
+  useEffect(() => {
+    if (markAllRef.current) markAllRef.current.indeterminate = unread > 0 && unread < items.length;
+  }, [items.length, unread]);
+  const markAllRead = async () => {
+    if (readOnly || unread === 0 || busy) return;
+    setBusy('all');
+    setError('');
+    try {
+      await api.post('/notifications/read-all');
+      setItems(current => current.map(item => ({ ...item, read: true })));
+    } catch (requestError: any) {
+      setError(requestError.response?.data?.message || 'Unable to mark all notifications as read.');
+    } finally {
+      setBusy('');
+    }
+  };
   return <details className="surface-card mx-4 mt-4 p-4 sm:mx-6">
     <summary className="cursor-pointer text-sm font-semibold"><Bell className="mr-2 inline h-4 w-4" />Notifications {unread > 0 && <span className="ml-2 rounded bg-[var(--mv-accent-soft)] px-2 py-1 text-[var(--mv-accent)]">{unread} unread</span>}</summary>
     <div className="mt-3 max-h-80 space-y-3 overflow-y-auto">
       <p className="text-xs text-slate-500">Latest 50 updates. Refreshes every 30 seconds.</p>
+      {!loading && items.length > 0 && <label className="flex w-fit items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs font-medium dark:border-slate-700">
+        <input
+          ref={markAllRef}
+          type="checkbox"
+          checked={allRead}
+          disabled={readOnly || allRead || !!busy}
+          onChange={(event) => { if (event.target.checked) void markAllRead(); }}
+          className="h-4 w-4 accent-[var(--mv-accent)] disabled:opacity-60"
+          aria-label="Mark all notifications as read"
+        />
+        {busy === 'all' ? 'Marking all as read…' : 'Mark all as read'}
+      </label>}
       {error && <p role="alert" className="text-sm text-rose-600">{error} <button onClick={() => setVersion(value => value + 1)} className="underline">Retry</button></p>}
       {loading ? <p className="text-sm">Loading notifications...</p> : !items.length && !error ? <p className="text-sm text-slate-500">No updates yet.</p> : null}
       {items.map(item => <article key={item.id} className="border-t border-slate-200 pt-3 dark:border-slate-700">

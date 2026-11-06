@@ -1,4 +1,5 @@
 import { NotificationInbox } from './NotificationInbox';
+import { MedicationReminderCenter } from './MedicationReminderCenter';
 import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import {
@@ -94,6 +95,7 @@ export const PatientPortalLayout: React.FC = () => {
           <span className="patient-context-strip__badge">{activeDependent?.accessLevel === 'read_only' ? 'Read-only access' : activeDependent ? 'Caregiver access' : 'Personal workspace'}</span>
         </div>
         <NotificationInbox key={`notifications-${user.id}-${activeDependent?.mediVaultId || user.mediVaultId}`} />
+        <MedicationReminderCenter key={`medication-reminders-${activeDependent?.mediVaultId || user.mediVaultId}`} />
         <Outlet key={activeDependent?.mediVaultId || user.mediVaultId} />
       </div>
     </div>

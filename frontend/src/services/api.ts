@@ -177,6 +177,33 @@ export const dashboardAPI = {
   },
 };
 
+export const medicationReminderAPI = {
+  getAll: async (): Promise<{ success: boolean; reminders: MedicationReminder[] }> => {
+    const res = await api.get('/medication-reminders');
+    return res.data;
+  },
+  create: async (data: {
+    medicationName: string;
+    time: string;
+    confirmCurrentUse: boolean;
+  }): Promise<{ success: boolean; reminder: MedicationReminder }> => {
+    const res = await api.post('/medication-reminders', data);
+    return res.data;
+  },
+  remove: async (id: string): Promise<{ success: boolean; message: string }> => {
+    const res = await api.delete(`/medication-reminders/${id}`);
+    return res.data;
+  },
+};
+
+export interface MedicationReminder {
+  _id: string;
+  medicationName: string;
+  time: string;
+  timezone: 'Asia/Kolkata';
+  createdAt: string;
+}
+
 export const auditAPI = {
   getLogs: async (params?: {
     action?: string;

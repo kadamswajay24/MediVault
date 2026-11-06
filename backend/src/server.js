@@ -21,6 +21,7 @@ import policyRoutes from './routes/policyRoutes.js';
 import insurancePolicyPlanRoutes from './routes/insurancePolicyPlanRoutes.js';
 import appointmentRoutes from './routes/appointmentRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+import medicationReminderRoutes from './routes/medicationReminderRoutes.js';
 
 // Initialize database and assign MediVault IDs to any existing accounts before serving requests.
 getJwtSecret();
@@ -108,6 +109,7 @@ app.use('/api/policies', policyRoutes);
 app.use('/api/insurance', insurancePolicyPlanRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/medication-reminders', medicationReminderRoutes);
 
 // Error Handling
 app.use(notFound);

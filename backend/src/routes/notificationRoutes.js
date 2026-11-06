@@ -19,6 +19,37 @@ router.get('/', async (req, res, next) => {
     res.json({ success: true, notifications: entries.map(entry => ({ id: entry._id, message: entry.details, at: entry.timestamp, href: destinations[entry.action], read: read.has(String(entry._id)) })) });
   } catch (error) { next(error); }
 });
+router.post('/read-all', async (req, res, next) => {
+  try {
+    const entries = await AuditLog.find({
+      user: req.effectivePatientId,
+      action: { $in: Object.keys(destinations) },
+    })
+      .select('_id')
+      .sort({ timestamp: -1, _id: -1 })
+      .limit(50)
+      .lean();
+
+    if (entries.length) {
+      try {
+        await NotificationRead.bulkWrite(
+          entries.map((entry) => ({
+            updateOne: {
+              filter: { viewer: req.user._id, notification: entry._id },
+              update: { $setOnInsert: { viewer: req.user._id, notification: entry._id } },
+              upsert: true,
+            },
+          })),
+          { ordered: false }
+        );
+      } catch (error) {
+        if (error.code !== 11000) throw error;
+      }
+    }
+
+    return res.json({ success: true, markedRead: entries.length });
+  } catch (error) { return next(error); }
+});
 router.put('/:id/read', async (req, res, next) => {
   try {
     if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(400).json({ message: 'Invalid notification.' });
