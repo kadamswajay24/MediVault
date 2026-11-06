@@ -29,14 +29,14 @@ const portalDetails: Record<AuthPortal, {
   clinical: {
     title: 'Medical Staff Portal',
     heading: 'Sign in to the clinical workspace',
-    description: 'For approved clinicians and hospital staff. Staff accounts require administrator approval.',
+    description: 'Sign in to track your application. Clinical tools unlock after credential verification and administrator approval.',
     home: '/medical-staff',
     submitLabel: 'Sign in to Clinical Portal',
   },
   insurance: {
     title: 'Insurance Portal',
     heading: 'Sign in to the insurance workspace',
-    description: 'For approved insurance staff managing claims and policy services.',
+    description: 'Sign in to track your application. Insurance tools unlock after credential verification and administrator approval.',
     home: '/claims',
     submitLabel: 'Sign in to Insurance Portal',
   },

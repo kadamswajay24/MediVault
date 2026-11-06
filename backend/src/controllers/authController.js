@@ -263,9 +263,11 @@ export const loginUser = async (req, res, next) => {
 
     const isStaff = ['medical_staff', 'insurance_agent'].includes(user.role);
     const credentialExpired = Boolean(isStaff && user.credentialVerification?.expiresAt && user.credentialVerification.expiresAt <= new Date());
-    const limitedApplication = isStaff && (user.credentialVerification?.status === 'needs_changes' || credentialExpired);
-    if (user.approvalStatus === 'pending' && !limitedApplication) {
-      return res.status(403).json({ success: false, message: 'Your staff account is awaiting administrator approval.' });
+    const applicationPending = isStaff && user.approvalStatus === 'pending' && user.credentialVerification?.status !== 'rejected';
+    const limitedApplication = applicationPending || (isStaff && user.isActive && (user.credentialVerification?.status === 'needs_changes' || credentialExpired));
+
+    if (isStaff && user.credentialVerification?.status === 'rejected') {
+      return res.status(403).json({ success: false, message: 'Your credential application was rejected. Contact the administrator if you believe this was an error.' });
     }
 
     if (isStaff && !limitedApplication && user.credentialVerification?.status !== 'verified') {
@@ -277,7 +279,7 @@ export const loginUser = async (req, res, next) => {
       });
     }
 
-    if (!user.isActive) {
+    if (!user.isActive && !applicationPending) {
       return res.status(403).json({
         success: false,
         message: 'Your account has been deactivated. Please contact support.',

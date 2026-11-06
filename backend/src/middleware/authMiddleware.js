@@ -26,7 +26,11 @@ export const protectIdentity = async (req, res, next) => {
         });
       }
 
-      if (!user.isActive) {
+      const limitedStaffApplication =
+        ['medical_staff', 'insurance_agent'].includes(user.role) &&
+        user.approvalStatus === 'pending' &&
+        user.credentialVerification?.status !== 'rejected';
+      if (!user.isActive && !limitedStaffApplication) {
         return res.status(403).json({
           success: false,
           message: 'Account has been deactivated. Please contact MediVault administrator.',
