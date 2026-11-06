@@ -3,10 +3,11 @@ import { registerUser, loginUser, getMe } from '../controllers/authController.js
 import { protect } from '../middleware/authMiddleware.js';
 
 import { loginRateLimit, registerRateLimit } from '../middleware/authRateLimit.js';
+import { upload, validateFileContent } from '../middleware/uploadMiddleware.js';
 
 const router = express.Router();
 
-router.post('/register', registerRateLimit, registerUser);
+router.post('/register', registerRateLimit, upload.single('credentialDocument'), validateFileContent, registerUser);
 // The legacy endpoint is patient-only. Professional portals must name their
 // portal so the controller can verify the account role before issuing a JWT.
 router.post('/login', loginRateLimit, loginUser);

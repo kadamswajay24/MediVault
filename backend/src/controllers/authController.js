@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import HealthProfile from '../models/HealthProfile.js';
 import { createAuditLog } from '../services/auditService.js';
 import { generateCompanyAgentId } from '../services/agentIdService.js';
+import { saveFile, deleteFile } from '../services/fileStorageService.js';
 
 // Helper to sign JWT
 const generateToken = (id) => {
@@ -29,6 +30,11 @@ const formatUserResponse = (user) => {
     phone: user.phone || '',
     medicalStaffDetails: user.medicalStaffDetails || {},
     insuranceDetails: user.insuranceDetails || {},
+    credentialVerification: {
+      status: user.credentialVerification?.status || 'verified',
+      expiresAt: user.credentialVerification?.expiresAt || null,
+      reviewNote: user.credentialVerification?.reviewNote || '',
+    },
     createdAt: user.createdAt,
   };
 };
@@ -37,6 +43,8 @@ const formatUserResponse = (user) => {
 // @route   POST /api/auth/register
 // @access  Public
 export const registerUser = async (req, res, next) => {
+  let credentialStorageFileId;
+  let userCreated = false;
   try {
     const {
       name,
@@ -46,7 +54,11 @@ export const registerUser = async (req, res, next) => {
       phone,
       medicalStaffDetails,
       insuranceDetails,
+      credentialExpiresAt,
     } = req.body;
+
+    const parsedMedicalDetails = typeof medicalStaffDetails === 'string' ? JSON.parse(medicalStaffDetails) : medicalStaffDetails;
+    const parsedInsuranceDetails = typeof insuranceDetails === 'string' ? JSON.parse(insuranceDetails) : insuranceDetails;
 
     if (!name || !email || !password) {
       return res.status(400).json({
@@ -72,13 +84,26 @@ export const registerUser = async (req, res, next) => {
 
     if (
       role === 'insurance_agent' &&
-      (!insuranceDetails || typeof insuranceDetails.companyName !== 'string' ||
-        !insuranceDetails.companyName.trim())
+      (!parsedInsuranceDetails || typeof parsedInsuranceDetails.companyName !== 'string' ||
+        !parsedInsuranceDetails.companyName.trim())
     ) {
       return res.status(400).json({
         success: false,
         message: 'Please select an insurance company for the agent account.',
       });
+    }
+
+    if (role !== 'patient') {
+      const licenseNumber = role === 'medical_staff'
+        ? parsedMedicalDetails?.licenseNumber
+        : parsedInsuranceDetails?.licenseNumber;
+      const expiresAt = new Date(credentialExpiresAt);
+      if (!req.file || !String(licenseNumber || '').trim() || !credentialExpiresAt || Number.isNaN(expiresAt.getTime())) {
+        return res.status(400).json({ success: false, message: 'Staff applications require a license number, expiry date, and credential document.' });
+      }
+      if (expiresAt <= new Date()) {
+        return res.status(400).json({ success: false, message: 'The credential expiry date must be in the future.' });
+      }
     }
 
     const normalizedPhone = String(phone || '').replace(/[\s()-]/g, '');
@@ -110,26 +135,40 @@ export const registerUser = async (req, res, next) => {
       phone: `+91${phoneMatch[1]}`,
     };
 
-    if (medicalStaffDetails && typeof medicalStaffDetails === 'object') {
+    if (parsedMedicalDetails && typeof parsedMedicalDetails === 'object') {
       userData.medicalStaffDetails = {
-        licenseNumber: medicalStaffDetails.licenseNumber || '',
-        specialization: medicalStaffDetails.specialization || '',
-        hospitalAffiliation: medicalStaffDetails.hospitalAffiliation || '',
+        licenseNumber: parsedMedicalDetails.licenseNumber || '',
+        specialization: parsedMedicalDetails.specialization || '',
+        hospitalAffiliation: parsedMedicalDetails.hospitalAffiliation || '',
       };
     }
 
-    if (insuranceDetails && typeof insuranceDetails === 'object') {
+    if (parsedInsuranceDetails && typeof parsedInsuranceDetails === 'object') {
       userData.insuranceDetails = {
-        companyName: String(insuranceDetails.companyName || '').trim(),
+        companyName: String(parsedInsuranceDetails.companyName || '').trim(),
         agentId:
           role === 'insurance_agent'
-            ? generateCompanyAgentId(insuranceDetails.companyName)
+            ? generateCompanyAgentId(parsedInsuranceDetails.companyName)
             : '',
-        licenseNumber: insuranceDetails.licenseNumber || '',
+        licenseNumber: parsedInsuranceDetails.licenseNumber || '',
+      };
+    }
+
+    if (role !== 'patient') {
+      credentialStorageFileId = await saveFile(req.file.buffer, `credential-${Date.now()}`);
+      userData.credentialVerification = {
+        status: 'pending',
+        expiresAt: new Date(credentialExpiresAt),
+        documentStorageFileId: credentialStorageFileId,
+        documentFileName: req.file.originalname,
+        documentFileType: req.file.mimetype,
+        documentFileSize: req.file.size,
+        submittedAt: new Date(),
       };
     }
 
     const user = await User.create(userData);
+    userCreated = true;
 
     // Initialize Health Profile for patients (or default profile)
     await HealthProfile.create({
@@ -168,6 +207,9 @@ export const registerUser = async (req, res, next) => {
       user: formatUserResponse(user),
     });
   } catch (error) {
+    if (credentialStorageFileId && !userCreated) {
+      await deleteFile({ storageFileId: credentialStorageFileId }).catch(() => {});
+    }
     next(error);
   }
 };
@@ -216,6 +258,20 @@ export const loginUser = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: 'Email or password is incorrect.',
+      });
+    }
+
+    if (['medical_staff', 'insurance_agent'].includes(user.role) && (
+      user.credentialVerification?.status !== 'verified' ||
+      (user.credentialVerification.expiresAt && user.credentialVerification.expiresAt <= new Date())
+    )) {
+      return res.status(403).json({
+        success: false,
+        message: user.credentialVerification?.expiresAt && user.credentialVerification.expiresAt <= new Date()
+          ? 'Your credential document has expired. Contact the administrator to update your credential.'
+          : user.credentialVerification?.status === 'rejected'
+          ? 'Your credential document was not approved. Contact the administrator for next steps.'
+          : 'Your credential document is awaiting administrator review.',
       });
     }
 

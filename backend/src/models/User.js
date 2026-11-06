@@ -85,6 +85,18 @@ const userSchema = new mongoose.Schema(
       agentId: { type: String, trim: true, default: '' },
       licenseNumber: { type: String, trim: true, default: '' },
     },
+    credentialVerification: {
+      status: { type: String, enum: ['pending', 'verified', 'rejected'], default: 'verified' },
+      expiresAt: { type: Date, default: null },
+      documentStorageFileId: { type: mongoose.Schema.Types.ObjectId, default: null },
+      documentFileName: { type: String, default: '' },
+      documentFileType: { type: String, default: '' },
+      documentFileSize: { type: Number, default: 0 },
+      submittedAt: { type: Date, default: null },
+      reviewedAt: { type: Date, default: null },
+      reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+      reviewNote: { type: String, trim: true, maxlength: 1000, default: '' },
+    },
   },
   {
     timestamps: true,

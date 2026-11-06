@@ -100,8 +100,26 @@ export const authAPI = {
     phone?: string;
     medicalStaffDetails?: MedicalStaffDetails;
     insuranceDetails?: InsuranceDetails;
+    credentialDocument?: File;
+    credentialExpiresAt?: string;
   }): Promise<AuthResponse> => {
-    const res = await api.post<AuthResponse>('/auth/register', userData);
+    let payload: FormData | typeof userData = userData;
+    if (userData.credentialDocument) {
+      const formData = new FormData();
+      formData.append('name', userData.name);
+      formData.append('email', userData.email);
+      formData.append('password', userData.password);
+      formData.append('role', userData.role || 'patient');
+      formData.append('phone', userData.phone || '');
+      if (userData.medicalStaffDetails) formData.append('medicalStaffDetails', JSON.stringify(userData.medicalStaffDetails));
+      if (userData.insuranceDetails) formData.append('insuranceDetails', JSON.stringify(userData.insuranceDetails));
+      formData.append('credentialExpiresAt', userData.credentialExpiresAt || '');
+      formData.append('credentialDocument', userData.credentialDocument);
+      payload = formData;
+    }
+    const res = await api.post<AuthResponse>('/auth/register', payload, userData.credentialDocument
+      ? { headers: { 'Content-Type': 'multipart/form-data' } }
+      : undefined);
     return res.data;
   },
 
@@ -702,6 +720,16 @@ export const adminAPI = {
   ): Promise<{ success: boolean; message: string; user: User }> => {
     const res = await api.put(`/admin/users/${userId}/approve`);
     return res.data;
+  },
+
+  reviewCredential: async (userId: string, decision: 'verified' | 'rejected', reviewNote: string) => {
+    const res = await api.put(`/admin/users/${userId}/credential-review`, { decision, reviewNote });
+    return res.data as { success: boolean; message: string; user: User };
+  },
+
+  getCredentialDocument: async (userId: string): Promise<Blob> => {
+    const res = await api.get(`/admin/users/${userId}/credential-document`, { responseType: 'blob' });
+    return res.data as Blob;
   },
 
   getStats: async (): Promise<AdminStatsResponse> => {

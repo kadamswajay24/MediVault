@@ -37,6 +37,8 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
 
   // Role details
   const [licenseNumber, setLicenseNumber] = useState('');
+  const [credentialExpiresAt, setCredentialExpiresAt] = useState('');
+  const [credentialDocument, setCredentialDocument] = useState<File | undefined>();
   const [specialization, setSpecialization] = useState('');
   const [customSpecialization, setCustomSpecialization] = useState('');
   const [hospitalAffiliation, setHospitalAffiliation] = useState('');
@@ -92,6 +94,25 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
       return;
     }
 
+    if (!isPatientPortal) {
+      if (!licenseNumber.trim() || !credentialExpiresAt || !credentialDocument) {
+        setError('Staff applications require a license number, expiry date, and credential document.');
+        return;
+      }
+      if (new Date(`${credentialExpiresAt}T23:59:59`) <= new Date()) {
+        setError('The credential expiry date must be in the future.');
+        return;
+      }
+      if (credentialDocument.size > 4 * 1024 * 1024) {
+        setError('Credential documents must be 4 MB or smaller.');
+        return;
+      }
+      if (!['application/pdf', 'image/jpeg', 'image/png'].includes(credentialDocument.type)) {
+        setError('Upload a PDF, PNG, or JPEG credential document.');
+        return;
+      }
+    }
+
     setLoading(true);
     setError(null);
 
@@ -122,6 +143,8 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
                 licenseNumber,
               }
             : undefined,
+        credentialExpiresAt: isPatientPortal ? undefined : credentialExpiresAt,
+        credentialDocument,
       });
 
       if (result.pendingApproval) {
@@ -167,8 +190,8 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
               Application submitted for review
             </h2>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-              Your staff account will be available after an administrator approves your
-              application. You can sign in once your access is approved.
+              Your credential document and staff application will be reviewed by an
+              administrator. You can sign in after both are approved.
             </p>
             {issuedMediVaultId && (
               <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-950 dark:text-slate-300">
@@ -402,6 +425,48 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
                 <p className="text-[10px] text-slate-500 dark:text-slate-400">
                   MediVault will generate a company-specific agent ID for you.
                 </p>
+                <input
+                  required
+                  type="text"
+                  value={licenseNumber}
+                  onChange={(e) => setLicenseNumber(e.target.value)}
+                  placeholder="Insurance license / registration number"
+                  className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded text-xs"
+                />
+              </div>
+            )}
+
+            {!isPatientPortal && (
+              <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950">
+                <div>
+                  <label htmlFor="credential-expiry" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Credential expiry date *
+                  </label>
+                  <input
+                    id="credential-expiry"
+                    required
+                    type="date"
+                    value={credentialExpiresAt}
+                    onChange={(e) => setCredentialExpiresAt(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded text-xs"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="credential-document" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Upload license or credential document *
+                  </label>
+                  <input
+                    id="credential-document"
+                    required
+                    type="file"
+                    accept="application/pdf,image/png,image/jpeg"
+                    onChange={(e) => setCredentialDocument(e.target.files?.[0])}
+                    className="w-full text-xs text-slate-700 dark:text-slate-300"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                    PDF, PNG, or JPEG; up to 4 MB. An administrator must verify it before staff access is approved.
+                  </p>
+                </div>
               </div>
             )}
 

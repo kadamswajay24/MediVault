@@ -36,7 +36,7 @@ export const upload = multer({
   limits: {
     fileSize: 4 * 1024 * 1024, // Leave room for multipart fields under Vercel's 4.5 MB limit
     files: 1,
-    fields: 4,
+    fields: 12,
     fieldSize: 8 * 1024,
   },
   fileFilter,

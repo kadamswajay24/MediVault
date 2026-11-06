@@ -23,6 +23,16 @@ export interface User {
   phone?: string;
   medicalStaffDetails?: MedicalStaffDetails;
   insuranceDetails?: InsuranceDetails;
+  credentialVerification?: {
+    status: 'pending' | 'verified' | 'rejected';
+    expiresAt?: string | null;
+    documentFileName?: string;
+    documentFileType?: string;
+    documentFileSize?: number;
+    submittedAt?: string | null;
+    reviewedAt?: string | null;
+    reviewNote?: string;
+  };
   createdAt?: string;
 }
 

@@ -106,6 +106,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     phone?: string;
     medicalStaffDetails?: MedicalStaffDetails;
     insuranceDetails?: InsuranceDetails;
+    credentialDocument?: File;
+    credentialExpiresAt?: string;
   }) => {
     const data = await authAPI.register(registerData);
     if (data.token && data.user) {

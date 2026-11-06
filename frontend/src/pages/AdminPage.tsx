@@ -39,6 +39,9 @@ export const AdminPage: React.FC = () => {
   const [statusChangeUser, setStatusChangeUser] = useState<User | null>(null);
   const [changingStatus, setChangingStatus] = useState(false);
   const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
+  const [credentialUser, setCredentialUser] = useState<User | null>(null);
+  const [credentialReviewNote, setCredentialReviewNote] = useState('');
+  const [credentialActionBusy, setCredentialActionBusy] = useState(false);
 
   const fetchAdminData = useCallback(async () => {
     try {
@@ -113,6 +116,37 @@ export const AdminPage: React.FC = () => {
       alert(err.response?.data?.message || 'Failed to approve staff account.');
     } finally {
       setApprovingUserId(null);
+    }
+  };
+
+  const handleCredentialDecision = async (decision: 'verified' | 'rejected') => {
+    if (!credentialUser?.id) return;
+    if (decision === 'rejected' && !credentialReviewNote.trim()) {
+      alert('Add a reason so the staff applicant knows why the credential was rejected.');
+      return;
+    }
+    setCredentialActionBusy(true);
+    try {
+      await adminAPI.reviewCredential(credentialUser.id, decision, credentialReviewNote);
+      setCredentialUser(null);
+      setCredentialReviewNote('');
+      await fetchAdminData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Could not save the credential review.');
+    } finally {
+      setCredentialActionBusy(false);
+    }
+  };
+
+  const handleViewCredential = async (user: User) => {
+    if (!user.id) return;
+    try {
+      const blob = await adminAPI.getCredentialDocument(user.id);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      alert('Could not open the credential document.');
     }
   };
 
@@ -386,6 +420,22 @@ export const AdminPage: React.FC = () => {
                               Full System Authority
                             </span>
                           )}
+                          {['medical_staff', 'insurance_agent'].includes(u.role) && (
+                            <div className="mt-1">
+                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                u.credentialVerification?.status === 'verified' && (!u.credentialVerification.expiresAt || new Date(u.credentialVerification.expiresAt) > new Date())
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                  : u.credentialVerification?.status === 'rejected'
+                                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                              }`}>
+                                Credential: {u.credentialVerification?.expiresAt && new Date(u.credentialVerification.expiresAt) <= new Date() ? 'expired' : u.credentialVerification?.status || 'verified'}
+                              </span>
+                              {u.credentialVerification?.expiresAt && (
+                                <span className="mt-1 block text-[10px]">Expires {new Date(u.credentialVerification.expiresAt).toLocaleDateString('en-IN')}</span>
+                              )}
+                            </div>
+                          )}
                         </td>
 
                         <td className="px-4 py-3.5">
@@ -409,11 +459,20 @@ export const AdminPage: React.FC = () => {
                         </td>
 
                         <td className="px-4 py-3.5 text-right whitespace-nowrap space-x-2">
+                          {['medical_staff', 'insurance_agent'].includes(u.role) && u.credentialVerification?.documentFileName && (
+                            <button
+                              onClick={() => { setCredentialUser(u); setCredentialReviewNote(u.credentialVerification?.reviewNote || ''); }}
+                              className="px-2.5 py-1 text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-300 rounded"
+                            >
+                              Review credentials
+                            </button>
+                          )}
                           {u.approvalStatus === 'pending' && (
                             <button
                               onClick={() => handleApproveUser(u)}
-                              disabled={!u.id || approvingUserId === u.id}
+                              disabled={!u.id || approvingUserId === u.id || (['medical_staff', 'insurance_agent'].includes(u.role) && (u.credentialVerification?.status !== 'verified' || Boolean(u.credentialVerification.expiresAt && new Date(u.credentialVerification.expiresAt) <= new Date())))}
                               className="button-primary px-2.5 py-1 text-xs font-semibold disabled:opacity-50 rounded"
+                              title={['medical_staff', 'insurance_agent'].includes(u.role) && u.credentialVerification?.status !== 'verified' ? 'Verify credentials before approving this account.' : undefined}
                             >
                               {approvingUserId === u.id ? 'Approving...' : 'Approve'}
                             </button>
@@ -725,6 +784,25 @@ export const AdminPage: React.FC = () => {
                     : 'Reactivate account'}
               </button>
             </div>
+          </section>
+        </div>
+      )}
+      {credentialUser && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <section role="dialog" aria-modal="true" aria-labelledby="credential-review-title" className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <h2 id="credential-review-title" className="text-lg font-bold text-slate-900 dark:text-white">Review staff credentials</h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{credentialUser.name} · {credentialUser.role === 'medical_staff' ? credentialUser.medicalStaffDetails?.licenseNumber : credentialUser.insuranceDetails?.licenseNumber}</p>
+            <p className="mt-1 text-xs text-slate-500">Expires: {credentialUser.credentialVerification?.expiresAt ? new Date(credentialUser.credentialVerification.expiresAt).toLocaleDateString('en-IN') : 'Not provided'}</p>
+            {credentialUser.credentialVerification?.reviewNote && <p className="mt-3 rounded bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">Previous review: {credentialUser.credentialVerification.reviewNote}</p>}
+            <button type="button" onClick={() => void handleViewCredential(credentialUser)} className="mt-4 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Open submitted document</button>
+            <label htmlFor="credential-review-note" className="mt-4 block text-xs font-semibold text-slate-700 dark:text-slate-300">Review note {credentialUser.credentialVerification?.status === 'rejected' ? '(required for rejection)' : '(optional)'}</label>
+            <textarea id="credential-review-note" value={credentialReviewNote} onChange={(event) => setCredentialReviewNote(event.target.value)} maxLength={1000} rows={3} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white" placeholder="Record what was checked or what needs correction." />
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button type="button" disabled={credentialActionBusy} onClick={() => setCredentialUser(null)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">Close</button>
+              <button type="button" disabled={credentialActionBusy} onClick={() => void handleCredentialDecision('rejected')} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Reject</button>
+              <button type="button" disabled={credentialActionBusy || !credentialUser.credentialVerification?.expiresAt || new Date(credentialUser.credentialVerification.expiresAt) <= new Date()} onClick={() => void handleCredentialDecision('verified')} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Verify credentials</button>
+            </div>
+            {credentialUser.credentialVerification?.status === 'rejected' && <p className="mt-3 text-xs text-rose-600 dark:text-rose-400">Rejected documents cannot be resubmitted in-app yet. The applicant must contact an administrator.</p>}
           </section>
         </div>
       )}

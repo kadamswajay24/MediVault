@@ -6,6 +6,7 @@ import AuditLog from '../models/AuditLog.js';
 import ProxyDelegation from '../models/ProxyDelegation.js';
 import { createAuditLog } from '../services/auditService.js';
 import { generateCompanyAgentId } from '../services/agentIdService.js';
+import { readFile, sendFile } from '../services/fileStorageService.js';
 
 const isValidUserId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -41,10 +42,11 @@ export const getUsers = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       count: users.length,
-      users: users.map((user) => ({
-        ...user.toObject(),
-        id: user._id.toString(),
-      })),
+      users: users.map((user) => {
+        const data = user.toObject();
+        if (data.credentialVerification) delete data.credentialVerification.documentStorageFileId;
+        return { ...data, id: user._id.toString() };
+      }),
     });
   } catch (error) {
     next(error);
@@ -90,6 +92,9 @@ export const updateUserRole = async (req, res, next) => {
     }
 
     const oldRole = user.role;
+    if (['medical_staff', 'insurance_agent'].includes(role) && oldRole !== role) {
+      return res.status(400).json({ success: false, message: 'Changing a user into a staff role requires a new application with credentials through the appropriate staff registration portal.' });
+    }
     user.role = role;
     if (oldRole !== role || (role === 'patient' && user.approvalStatus === 'pending')) {
       user.approvalStatus = 'approved';
@@ -97,15 +102,26 @@ export const updateUserRole = async (req, res, next) => {
     }
 
     if (medicalStaffDetails && typeof medicalStaffDetails === 'object') {
+      const credentialChanged = role === 'medical_staff' &&
+        user.medicalStaffDetails?.licenseNumber !== (medicalStaffDetails.licenseNumber || '');
       user.medicalStaffDetails = {
         licenseNumber: medicalStaffDetails.licenseNumber || '',
         specialization: medicalStaffDetails.specialization || '',
         hospitalAffiliation: medicalStaffDetails.hospitalAffiliation || '',
       };
+      if (credentialChanged) {
+        user.credentialVerification.status = 'pending';
+        user.credentialVerification.reviewedAt = null;
+        user.credentialVerification.reviewedBy = null;
+        user.credentialVerification.reviewNote = 'License number changed; review the existing credential document again.';
+      }
     }
 
     if (insuranceDetails && typeof insuranceDetails === 'object') {
       const companyName = String(insuranceDetails.companyName || '').trim();
+      const credentialChanged = role === 'insurance_agent' &&
+        (user.insuranceDetails?.licenseNumber !== (insuranceDetails.licenseNumber || '') ||
+          user.insuranceDetails?.companyName?.trim().toLowerCase() !== companyName.toLowerCase());
       const companyChanged =
         user.insuranceDetails?.companyName?.trim().toLowerCase() !== companyName.toLowerCase();
       const agentId =
@@ -119,6 +135,12 @@ export const updateUserRole = async (req, res, next) => {
         agentId,
         licenseNumber: insuranceDetails.licenseNumber || '',
       };
+      if (credentialChanged) {
+        user.credentialVerification.status = 'pending';
+        user.credentialVerification.reviewedAt = null;
+        user.credentialVerification.reviewedBy = null;
+        user.credentialVerification.reviewNote = 'License or company details changed; review the existing credential document again.';
+      }
     }
 
     await user.save();
@@ -245,6 +267,14 @@ export const approveUser = async (req, res, next) => {
       });
     }
 
+    if (user.credentialVerification?.status !== 'verified' ||
+      (user.credentialVerification.expiresAt && user.credentialVerification.expiresAt <= new Date())) {
+      return res.status(409).json({
+        success: false,
+        message: 'Verify a current, unexpired staff credential document before approving the account.',
+      });
+    }
+
     user.approvalStatus = 'approved';
     user.isActive = true;
     await user.save();
@@ -274,6 +304,67 @@ export const approveUser = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+export const reviewUserCredential = async (req, res, next) => {
+  try {
+    if (!isValidUserId(req.params.id)) return res.status(400).json({ success: false, message: 'A valid user ID is required.' });
+    const { decision, reviewNote = '' } = req.body;
+    if (!['verified', 'rejected'].includes(decision)) return res.status(400).json({ success: false, message: 'Decision must be verified or rejected.' });
+    if (decision === 'rejected' && !String(reviewNote).trim()) return res.status(400).json({ success: false, message: 'Add a reason when rejecting credential documents.' });
+    const user = await User.findById(req.params.id);
+    if (!user || !['medical_staff', 'insurance_agent'].includes(user.role)) return res.status(404).json({ success: false, message: 'Staff account not found.' });
+    if (!user.credentialVerification?.documentStorageFileId) return res.status(404).json({ success: false, message: 'No credential document is available for review.' });
+    if (decision === 'verified' && (!user.credentialVerification.expiresAt || user.credentialVerification.expiresAt <= new Date())) {
+      return res.status(400).json({ success: false, message: 'This credential is expired. It cannot be verified.' });
+    }
+    user.credentialVerification.status = decision;
+    user.credentialVerification.reviewNote = String(reviewNote).trim().slice(0, 1000);
+    user.credentialVerification.reviewedAt = new Date();
+    user.credentialVerification.reviewedBy = req.user._id;
+    await user.save();
+    await createAuditLog({
+      userId: user._id,
+      performedBy: req.user._id,
+      action: 'ADMIN_USER_UPDATED',
+      details: `Admin (${req.user.name}) marked ${user.role} credentials ${decision}${reviewNote ? `: ${String(reviewNote).trim().slice(0, 300)}` : ''}`,
+      resourceId: user._id,
+      resourceType: 'User',
+      req,
+    });
+    return res.status(200).json({
+      success: true,
+      message: `Credentials marked ${decision}.`,
+      user: {
+        id: user._id,
+        credentialVerification: {
+          status: user.credentialVerification.status,
+          expiresAt: user.credentialVerification.expiresAt,
+          submittedAt: user.credentialVerification.submittedAt,
+          reviewedAt: user.credentialVerification.reviewedAt,
+          reviewNote: user.credentialVerification.reviewNote,
+        },
+      },
+    });
+  } catch (error) { next(error); }
+};
+
+export const downloadUserCredential = async (req, res, next) => {
+  try {
+    if (!isValidUserId(req.params.id)) return res.status(400).json({ success: false, message: 'A valid user ID is required.' });
+    const user = await User.findById(req.params.id).select('role name credentialVerification');
+    if (!user || !['medical_staff', 'insurance_agent'].includes(user.role) || !user.credentialVerification?.documentStorageFileId) {
+      return res.status(404).json({ success: false, message: 'Credential document not found.' });
+    }
+    const file = {
+      storageFileId: user.credentialVerification.documentStorageFileId,
+      fileName: user.credentialVerification.documentFileName || 'credential-document',
+      fileType: user.credentialVerification.documentFileType || 'application/octet-stream',
+    };
+    const buffer = await readFile(file);
+    await createAuditLog({ userId: user._id, performedBy: req.user._id, action: 'ADMIN_USER_UPDATED', details: `Admin (${req.user.name}) viewed staff credential document for ${user.name}`, resourceId: user._id, resourceType: 'User', req });
+    return sendFile(res, file, buffer);
+  } catch (error) { next(error); }
 };
 
 // @desc    Get system-wide platform statistics

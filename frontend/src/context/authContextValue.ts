@@ -25,6 +25,8 @@ export interface AuthContextType {
     phone?: string;
     medicalStaffDetails?: MedicalStaffDetails;
     insuranceDetails?: InsuranceDetails;
+    credentialDocument?: File;
+    credentialExpiresAt?: string;
   }) => Promise<AuthResponse>;
   logout: () => void;
   updateUserContext: (user: User) => void;

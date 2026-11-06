@@ -6,6 +6,8 @@ import {
   approveUser,
   getPlatformStats,
   getGlobalAuditLogs,
+  reviewUserCredential,
+  downloadUserCredential,
 } from '../controllers/adminController.js';
 import {
   createAdminPolicyPlan,
@@ -24,6 +26,8 @@ router.get('/users', getUsers);
 router.put('/users/:id/role', updateUserRole);
 router.put('/users/:id/status', toggleUserStatus);
 router.put('/users/:id/approve', approveUser);
+router.put('/users/:id/credential-review', reviewUserCredential);
+router.get('/users/:id/credential-document', downloadUserCredential);
 router.get('/stats', getPlatformStats);
 router.get('/audit-logs', getGlobalAuditLogs);
 router.get('/policy-plans', getAdminPolicyPlans);

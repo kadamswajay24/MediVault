@@ -40,6 +40,21 @@ export const protect = async (req, res, next) => {
         });
       }
 
+      if (
+        ['medical_staff', 'insurance_agent'].includes(user.role) &&
+        (user.credentialVerification?.status !== 'verified' ||
+          (user.credentialVerification.expiresAt && user.credentialVerification.expiresAt <= new Date()))
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: user.credentialVerification?.expiresAt && user.credentialVerification.expiresAt <= new Date()
+            ? 'Your credential document has expired. Contact the administrator to update your credential.'
+            : user.credentialVerification?.status === 'rejected'
+            ? 'Your credential document was not approved. Contact the administrator for next steps.'
+            : 'Your credential document is awaiting administrator review.',
+        });
+      }
+
       req.user = user;
       return next();
     } catch (error) {
