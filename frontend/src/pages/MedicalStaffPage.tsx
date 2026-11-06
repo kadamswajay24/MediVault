@@ -563,6 +563,28 @@ export const MedicalStaffPage: React.FC = () => {
           duration: row.duration,
           instructions: row.instructions,
         }));
+      const normalizeRegimenPart = (value: string) => value
+        .toLowerCase()
+        .replace(/\b(tablets?|tabs?)\b/g, 'tablet')
+        .replace(/\bcapsules?\b/g, 'capsule')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const seenRegimens = new Set<string>();
+      const duplicatePrescription = validPrescriptions.find((item) => {
+        const key = [item.medicineName, item.dosage, item.frequency, item.duration]
+          .map(normalizeRegimenPart)
+          .join('|');
+        if (seenRegimens.has(key)) return true;
+        seenRegimens.add(key);
+        return false;
+      });
+      if (duplicatePrescription) {
+        setNoteError(
+          `${duplicatePrescription.medicineName} is listed more than once with the same dose and schedule. Remove the duplicate, or change the regimen if both entries are intentional.`
+        );
+        setSubmittingNote(false);
+        return;
+      }
       const noteData = {
         noteType,
         title: noteTitle.trim(),
@@ -916,9 +938,12 @@ export const MedicalStaffPage: React.FC = () => {
                     <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">
                       {doctorSummary.summary}
                     </p>
+                    <p className="mt-2 text-[11px] leading-4 text-slate-500 dark:text-slate-400">
+                      Source labels are based on the supplied record headings. Confirm every item in its original record before relying on it.
+                    </p>
                     {[
-                      { title: 'Key findings', items: doctorSummary.keyFindings },
-                      { title: 'Medicines mentioned', items: doctorSummary.medicationMentions },
+                      { title: 'Key findings · source-labeled', items: doctorSummary.keyFindings },
+                      { title: 'Medicines mentioned · source-labeled', items: doctorSummary.medicationMentions },
                       { title: 'Dates and values', items: doctorSummary.datesAndValues },
                       { title: 'Points to verify', items: doctorSummary.questionsForDoctor },
                     ].map(({ title, items }) => items.length > 0 && (

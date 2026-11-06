@@ -11,6 +11,26 @@ import {
   searchMedicineCatalogLocally,
 } from '../services/localAiSummaryService.js';
 
+const getDuplicatePrescriptionItem = (items = []) => {
+  const normalize = (value) => String(value || '')
+    .toLowerCase()
+    .replace(/\b(tablets?|tabs?)\b/g, 'tablet')
+    .replace(/\bcapsules?\b/g, 'capsule')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const seen = new Set();
+
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+    const key = [item.medicineName, item.dosage, item.frequency, item.duration]
+      .map(normalize)
+      .join('|');
+    if (seen.has(key)) return item.medicineName || 'medicine';
+    seen.add(key);
+  }
+  return null;
+};
+
 const requireActiveClinicalAccess = async (staffId, patientId) => {
   const grant = await ClinicalAccessRequest.findOne({
     patient: patientId,
@@ -64,6 +84,16 @@ export const addClinicalNote = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: 'Clinical note title is required.',
+      });
+    }
+    if (!Array.isArray(prescriptionItems)) {
+      return res.status(400).json({ success: false, message: 'Prescription items must be a list.' });
+    }
+    const duplicateMedicine = getDuplicatePrescriptionItem(prescriptionItems);
+    if (duplicateMedicine) {
+      return res.status(400).json({
+        success: false,
+        message: `${duplicateMedicine} appears more than once with the same dose and schedule. Remove the duplicate or change the regimen if it is intentional.`,
       });
     }
 
@@ -160,6 +190,13 @@ export const updateClinicalNote = async (req, res, next) => {
     }
     if (prescriptionItems !== undefined && !Array.isArray(prescriptionItems)) {
       return res.status(400).json({ success: false, message: 'Prescription items must be a list.' });
+    }
+    const duplicateMedicine = getDuplicatePrescriptionItem(prescriptionItems || []);
+    if (duplicateMedicine) {
+      return res.status(400).json({
+        success: false,
+        message: `${duplicateMedicine} appears more than once with the same dose and schedule. Remove the duplicate or change the regimen if it is intentional.`,
+      });
     }
 
     note.noteType = noteType || note.noteType;
@@ -429,7 +466,7 @@ export const getPatientAiSummary = async (req, res, next) => {
     const sections = [];
     if (profile) {
       sections.push(
-        `Patient-reported profile (not independently verified):\n` +
+        `[Source: patient-reported profile; not independently verified]\n` +
         `Conditions: ${profile.medicalConditions.join(', ') || 'Not recorded'}\n` +
         `Allergies: ${profile.allergies.join(', ') || 'Not recorded'}\n` +
         `Medications: ${profile.medications.join(', ') || 'Not recorded'}`
@@ -439,8 +476,8 @@ export const getPatientAiSummary = async (req, res, next) => {
     for (const record of records) {
       const identityStatus = record.metadata?.identityCheck?.status || 'unverified';
       const recordHeader =
-        `Report (${new Date(record.recordDate).toISOString().slice(0, 10)}): ` +
-        `${record.category} - ${record.title}. Identity check: ${identityStatus}.`;
+        `[Source: ${record.category} report, ${new Date(record.recordDate).toISOString().slice(0, 10)}, ` +
+        `${record.title}; identity check: ${identityStatus}]`;
 
       if (identityStatus !== 'matched') {
         sections.push(
@@ -467,7 +504,7 @@ export const getPatientAiSummary = async (req, res, next) => {
         )
         .filter(Boolean);
       sections.push(
-        `Clinician-authored note (${new Date(note.createdAt).toISOString().slice(0, 10)}; ${note.noteType}): ` +
+        `[Source: clinician-authored ${note.noteType} note, ${new Date(note.createdAt).toISOString().slice(0, 10)}${note.title ? `, ${note.title}` : ''}]\n` +
         `${redactPatientIdentifiers(
           [
             note.title,

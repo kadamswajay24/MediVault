@@ -408,7 +408,21 @@ const validateSummary = (summary) => {
     );
   }
 
-  return summary;
+  const normalizeMedicationMention = (mention) =>
+    mention
+      .toLowerCase()
+      .replace(/\b(tablets?|tabs?)\b/g, 'tablet')
+      .replace(/\b(capsules?|caps?)\b/g, 'capsule')
+      .replace(/\s+/g, ' ')
+      .replace(/[.,;:]+$/g, '')
+      .trim();
+
+  return {
+    ...summary,
+    medicationMentions: [...new Map(
+      summary.medicationMentions.map((mention) => [normalizeMedicationMention(mention), mention.trim()])
+    ).values()],
+  };
 };
 
 export const generateLocalSummary = async (
@@ -436,8 +450,12 @@ export const generateLocalSummary = async (
       audience === 'clinician'
         ? 'Write a concise clinician-facing overview in English from only the supplied patient-authorized records.'
         : 'Write a concise plain-language summary in English.',
-      'Copy all explicitly stated findings, medicines and doses, dates, measurements, and units into their matching arrays. Do not leave an array empty when the document contains matching information.',
-      'Put reported results and abnormal flags in keyFindings; medicine names and stated doses in medicationMentions; all dates and numeric measurements with units in datesAndValues.',
+      audience === 'clinician'
+        ? 'For every key finding and medication mention, include a brief source label copied from the supplied [Source: ...] heading. Preserve whether the information is patient-reported, from an identity-matched report, or from a clinician-authored note. Do not combine facts from different sources into one item.'
+        : 'Copy all explicitly stated findings, medicines and doses, dates, measurements, and units into their matching arrays. Do not leave an array empty when the document contains matching information.',
+      audience === 'clinician'
+        ? 'List each medicine and regimen once per source. Do not repeat an identical medicine and regimen; keep different doses, frequencies, durations, or sources separate.'
+        : 'Put reported results and abnormal flags in keyFindings; medicine names and stated doses in medicationMentions; all dates and numeric measurements with units in datesAndValues.',
       'Use an empty array only when that type of detail is absent. Do not infer a diagnosis or treatment.',
       audience === 'clinician'
         ? 'Highlight information to verify in the original records and important missing or unclear details. This is not a diagnosis or treatment recommendation.'
