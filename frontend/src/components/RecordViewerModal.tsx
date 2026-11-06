@@ -5,7 +5,6 @@ import {
   Trash2,
   Calendar,
   FileText,
-  ExternalLink,
 } from 'lucide-react';
 import type { MedicalRecord } from '../types';
 import { recordAPI } from '../services/api';
@@ -31,6 +30,7 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ recordId: string; url: string } | null>(null);
   const [previewError, setPreviewError] = useState<{ recordId: string; message: string } | null>(null);
+  const [imageExpanded, setImageExpanded] = useState(false);
   const recordId = record?._id;
 
   useEffect(() => {
@@ -107,7 +107,7 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-2xl max-w-6xl w-full p-4 sm:p-6 shadow-2xl relative max-h-[95vh] flex flex-col">
         {/* Header */}
         <div className="flex items-start justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
           <div className="space-y-1 pr-4">
@@ -172,23 +172,22 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
           )}
 
           {/* Document Preview Box */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 p-4 flex flex-col items-center justify-center min-h-[220px]">
+          <div className={`rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 p-3 flex flex-col items-center justify-center ${isPdf ? 'min-h-[55vh]' : 'min-h-[220px]'}`}>
             {isImage ? (
               previewUrl ? (
                 <div className="space-y-3 w-full flex flex-col items-center">
                   <img
                     src={previewUrl}
                     alt={record.title}
-                    className="max-h-72 max-w-full rounded-lg object-contain border border-slate-200 dark:border-slate-800 shadow-md"
+                    className={`${imageExpanded ? 'max-h-[70vh]' : 'max-h-72'} max-w-full rounded-lg object-contain border border-slate-200 dark:border-slate-800 shadow-md`}
                   />
-                  <a
-                    href={previewUrl}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => setImageExpanded((expanded) => !expanded)}
                     className="text-xs text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 font-medium"
                   >
-                    <ExternalLink className="w-3 h-3" /> View Full Resolution
-                  </a>
+                    {imageExpanded ? 'Fit image to preview' : 'Enlarge image'}
+                  </button>
                 </div>
               ) : <LoaderPreview />
             ) : isPdf ? (
@@ -203,15 +202,11 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
                   </p>
                 </div>
                 {previewUrl ? (
-                  <a
-                    href={previewUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-teal-700 dark:text-teal-300 border border-slate-300 dark:border-slate-700 transition-all shadow-sm"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    Open PDF in Browser
-                  </a>
+                  <iframe
+                    src={previewUrl}
+                    title={`Preview of ${record.fileName}`}
+                    className="h-[65vh] min-h-[360px] w-full rounded-lg bg-white"
+                  />
                 ) : <LoaderPreview />}
               </div>
             ) : (
