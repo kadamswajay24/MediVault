@@ -178,11 +178,26 @@ export const registerUser = async (req, res, next) => {
 export const loginUser = async (req, res, next) => {
   try {
     const { email, password } = req.body;
+    const portalRoles = {
+      patient: 'patient',
+      clinical: 'medical_staff',
+      insurance: 'insurance_agent',
+      admin: 'admin',
+    };
+    const portal = req.params.portal || 'patient';
+    const requiredRole = portalRoles[portal];
+
+    if (!requiredRole) {
+      return res.status(404).json({
+        success: false,
+        message: 'Unable to sign in. Check your details and try again.',
+      });
+    }
 
     if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide both email and password.',
+        message: 'Enter your email address and password.',
       });
     }
 
@@ -192,15 +207,15 @@ export const loginUser = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password credentials.',
+        message: 'Email or password is incorrect.',
       });
     }
 
     const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
+    if (!isMatch || user.role !== requiredRole) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password credentials.',
+        message: 'Email or password is incorrect.',
       });
     }
 

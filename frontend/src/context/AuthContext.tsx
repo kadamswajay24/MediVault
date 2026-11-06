@@ -3,52 +3,67 @@ import type { User, UserRole, MedicalStaffDetails, InsuranceDetails } from '../t
 import { authAPI } from '../services/api';
 import { AuthContext } from './authContextValue';
 import type { ActiveDependentInfo } from './authContextValue';
+import {
+  AUTH_SESSION_KEYS,
+  clearLegacySharedAuth,
+  clearTabAuthSession,
+  portalForRole,
+  roleForPortal,
+  type AuthPortal,
+} from '../utils/authSession';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('medivault_user');
-    return saved ? JSON.parse(saved) : null;
+    clearLegacySharedAuth();
+    try {
+      const saved = sessionStorage.getItem(AUTH_SESSION_KEYS.user);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
   });
   const [token, setToken] = useState<string | null>(() => {
-    return localStorage.getItem('medivault_token');
+    try { return sessionStorage.getItem(AUTH_SESSION_KEYS.token); }
+    catch { return null; }
   });
   const [loading, setLoading] = useState<boolean>(true);
 
   const [activeDependent, setActiveDependentState] = useState<ActiveDependentInfo | null>(() => {
-    const saved = localStorage.getItem('medivault_active_dependent');
-    if (!saved) return null;
-
-    const dependent = JSON.parse(saved) as ActiveDependentInfo;
-    if (/^MV-[A-F0-9]{16}$/i.test(dependent.mediVaultId)) return dependent;
-
-    localStorage.removeItem('medivault_active_dependent');
-    return null;
+    try {
+      const saved = sessionStorage.getItem(AUTH_SESSION_KEYS.activeDependent);
+      if (!saved) return null;
+      const dependent = JSON.parse(saved) as ActiveDependentInfo;
+      return /^MV-[A-F0-9]{16}$/i.test(dependent.mediVaultId) ? dependent : null;
+    } catch {
+      return null;
+    }
   });
 
   const setActiveDependent = (dependent: ActiveDependentInfo | null) => {
     setActiveDependentState(dependent);
     if (dependent) {
-      localStorage.setItem('medivault_active_dependent', JSON.stringify(dependent));
+      sessionStorage.setItem(AUTH_SESSION_KEYS.activeDependent, JSON.stringify(dependent));
     } else {
-      localStorage.removeItem('medivault_active_dependent');
+      sessionStorage.removeItem(AUTH_SESSION_KEYS.activeDependent);
     }
   };
 
   useEffect(() => {
     const verifyAuth = async () => {
-      const storedToken = localStorage.getItem('medivault_token');
+      const storedToken = sessionStorage.getItem(AUTH_SESSION_KEYS.token);
       if (storedToken) {
         try {
           const data = await authAPI.getMe();
           if (data.success && data.user) {
+            const portal = sessionStorage.getItem(AUTH_SESSION_KEYS.portal);
+            if (portal && data.user.role !== roleForPortal(portal as AuthPortal)) {
+              throw new Error('Portal session role mismatch.');
+            }
             setUser(data.user);
-            localStorage.setItem('medivault_user', JSON.stringify(data.user));
+            sessionStorage.setItem(AUTH_SESSION_KEYS.user, JSON.stringify(data.user));
           }
         } catch {
-          console.warn('[AuthContext] Session invalid or expired.');
-          localStorage.removeItem('medivault_token');
-          localStorage.removeItem('medivault_user');
-          localStorage.removeItem('medivault_active_dependent');
+          clearTabAuthSession();
           setUser(null);
           setToken(null);
           setActiveDependentState(null);
@@ -60,16 +75,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     verifyAuth();
   }, []);
 
-  const login = async (email: string, password: string, allowedRoles?: UserRole[]) => {
-    const data = await authAPI.login({ email, password });
+  const login = async (email: string, password: string, portal: AuthPortal) => {
+    const data = await authAPI.login({ email, password }, portal);
     if (data.token && data.user) {
-      if (allowedRoles && !allowedRoles.includes(data.user.role)) {
-        throw new Error('This account belongs to a different MediVault portal. Choose the portal for your account and sign in there.');
+      if (data.user.role !== roleForPortal(portal)) {
+        throw new Error('Unable to sign in. Check your details and try again.');
       }
-      localStorage.setItem('medivault_token', data.token);
-      localStorage.setItem('medivault_user', JSON.stringify(data.user));
+      try {
+        clearTabAuthSession();
+        sessionStorage.setItem(AUTH_SESSION_KEYS.portal, portal);
+        sessionStorage.setItem(AUTH_SESSION_KEYS.token, data.token);
+        sessionStorage.setItem(AUTH_SESSION_KEYS.user, JSON.stringify(data.user));
+      } catch {
+        clearTabAuthSession();
+        throw new Error('Sign-in storage is unavailable in this browser tab. Enable site storage and try again.');
+      }
       setToken(data.token);
       setUser(data.user);
+      setActiveDependentState(null);
       return data.user;
     }
     throw new Error('The sign-in service returned an incomplete response. Please try again.');
@@ -86,18 +109,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }) => {
     const data = await authAPI.register(registerData);
     if (data.token && data.user) {
-      localStorage.setItem('medivault_token', data.token);
-      localStorage.setItem('medivault_user', JSON.stringify(data.user));
+      const portal = portalForRole(data.user.role);
+      sessionStorage.setItem(AUTH_SESSION_KEYS.portal, portal);
+      sessionStorage.setItem(AUTH_SESSION_KEYS.token, data.token);
+      sessionStorage.setItem(AUTH_SESSION_KEYS.user, JSON.stringify(data.user));
       setToken(data.token);
       setUser(data.user);
+      setActiveDependentState(null);
     }
     return data;
   };
 
   const logout = () => {
-    localStorage.removeItem('medivault_token');
-    localStorage.removeItem('medivault_user');
-    localStorage.removeItem('medivault_active_dependent');
+    clearTabAuthSession();
     setToken(null);
     setUser(null);
     setActiveDependentState(null);
@@ -105,7 +129,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateUserContext = (updatedUser: User) => {
     setUser(updatedUser);
-    localStorage.setItem('medivault_user', JSON.stringify(updatedUser));
+    sessionStorage.setItem(AUTH_SESSION_KEYS.user, JSON.stringify(updatedUser));
   };
 
   return (

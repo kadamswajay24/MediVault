@@ -1,5 +1,6 @@
 import { createContext } from 'react';
 import type { User, UserRole, MedicalStaffDetails, InsuranceDetails, AuthResponse } from '../types';
+import type { AuthPortal } from '../utils/authSession';
 
 export interface ActiveDependentInfo {
   mediVaultId: string;
@@ -15,7 +16,7 @@ export interface AuthContextType {
   loading: boolean;
   activeDependent: ActiveDependentInfo | null;
   setActiveDependent: (dependent: ActiveDependentInfo | null) => void;
-  login: (email: string, password: string, allowedRoles?: UserRole[]) => Promise<User>;
+  login: (email: string, password: string, portal: AuthPortal) => Promise<User>;
   register: (data: {
     name: string;
     email: string;

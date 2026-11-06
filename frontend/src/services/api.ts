@@ -22,6 +22,12 @@ import type {
   MedicalRecordSummary,
 } from '../types';
 import type { CatalogSearchMedicine } from '../constants/specialtyMedicineCatalog';
+import {
+  AUTH_SESSION_KEYS,
+  clearTabAuthSession,
+  loginPathForPortal,
+  type AuthPortal,
+} from '../utils/authSession';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
@@ -35,12 +41,12 @@ const api = axios.create({
 // Request interceptor to attach JWT token and active dependent context
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('medivault_token');
+    const token = sessionStorage.getItem(AUTH_SESSION_KEYS.token);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    const activeDependent = localStorage.getItem('medivault_active_dependent');
+    const activeDependent = sessionStorage.getItem(AUTH_SESSION_KEYS.activeDependent);
     if (activeDependent) {
       try {
         const dep = JSON.parse(activeDependent);
@@ -49,7 +55,7 @@ api.interceptors.request.use(
         }
       } catch (error) {
         console.warn('[API] Clearing invalid active patient context:', error);
-        localStorage.removeItem('medivault_active_dependent');
+        sessionStorage.removeItem(AUTH_SESSION_KEYS.activeDependent);
       }
     }
 
@@ -63,14 +69,17 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('medivault_token');
-      localStorage.removeItem('medivault_user');
-      localStorage.removeItem('medivault_active_dependent');
+      const requestUrl = String(error.config?.url || '');
+      const isPublicAuthAttempt = /\/auth\/(login|register)(\/|$)/.test(requestUrl);
+      if (isPublicAuthAttempt) return Promise.reject(error);
+
+      const loginPath = loginPathForPortal(sessionStorage.getItem(AUTH_SESSION_KEYS.portal));
+      clearTabAuthSession();
       if (
         !window.location.pathname.includes('/login') &&
         !window.location.pathname.includes('/register')
       ) {
-        window.location.href = '/login';
+        window.location.href = loginPath;
       }
     }
     return Promise.reject(error);
@@ -78,8 +87,8 @@ api.interceptors.response.use(
 );
 
 export const authAPI = {
-  login: async (credentials: { email: string; password: string }): Promise<AuthResponse> => {
-    const res = await api.post<AuthResponse>('/auth/login', credentials);
+  login: async (credentials: { email: string; password: string }, portal: AuthPortal): Promise<AuthResponse> => {
+    const res = await api.post<AuthResponse>(`/auth/login/${portal}`, credentials);
     return res.data;
   },
 
