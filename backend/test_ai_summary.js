@@ -2,6 +2,9 @@
 process.env.AI_PROVIDER = 'ollama';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { createCanvas } from '@napi-rs/canvas';
 import {
@@ -101,6 +104,40 @@ test('extracts selectable text from a PDF', async () => {
   );
   assert.match(text, /Hemoglobin 12\.4 g\/dL/);
   assert.match(text, /2026-01-15/);
+});
+
+test('PDF extraction works when a serverless bundle cannot resolve the relative worker file', async () => {
+  const script = `
+    import assert from 'node:assert/strict';
+    import { GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
+    GlobalWorkerOptions.workerSrc = 'file:///missing-serverless-bundle/pdf.worker.mjs';
+    const { extractPdfText } = await import('./src/services/localAiSummaryService.js');
+    const text = await extractPdfText(Buffer.from('${createPdf('Synthetic deployment report').toString('base64')}', 'base64'));
+    assert.match(text, /Synthetic deployment report/);
+  `;
+  await promisify(execFile)(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: fileURLToPath(new URL('.', import.meta.url)), timeout: 15000,
+  });
+});
+
+test('invalid PDF data remains a document error', async () => {
+  await assert.rejects(extractPdfText(Buffer.from('%PDF-1.4\nnot a PDF document')), (error) =>
+    error.statusCode === 422 && error.code === 'invalid_pdf');
+});
+
+test('a missing PDF worker is a server error, not a claim that the document is damaged', async () => {
+  const script = `
+    import assert from 'node:assert/strict';
+    import { GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
+    const { extractPdfText } = await import('./src/services/localAiSummaryService.js');
+    delete globalThis.pdfjsWorker;
+    GlobalWorkerOptions.workerSrc = 'file:///missing-serverless-bundle/pdf.worker.mjs';
+    await assert.rejects(extractPdfText(Buffer.from('${createPdf('Synthetic deployment report').toString('base64')}', 'base64')),
+      error => error.statusCode === 503 && error.code === 'pdf_reader_unavailable');
+  `;
+  await promisify(execFile)(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: fileURLToPath(new URL('.', import.meta.url)), timeout: 15000,
+  });
 });
 
 test('rejects scanned PDFs without selectable text', async () => {

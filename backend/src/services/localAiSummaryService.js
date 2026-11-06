@@ -3,7 +3,12 @@ export { AiServiceError as LocalAiSummaryError } from './aiProviderService.js';
 import { createRequire } from 'node:module';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { WorkerMessageHandler } from 'pdfjs-dist/legacy/build/pdf.worker.mjs';
 import { createWorker } from 'tesseract.js';
+
+// PDF.js otherwise dynamically imports a relative worker path that serverless
+// bundlers cannot reliably trace. Register the statically imported Node handler.
+globalThis.pdfjsWorker = { WorkerMessageHandler };
 
 const MAX_EXTRACTED_CHARACTERS = 12_000;
 const MAX_PDF_PAGES = 50;
@@ -133,6 +138,18 @@ export const inspectPatientIdentity = (
   };
 };
 
+const pdfReadError = (error) => {
+  if (error?.name === 'PasswordException') {
+    return new LocalAiSummaryError('This PDF is password-protected. Upload an unlocked copy to generate a summary.', 422, 'pdf_password');
+  }
+  if (['InvalidPDFException', 'MissingPDFException'].includes(error?.name)) {
+    return new LocalAiSummaryError('This file could not be read as a valid PDF. Please upload a new PDF export.', 422, 'invalid_pdf');
+  }
+  // Do not log document content or raw exception messages.
+  console.error('[PDF reader] Processing failed; check the deployed PDF.js runtime and worker.');
+  return new LocalAiSummaryError('The server PDF reader is temporarily unavailable. Please try again after the deployment is updated.', 503, 'pdf_reader_unavailable');
+};
+
 export const extractPdfText = async (buffer) => {
   const loadingTask = getDocument({
     data: new Uint8Array(buffer),
@@ -143,12 +160,9 @@ export const extractPdfText = async (buffer) => {
 
   try {
     document = await loadingTask.promise;
-  } catch {
-    await loadingTask.destroy();
-    throw new LocalAiSummaryError(
-      'This PDF could not be read. It may be damaged or password-protected.',
-      422
-    );
+  } catch (error) {
+    await loadingTask.destroy().catch(() => {});
+    throw pdfReadError(error);
   }
 
   try {
@@ -187,10 +201,7 @@ export const extractPdfText = async (buffer) => {
     return text;
   } catch (error) {
     if (error instanceof LocalAiSummaryError) throw error;
-    throw new LocalAiSummaryError(
-      'This PDF could not be read. It may be damaged or password-protected.',
-      422
-    );
+    throw pdfReadError(error);
   } finally {
     await loadingTask.destroy();
   }
