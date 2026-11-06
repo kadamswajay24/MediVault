@@ -459,7 +459,10 @@ export const AdminPage: React.FC = () => {
                         </td>
 
                         <td className="px-4 py-3.5 text-right whitespace-nowrap space-x-2">
-                          {['medical_staff', 'insurance_agent'].includes(u.role) && u.credentialVerification?.documentFileName && (
+                          {['medical_staff', 'insurance_agent'].includes(u.role) &&
+                            u.credentialVerification?.documentFileName &&
+                            (u.credentialVerification.status !== 'verified' ||
+                              Boolean(u.credentialVerification.expiresAt && new Date(u.credentialVerification.expiresAt) <= new Date())) && (
                             <button
                               onClick={() => { setCredentialUser(u); setCredentialReviewNote(u.credentialVerification?.reviewNote || ''); }}
                               className="px-2.5 py-1 text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-300 rounded"
