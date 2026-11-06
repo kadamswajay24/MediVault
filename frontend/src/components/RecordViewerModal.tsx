@@ -191,7 +191,7 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
                 </div>
               ) : <LoaderPreview />
             ) : isPdf ? (
-              <div className="text-center space-y-3 py-6">
+              <div className="flex h-[65vh] min-h-[360px] w-full flex-col gap-2">
                 <div className="w-16 h-16 rounded-2xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-500 dark:text-rose-400 flex items-center justify-center mx-auto">
                   <FileText className="w-8 h-8" />
                 </div>
@@ -205,7 +205,7 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
                   <iframe
                     src={previewUrl}
                     title={`Preview of ${record.fileName}`}
-                    className="h-[65vh] min-h-[360px] w-full rounded-lg bg-white"
+                    className="min-h-0 w-full flex-1 rounded-lg bg-white"
                   />
                 ) : <LoaderPreview />}
               </div>
