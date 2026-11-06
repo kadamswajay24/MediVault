@@ -26,6 +26,7 @@ import { InsuranceMarketplacePage } from './pages/InsuranceMarketplacePage';
 import { CaregiversPage } from './pages/CaregiversPage';
 import { PatientLandingPage } from './pages/PatientLandingPage';
 import { PoliciesPage } from './pages/PoliciesPage';
+import { StaffApplicationPage } from './pages/StaffApplicationPage';
 const MedicalStaffPage = React.lazy(() =>
   import('./pages/MedicalStaffPage').then((page) => ({ default: page.MedicalStaffPage }))
 );
@@ -54,6 +55,11 @@ const RoleBasedHomeRedirect: React.FC = () => {
 
   if (loading) return null;
   if (!isAuthenticated || !user) return <PatientLandingPage />;
+
+  if (['medical_staff', 'insurance_agent'].includes(user.role) && (
+    user.approvalStatus === 'pending' || user.credentialVerification?.status !== 'verified' ||
+    (user.credentialVerification?.expiresAt && new Date(user.credentialVerification.expiresAt) <= new Date())
+  )) return <Navigate to="/staff-application" replace />;
 
   switch (user.role) {
     case 'admin':
@@ -139,6 +145,7 @@ export function App() {
 
               {/* Protected Routes */}
               <Route element={<ProtectedRoute />}>
+                <Route path="/staff-application" element={<StaffApplicationPage />} />
                 <Route element={<PatientPortalLayout />}>
                   <Route element={<RoleRoute roles={['patient', 'medical_staff', 'admin']} />}>
                     <Route

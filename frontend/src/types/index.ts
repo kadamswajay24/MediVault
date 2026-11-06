@@ -24,7 +24,7 @@ export interface User {
   medicalStaffDetails?: MedicalStaffDetails;
   insuranceDetails?: InsuranceDetails;
   credentialVerification?: {
-    status: 'pending' | 'verified' | 'rejected';
+    status: 'pending' | 'needs_changes' | 'verified' | 'rejected';
     expiresAt?: string | null;
     documentFileName?: string;
     documentFileType?: string;

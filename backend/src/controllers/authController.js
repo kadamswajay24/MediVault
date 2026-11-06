@@ -261,24 +261,19 @@ export const loginUser = async (req, res, next) => {
       });
     }
 
-    if (['medical_staff', 'insurance_agent'].includes(user.role) && (
-      user.credentialVerification?.status !== 'verified' ||
-      (user.credentialVerification.expiresAt && user.credentialVerification.expiresAt <= new Date())
-    )) {
-      return res.status(403).json({
-        success: false,
-        message: user.credentialVerification?.expiresAt && user.credentialVerification.expiresAt <= new Date()
-          ? 'Your credential document has expired. Contact the administrator to update your credential.'
-          : user.credentialVerification?.status === 'rejected'
-          ? 'Your credential document was not approved. Contact the administrator for next steps.'
-          : 'Your credential document is awaiting administrator review.',
-      });
+    const isStaff = ['medical_staff', 'insurance_agent'].includes(user.role);
+    const credentialExpired = Boolean(isStaff && user.credentialVerification?.expiresAt && user.credentialVerification.expiresAt <= new Date());
+    const limitedApplication = isStaff && (user.credentialVerification?.status === 'needs_changes' || credentialExpired);
+    if (user.approvalStatus === 'pending' && !limitedApplication) {
+      return res.status(403).json({ success: false, message: 'Your staff account is awaiting administrator approval.' });
     }
 
-    if (user.approvalStatus === 'pending') {
+    if (isStaff && !limitedApplication && user.credentialVerification?.status !== 'verified') {
       return res.status(403).json({
         success: false,
-        message: 'Your staff account is awaiting administrator approval.',
+        message: user.credentialVerification?.status === 'rejected'
+          ? 'Your credential document was not approved. Contact the administrator for next steps.'
+          : 'Your credential document is awaiting administrator review.',
       });
     }
 
@@ -329,6 +324,57 @@ export const getMe = async (req, res, next) => {
       user: formatUserResponse(user),
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+export const resubmitUserCredential = async (req, res, next) => {
+  let replacementFileId;
+  try {
+    const user = req.user;
+    if (!['medical_staff', 'insurance_agent'].includes(user.role)) {
+      return res.status(403).json({ success: false, message: 'Credential resubmission is only available to staff applicants.' });
+    }
+    const expiredRenewal = user.credentialVerification?.status === 'verified' &&
+      user.credentialVerification.expiresAt && user.credentialVerification.expiresAt <= new Date();
+    if (user.credentialVerification?.status !== 'needs_changes' && !expiredRenewal) {
+      return res.status(409).json({ success: false, message: 'Your application is not currently open for credential changes.' });
+    }
+    if (!req.file) return res.status(400).json({ success: false, message: 'Upload a replacement credential document.' });
+    const licenseNumber = String(req.body.licenseNumber || '').trim();
+    const expiresAt = new Date(req.body.credentialExpiresAt);
+    if (!licenseNumber || !req.body.credentialExpiresAt || Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date()) {
+      return res.status(400).json({ success: false, message: 'Enter a license number and a future expiry date.' });
+    }
+
+    replacementFileId = await saveFile(req.file.buffer, `credential-${Date.now()}`);
+    const oldFileId = user.credentialVerification.documentStorageFileId;
+    if (user.role === 'medical_staff') user.medicalStaffDetails.licenseNumber = licenseNumber;
+    else user.insuranceDetails.licenseNumber = licenseNumber;
+    user.credentialVerification.status = 'pending';
+    user.credentialVerification.expiresAt = expiresAt;
+    user.credentialVerification.documentStorageFileId = replacementFileId;
+    user.credentialVerification.documentFileName = req.file.originalname;
+    user.credentialVerification.documentFileType = req.file.mimetype;
+    user.credentialVerification.documentFileSize = req.file.size;
+    user.credentialVerification.submittedAt = new Date();
+    user.credentialVerification.reviewedAt = null;
+    user.credentialVerification.reviewedBy = null;
+    user.credentialVerification.reviewNote = '';
+    await user.save();
+    replacementFileId = null;
+    if (oldFileId) await deleteFile({ storageFileId: oldFileId }).catch((error) => console.error('[Credential cleanup]', error.message));
+    await createAuditLog({
+      userId: user._id,
+      action: 'ADMIN_USER_UPDATED',
+      details: `Staff applicant ${user.name} resubmitted credential documents for review`,
+      resourceId: user._id,
+      resourceType: 'User',
+      req,
+    });
+    return res.status(200).json({ success: true, message: 'Credential document resubmitted for review.', user: formatUserResponse(user) });
+  } catch (error) {
+    if (replacementFileId) await deleteFile({ storageFileId: replacementFileId }).catch(() => {});
     next(error);
   }
 };

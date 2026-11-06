@@ -1,10 +1,11 @@
 import React from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/useAuth';
 import { Loader2 } from 'lucide-react';
 
 export const ProtectedRoute: React.FC = () => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -17,6 +18,15 @@ export const ProtectedRoute: React.FC = () => {
 
   if (!isAuthenticated) {
     return <Navigate to="/" replace />;
+  }
+
+  const isLimitedStaff = Boolean(user && ['medical_staff', 'insurance_agent'].includes(user.role) && (
+    user.approvalStatus === 'pending' ||
+    user.credentialVerification?.status !== 'verified' ||
+    (user.credentialVerification?.expiresAt && new Date(user.credentialVerification.expiresAt) <= new Date())
+  ));
+  if (isLimitedStaff && location.pathname !== '/staff-application') {
+    return <Navigate to="/staff-application" replace />;
   }
 
   return <Outlet />;

@@ -123,6 +123,15 @@ export const authAPI = {
     return res.data;
   },
 
+  resubmitCredential: async (data: { licenseNumber: string; credentialExpiresAt: string; credentialDocument: File }) => {
+    const formData = new FormData();
+    formData.append('licenseNumber', data.licenseNumber);
+    formData.append('credentialExpiresAt', data.credentialExpiresAt);
+    formData.append('credentialDocument', data.credentialDocument);
+    const res = await api.post('/auth/credentials/resubmit', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return res.data as { success: boolean; message: string; user: User };
+  },
+
   getMe: async (): Promise<{ success: boolean; user: User }> => {
     const res = await api.get('/auth/me');
     return res.data;
@@ -722,7 +731,7 @@ export const adminAPI = {
     return res.data;
   },
 
-  reviewCredential: async (userId: string, decision: 'verified' | 'rejected', reviewNote: string) => {
+  reviewCredential: async (userId: string, decision: 'verified' | 'needs_changes' | 'rejected', reviewNote: string) => {
     const res = await api.put(`/admin/users/${userId}/credential-review`, { decision, reviewNote });
     return res.data as { success: boolean; message: string; user: User };
   },

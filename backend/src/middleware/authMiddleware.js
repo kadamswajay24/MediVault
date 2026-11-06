@@ -4,7 +4,7 @@ import User from '../models/User.js';
 import ProxyDelegation from '../models/ProxyDelegation.js';
 import ClinicalAccessRequest from '../models/ClinicalAccessRequest.js';
 
-export const protect = async (req, res, next) => {
+export const protectIdentity = async (req, res, next) => {
   let token;
 
   if (
@@ -26,32 +26,10 @@ export const protect = async (req, res, next) => {
         });
       }
 
-      if (user.approvalStatus === 'pending') {
-        return res.status(403).json({
-          success: false,
-          message: 'Your staff account is awaiting administrator approval.',
-        });
-      }
-
       if (!user.isActive) {
         return res.status(403).json({
           success: false,
           message: 'Account has been deactivated. Please contact MediVault administrator.',
-        });
-      }
-
-      if (
-        ['medical_staff', 'insurance_agent'].includes(user.role) &&
-        (user.credentialVerification?.status !== 'verified' ||
-          (user.credentialVerification.expiresAt && user.credentialVerification.expiresAt <= new Date()))
-      ) {
-        return res.status(403).json({
-          success: false,
-          message: user.credentialVerification?.expiresAt && user.credentialVerification.expiresAt <= new Date()
-            ? 'Your credential document has expired. Contact the administrator to update your credential.'
-            : user.credentialVerification?.status === 'rejected'
-            ? 'Your credential document was not approved. Contact the administrator for next steps.'
-            : 'Your credential document is awaiting administrator review.',
         });
       }
 
@@ -72,6 +50,31 @@ export const protect = async (req, res, next) => {
       message: 'Access denied. No authentication token provided.',
     });
   }
+};
+
+export const protect = async (req, res, next) => {
+  return protectIdentity(req, res, () => {
+    const user = req.user;
+    if (user.approvalStatus === 'pending') {
+      return res.status(403).json({ success: false, message: 'Your staff account is awaiting administrator approval.' });
+    }
+
+    if (
+        ['medical_staff', 'insurance_agent'].includes(user.role) &&
+        (user.credentialVerification?.status !== 'verified' ||
+          (user.credentialVerification.expiresAt && user.credentialVerification.expiresAt <= new Date()))
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: user.credentialVerification?.expiresAt && user.credentialVerification.expiresAt <= new Date()
+            ? 'Your credential document has expired. Contact the administrator to update your credential.'
+            : user.credentialVerification?.status === 'rejected'
+            ? 'Your credential document was not approved. Contact the administrator for next steps.'
+            : 'Your credential document is awaiting administrator review.',
+        });
+      }
+    return next();
+  });
 };
 
 /**

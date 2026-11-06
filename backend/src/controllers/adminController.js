@@ -110,10 +110,10 @@ export const updateUserRole = async (req, res, next) => {
         hospitalAffiliation: medicalStaffDetails.hospitalAffiliation || '',
       };
       if (credentialChanged) {
-        user.credentialVerification.status = 'pending';
+        user.credentialVerification.status = 'needs_changes';
         user.credentialVerification.reviewedAt = null;
         user.credentialVerification.reviewedBy = null;
-        user.credentialVerification.reviewNote = 'License number changed; review the existing credential document again.';
+        user.credentialVerification.reviewNote = 'License number changed. Submit the updated credential document for review.';
       }
     }
 
@@ -136,10 +136,10 @@ export const updateUserRole = async (req, res, next) => {
         licenseNumber: insuranceDetails.licenseNumber || '',
       };
       if (credentialChanged) {
-        user.credentialVerification.status = 'pending';
+        user.credentialVerification.status = 'needs_changes';
         user.credentialVerification.reviewedAt = null;
         user.credentialVerification.reviewedBy = null;
-        user.credentialVerification.reviewNote = 'License or company details changed; review the existing credential document again.';
+        user.credentialVerification.reviewNote = 'License or company details changed. Submit the updated credential document for review.';
       }
     }
 
@@ -310,8 +310,8 @@ export const reviewUserCredential = async (req, res, next) => {
   try {
     if (!isValidUserId(req.params.id)) return res.status(400).json({ success: false, message: 'A valid user ID is required.' });
     const { decision, reviewNote = '' } = req.body;
-    if (!['verified', 'rejected'].includes(decision)) return res.status(400).json({ success: false, message: 'Decision must be verified or rejected.' });
-    if (decision === 'rejected' && !String(reviewNote).trim()) return res.status(400).json({ success: false, message: 'Add a reason when rejecting credential documents.' });
+    if (!['verified', 'needs_changes', 'rejected'].includes(decision)) return res.status(400).json({ success: false, message: 'Decision must be verified, needs_changes, or rejected.' });
+    if (decision !== 'verified' && !String(reviewNote).trim()) return res.status(400).json({ success: false, message: 'Add a note when sending back or rejecting credential documents.' });
     const user = await User.findById(req.params.id);
     if (!user || !['medical_staff', 'insurance_agent'].includes(user.role)) return res.status(404).json({ success: false, message: 'Staff account not found.' });
     if (!user.credentialVerification?.documentStorageFileId) return res.status(404).json({ success: false, message: 'No credential document is available for review.' });

@@ -86,7 +86,7 @@ const userSchema = new mongoose.Schema(
       licenseNumber: { type: String, trim: true, default: '' },
     },
     credentialVerification: {
-      status: { type: String, enum: ['pending', 'verified', 'rejected'], default: 'verified' },
+      status: { type: String, enum: ['pending', 'needs_changes', 'verified', 'rejected'], default: 'verified' },
       expiresAt: { type: Date, default: null },
       documentStorageFileId: { type: mongoose.Schema.Types.ObjectId, default: null },
       documentFileName: { type: String, default: '' },

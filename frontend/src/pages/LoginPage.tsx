@@ -62,6 +62,13 @@ export const LoginPage: React.FC<{ portal: AuthPortal }> = ({ portal }) => {
 
   useEffect(() => {
     if (authLoading || !isAuthenticated || !user) return;
+    if (['medical_staff', 'insurance_agent'].includes(user.role) && (
+      user.approvalStatus === 'pending' || user.credentialVerification?.status !== 'verified' ||
+      (user.credentialVerification?.expiresAt && new Date(user.credentialVerification.expiresAt) <= new Date())
+    )) {
+      navigate('/staff-application', { replace: true });
+      return;
+    }
     if (user.role === roleForPortal(portal)) {
       navigate(details.home, { replace: true });
       return;
