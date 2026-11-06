@@ -1,3 +1,4 @@
+import { useAiProvider } from '../hooks/useAiProvider';
 import { indiaDateTimeInput, indiaInputToISO } from '../utils/indiaFormat';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
@@ -99,6 +100,7 @@ export const MedicalStaffPage: React.FC = () => {
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null);
   const [summaryRecord, setSummaryRecord] = useState<MedicalRecord | null>(null);
+  const ai = useAiProvider();
   const [doctorSummary, setDoctorSummary] = useState<MedicalRecordSummary | null>(null);
   const [doctorSummaryModel, setDoctorSummaryModel] = useState<string | null>(null);
   const [doctorSummaryLoading, setDoctorSummaryLoading] = useState(false);
@@ -323,6 +325,7 @@ export const MedicalStaffPage: React.FC = () => {
   };
 
   const handleGenerateDoctorSummary = async () => {
+    if (!ai.ready) return;
     if (!selectedPatient) return;
     const patientMediVaultId = selectedPatient.mediVaultId;
     const requestId = ++doctorSummaryRequestId.current;
@@ -340,7 +343,7 @@ export const MedicalStaffPage: React.FC = () => {
     } catch (err: any) {
       if (requestId !== doctorSummaryRequestId.current) return;
       setDoctorSummaryError(
-        err.response?.data?.message || 'Unable to generate the local AI overview.'
+        err.response?.data?.message || 'Unable to generate the AI overview.'
       );
     } finally {
       if (requestId === doctorSummaryRequestId.current) {
@@ -399,6 +402,7 @@ export const MedicalStaffPage: React.FC = () => {
   };
 
   const handleCatalogSearch = async () => {
+    if (!ai.ready) return;
     const query = catalogSearchQuery.trim();
     if (query.length < 2) {
       setCatalogSearchError('Enter at least 2 characters to search the catalog.');
@@ -437,7 +441,7 @@ export const MedicalStaffPage: React.FC = () => {
         .filter((medicine): medicine is CatalogSearchMedicine => Boolean(medicine));
       const aiErrorMessage =
         (error as { response?: { data?: { message?: string } } }).response?.data?.message ||
-        'The local AI search service could not be reached.';
+        'The AI search service could not be reached.';
       setCatalogSearchResults(fallbackResults);
       if (fallbackResults.length) {
         setCatalogSearchMessage(
@@ -445,7 +449,7 @@ export const MedicalStaffPage: React.FC = () => {
         );
       } else {
         setCatalogSearchError(
-          `AI catalog search failed: ${aiErrorMessage} No keyword matches were found; check the local Ollama service or try catalog terms.`
+          `AI catalog search failed: ${aiErrorMessage} No keyword matches were found; try again later or use catalog terms.`
         );
       }
     } finally {
@@ -866,10 +870,11 @@ export const MedicalStaffPage: React.FC = () => {
                   </Link>
                 )}
                 {patientOverview && (
+                  <div className="flex max-w-sm flex-col gap-2">
                   <button
                     type="button"
                     onClick={() => void handleGenerateDoctorSummary()}
-                    disabled={doctorSummaryLoading}
+                    disabled={doctorSummaryLoading || !ai.ready}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 px-3.5 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-50 dark:border-violet-700 dark:text-violet-200 dark:hover:bg-violet-950/30"
                   >
                     {doctorSummaryLoading
@@ -877,6 +882,8 @@ export const MedicalStaffPage: React.FC = () => {
                       : <Sparkles className="h-3.5 w-3.5" />}
                     {doctorSummaryLoading ? 'Summarizing...' : 'AI clinical overview'}
                   </button>
+                    <p className="text-xs text-slate-500">{ai.disclosure('Authorized clinical information for the selected patient')}</p>
+                  </div>
                 )}
               </div>
 
@@ -903,7 +910,7 @@ export const MedicalStaffPage: React.FC = () => {
                         AI clinical overview
                       </h4>
                       <span className="ml-auto text-[10px] text-slate-500">
-                        {doctorSummaryModel || 'Local model'} · not saved
+                        {doctorSummaryModel || 'AI model'} · not saved
                       </span>
                     </div>
                     <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">
@@ -1480,7 +1487,7 @@ export const MedicalStaffPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => void handleCatalogSearch()}
-                        disabled={catalogSearchLoading}
+                        disabled={catalogSearchLoading || !ai.ready}
                         className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                       >
                         {catalogSearchLoading
@@ -1489,6 +1496,7 @@ export const MedicalStaffPage: React.FC = () => {
                         {catalogSearchLoading ? 'Searching...' : 'AI catalog search'}
                       </button>
                     </div>
+                    <p className="text-xs text-slate-500">{ai.disclosure('Your search phrase and catalog entries')} Do not include patient details in searches.</p>
                     {catalogSearchError && (
                       <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">
                         {catalogSearchError}

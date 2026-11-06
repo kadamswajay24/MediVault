@@ -65,7 +65,7 @@ MediVault is a secure, personal health management platform designed for patients
 
 8. **Insurance Policy Marketplace**:
    - Insurance agents can create draft listings for their assigned company and edit only listings they created; administrators can manage all custom illustrative plans and publish, unpublish, or archive them.
-   - The insurer plan assistant uses the configured local Ollama model to help draft listings. Chat suggestions are not saved until the agent applies them in the plan form and creates a draft; the assistant does not invent plan terms or publish listings.
+   - The insurer plan assistant uses the configured AI provider to help draft listings. Chat suggestions are not saved until the agent applies them in the plan form and creates a draft; the assistant does not invent plan terms or publish listings.
    - Patients can search hospitals affiliated with active, approved MediVault clinicians. These are intended MediVault cashless-network facilities; actual cashless use requires an eligible active policy and authorization. Current marketplace enrollments remain demonstrations and do not provide real coverage.
    - New plans are saved as drafts; patients see only published plans and can keep demo enrollments together in the Policies area.
    - Monthly premium dates and simulated payment history are recorded for demo enrollments. Listings and payments do not bind insurance coverage or charge money.
@@ -75,7 +75,7 @@ MediVault is a secure, personal health management platform designed for patients
    - Specialty-to-medicine search mappings are maintained in `frontend/data/medivault_specialty_medicine_catalog.csv` and loaded into the medical-staff prescription form.
    - Shared general entries appear alongside specialty-specific search references for the dropdown professions listed in the CSV. These are not recommendations or a claim that a medicine is suitable for every patient.
    - Active entries require prescriber validation; risk labels and clinical review flags identify additional review requirements. Clinicians may also search all active catalog entries by name or search terms, or enter a medicine manually; all results must be clinically validated.
-   - AI matching uses only the configured local Ollama service and returns IDs from the supplied catalog entries. Patient information is not sent; when local AI is unavailable, the interface falls back to keyword matching. Search does not assess medicine suitability or generate recommendations.
+   - AI matching uses the configured provider and returns IDs from the supplied catalog entries. Only the search phrase and catalog entries are supplied; do not enter patient details in searches. When AI is unavailable, the interface falls back to keyword matching. Search does not assess medicine suitability or generate recommendations.
 
 10. **System & Clinical Audit Logs**:
    - Automatic background logging for:
@@ -283,7 +283,7 @@ go to the frontend. The API remains a normal local Express server outside Vercel
 - Optional local AI summaries, medicine search, and insurer plan drafting use Ollama. Install Ollama, run
   `ollama pull qwen2.5:3b`, and start Ollama on `http://127.0.0.1:11434`. Set
   `OLLAMA_BASE_URL` and `OLLAMA_MODEL` in `backend/.env` if needed. The backend only
-  accepts loopback Ollama URLs; AI requests stay on that local instance. English
+  accepts loopback Ollama URLs; AI requests stay on that local instance when `AI_PROVIDER=ollama`. English
   summaries for patients and authorized doctors and insurer plan suggestions are
   generated on demand and not stored. English OCR runs locally for images and
   scanned PDFs (up to three pages); searchable PDFs use their embedded text.
@@ -343,8 +343,7 @@ loopback URL (for example, `mongodb://127.0.0.1:27028`) and run `npm run test:st
 The test creates and removes its own randomly named database and never uses `MONGODB_URI`.
 
 After deploying, upload a synthetic file, redeploy, and verify download and deletion with
-the same account. Verify that another patient cannot download it. Existing local Ollama
-AI features still require a local model service and are not supplied by Vercel.
+the same account. Verify that another patient cannot download it. For deployed AI, configure Gemini as described below. Ollama mode requires a model service on the backend host.
 
 Never commit `.env` files or expose production secrets in `VITE_*` variables. MediVault
 handles sensitive health information; this deployment setup does not by itself make the
@@ -465,7 +464,7 @@ The sign-in forms accept only the account roles assigned to their portal. Backen
 | `GET` | `/api/insurance/policy-plans` | List marketplace plans created by the authenticated agent | Insurance Agent |
 | `POST` | `/api/insurance/policy-plans` | Create a draft listing for the agent's assigned insurance company | Insurance Agent |
 | `PUT` | `/api/insurance/policy-plans/:planId` | Edit the agent's own listing without changing provider or publication status | Insurance Agent |
-| `POST` | `/api/insurance/plan-assistant` | Chat with the local AI to prepare marketplace plan suggestions | Insurance Agent |
+| `POST` | `/api/insurance/plan-assistant` | Chat with the configured AI to prepare marketplace plan suggestions | Insurance Agent |
 | `GET` | `/api/policies/plans` | Browse published custom marketplace listings | Patient |
 | `GET` | `/api/health` | Service health status check | Public |
 
@@ -519,3 +518,43 @@ The root `.gitignore` excludes dependencies, local environment files, build outp
 - Currency uses INR and Indian digit grouping (for example, `1,23,456`). Claim notifications and validation messages also use INR.
 - Emergency contact numbers use fixed `+91` followed by 10 digits.
 - Native date/time pickers may render their controls according to browser settings; API date values remain ISO-formatted. Existing audit message text is preserved.
+
+
+## Gemini on Vercel (demo)
+
+Save `GEMINI_API_KEY` as a backend secret in Vercel and redeploy. With no explicit
+`AI_PROVIDER`, a nonempty Gemini key selects Gemini; otherwise the app uses local
+Ollama. `AI_PROVIDER=gemini` or `AI_PROVIDER=ollama` overrides this selection.
+`GEMINI_MODEL` defaults to `gemini-2.5-flash-lite`. Confirm that this model has free
+quota in your Google AI Studio project. The app does not enable billing, change your
+Google account tier, or fall back to another provider/model. Actual availability,
+pricing and quota are controlled by Google, not these environment variables.
+
+All four API operations (patient document summary, clinician overview, medicine
+catalog matching, and insurance draft assistant) use the same provider adapter.
+PDF/OCR extraction remains on the backend. Gemini receives extracted record or
+clinical-context text for summaries, search phrases and catalog candidates for
+matching, and conversation text for insurance drafting. The interface shows the
+active provider's disclosure before enabling AI actions. Use synthetic data only
+with Gemini's free tier; content may be used to improve Google products. Summaries
+are not saved by MediVault; this does not describe the provider's retention policy.
+Never put API keys in frontend variables, source code, logs, or chat messages.
+
+MongoDB-backed limits apply across instances: 5 attempts/user/minute, 20/user/day,
+10 overall/minute, and 100 overall/day. Configure these using the `AI_*` variables
+in `backend/.env.example` to match your project's actual quota. Daily windows reset
+at UTC midnight (05:30 IST), independently of Google's quota reset. Failed requests
+also consume budget. One active AI operation per user is allowed, with a 90-second
+lease; requests time out after at most 45 seconds (20 seconds for catalog search).
+Limits and leases fail closed if MongoDB is unavailable. No automatic retries are
+made. Provider quota exhaustion returns 429; normal record access remains available.
+
+`GET /api/ai/config` requires sign-in and returns only provider, model and whether
+processing is external. It never returns a key. AI errors do not log provider bodies,
+prompts, responses, or credentials. Test with `npm run test:unit` in `backend`;
+Gemini requests are mocked, so these tests never use a real cloud API key.
+
+After deployment, sign in, confirm the Gemini disclosure, and summarize a synthetic
+report. Check the insurer assistant and medicine search too. A 503 configuration
+message means the administrator should check the key, exact model ID and project
+access; a 429 means a provider quota or application usage limit was reached.

@@ -1,3 +1,4 @@
+import { withAiUsage } from '../services/aiUsageService.js';
 import { randomUUID } from 'node:crypto';
 import { saveFile, readFile, deleteFile, sendFile } from '../services/fileStorageService.js';
 import MedicalRecord, { RECORD_CATEGORIES } from '../models/MedicalRecord.js';
@@ -248,7 +249,7 @@ export const getRecordById = async (req, res, next) => {
   }
 };
 
-// @desc    Generate an ephemeral summary using local Ollama
+// @desc    Generate an ephemeral summary using the configured AI provider
 // @route   GET /api/records/:id/summary
 // @access  Private
 export const summarizeRecord = async (req, res, next) => {
@@ -269,18 +270,18 @@ export const summarizeRecord = async (req, res, next) => {
       });
     }
 
-    const { summary, model } = await summarizeDocumentLocally(
+    const { summary, model } = await withAiUsage(req.user._id, async () => summarizeDocumentLocally(
       await readFile(record),
       record.fileType,
       record.metadata?.ocrExtractedText || '',
       req.user.role === 'medical_staff' ? 'clinician' : 'patient'
-    );
+    ));
 
     await createAuditLog({
       userId: record.user,
       performedBy: req.user._id,
       action: 'RECORD_AI_SUMMARIZED',
-      details: 'Generated a local AI summary for a medical record.',
+      details: 'Generated an AI summary for a medical record.',
       resourceId: record._id,
       resourceType: 'MedicalRecord',
       req,

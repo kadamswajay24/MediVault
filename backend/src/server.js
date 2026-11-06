@@ -1,3 +1,4 @@
+import aiRoutes from './routes/aiRoutes.js';
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -93,6 +94,7 @@ app.get('/api/health', (req, res) => {
 
 // Mount Core & Role-Based Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/ai', aiRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/records', recordRoutes);
 app.use('/api/dashboard', dashboardRoutes);

@@ -1,3 +1,5 @@
+// Keep local-provider tests isolated from any configured cloud credentials.
+process.env.AI_PROVIDER = 'ollama';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {

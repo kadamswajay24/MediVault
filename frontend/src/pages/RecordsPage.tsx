@@ -366,7 +366,7 @@ const RecordsWorkspace: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setSummaryRecord(record)}
-                      aria-label={`Summarize ${record.title} with local AI`}
+                      aria-label={`Summarize ${record.title} with AI`}
                       className="records-action-button disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <Sparkles className="h-4 w-4" aria-hidden="true" />

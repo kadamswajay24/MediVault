@@ -1,3 +1,4 @@
+import { withAiUsage } from '../services/aiUsageService.js';
 import MedicalNote, { NOTE_TYPES } from '../models/MedicalNote.js';
 import User from '../models/User.js';
 import HealthProfile from '../models/HealthProfile.js';
@@ -22,10 +23,10 @@ const requireActiveClinicalAccess = async (staffId, patientId) => {
 
 export const searchMedicineCatalog = async (req, res, next) => {
   try {
-    const { matches, model } = await searchMedicineCatalogLocally(
+    const { matches, model } = await withAiUsage(req.user._id, () => searchMedicineCatalogLocally(
       req.body?.query,
       req.body?.candidates
-    );
+    ));
     res.set('Cache-Control', 'no-store');
     return res.status(200).json({ success: true, matches, model });
   } catch (error) {
@@ -488,17 +489,17 @@ export const getPatientAiSummary = async (req, res, next) => {
       );
     }
 
-    const { summary, model } = await generateLocalSummary(
+    const { summary, model } = await withAiUsage(req.user._id, () => generateLocalSummary(
       sourceText,
       'en',
       'clinician'
-    );
+    ));
 
     await createAuditLog({
       userId: patient._id,
       performedBy: req.user._id,
       action: 'RECORD_AI_SUMMARIZED',
-      details: 'Generated a local AI clinical overview from patient-authorized records.',
+      details: 'Generated an AI clinical overview from patient-authorized records.',
       resourceId: patient._id,
       resourceType: 'PatientClinicalOverview',
       req,

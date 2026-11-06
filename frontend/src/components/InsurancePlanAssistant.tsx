@@ -1,3 +1,4 @@
+import { useAiProvider } from '../hooks/useAiProvider';
 import React, { useState } from 'react';
 import { Bot, Loader2, Send, Sparkles } from 'lucide-react';
 import { insuranceAPI } from '../services/api';
@@ -20,11 +21,12 @@ const initialMessages: InsurancePlanAssistantMessage[] = [
 
 const getErrorMessage = (error: unknown) =>
   (error as { response?: { data?: { message?: string } } }).response?.data?.message ||
-  'Unable to reach the local plan assistant. Please try again.';
+  'Unable to reach the plan assistant. Please try again.';
 
 export const InsurancePlanAssistant: React.FC<InsurancePlanAssistantProps> = ({
   onUseDraft,
 }) => {
+  const ai = useAiProvider();
   const [messages, setMessages] = useState(initialMessages);
   const [draft, setDraft] = useState<InsurancePlanAssistantDraft | null>(null);
   const [input, setInput] = useState('');
@@ -33,7 +35,7 @@ export const InsurancePlanAssistant: React.FC<InsurancePlanAssistantProps> = ({
 
   const sendMessage = async () => {
     const content = input.trim();
-    if (!content || loading) return;
+    if (!content || loading || !ai.ready) return;
 
     const conversation = [...messages, { role: 'user' as const, content }].slice(-12);
     setMessages(conversation);
@@ -143,7 +145,7 @@ export const InsurancePlanAssistant: React.FC<InsurancePlanAssistantProps> = ({
         <button
           type="button"
           onClick={() => void sendMessage()}
-          disabled={loading || !input.trim()}
+          disabled={loading || !input.trim() || !ai.ready}
           aria-label="Send message"
           className="inline-flex items-center justify-center rounded-lg bg-emerald-700 px-3 text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -152,7 +154,7 @@ export const InsurancePlanAssistant: React.FC<InsurancePlanAssistantProps> = ({
       </div>
 
       <p className="mt-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-        Suggestions use your local AI model. Verify all details; this is a demonstration draft,
+        {ai.disclosure('Your plan drafting conversation')} Verify all details; this is a demonstration draft,
         not a policy offer or compliance advice.
       </p>
     </section>

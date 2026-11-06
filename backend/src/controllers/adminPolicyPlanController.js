@@ -1,3 +1,4 @@
+import { withAiUsage } from '../services/aiUsageService.js';
 import { randomBytes } from 'crypto';
 import PolicyPlan from '../models/PolicyPlan.js';
 import { createAuditLog } from '../services/auditService.js';
@@ -230,7 +231,7 @@ export const updateAdminPolicyPlan = async (req, res, next) => {
 
 export const chatWithInsurancePlanAssistant = async (req, res, next) => {
   try {
-    const result = await generateInsurancePlanAssistantResponse(req.body?.messages);
+    const result = await withAiUsage(req.user._id, () => generateInsurancePlanAssistantResponse(req.body?.messages));
     res.set('Cache-Control', 'no-store');
     return res.status(200).json({ success: true, ...result });
   } catch (error) {

@@ -1,3 +1,4 @@
+import { useAiProvider } from '../hooks/useAiProvider';
 import React, { useState } from 'react';
 import axios from 'axios';
 import { AlertCircle, Loader2, Sparkles, X } from 'lucide-react';
@@ -15,6 +16,7 @@ export const RecordSummaryModal: React.FC<RecordSummaryModalProps> = ({
   audience = 'patient',
   onClose,
 }) => {
+  const ai = useAiProvider();
   const [summary, setSummary] = useState<MedicalRecordSummary | null>(null);
   const [model, setModel] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -30,6 +32,7 @@ export const RecordSummaryModal: React.FC<RecordSummaryModalProps> = ({
   };
 
   const generateSummary = async () => {
+    if (!ai.ready) return;
     setLoading(true);
     setError(null);
     setSummary(null);
@@ -43,7 +46,7 @@ export const RecordSummaryModal: React.FC<RecordSummaryModalProps> = ({
       const message = axios.isAxiosError<{ message?: string }>(requestError)
         ? requestError.response?.data?.message
         : undefined;
-      setError(message || 'Unable to generate a local AI summary.');
+      setError(message || 'Unable to generate a AI summary.');
     } finally {
       setLoading(false);
     }
@@ -74,7 +77,7 @@ export const RecordSummaryModal: React.FC<RecordSummaryModalProps> = ({
             <Sparkles className="mt-1 h-5 w-5 shrink-0 text-teal-600 dark:text-teal-400" />
             <div>
               <h2 id="record-summary-title" className="text-lg font-bold">
-                Local AI document summary
+                AI document summary
               </h2>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                 {record.title}
@@ -93,10 +96,8 @@ export const RecordSummaryModal: React.FC<RecordSummaryModalProps> = ({
 
         <div className="space-y-4 overflow-y-auto p-5">
           <div className="rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900 dark:border-teal-500/20 dark:bg-teal-500/10 dark:text-teal-100">
-            Text is extracted locally from this PDF or image and processed by the
-            configured local Ollama instance. It is not sent to an external AI
-            service, and the English summary is not saved. Please verify important
-            details with your healthcare professional.
+            {ai.disclosure('Extracted document text')} Summaries are not saved by MediVault.
+            Verify important details against the original document with your healthcare professional.
           </div>
           {record.metadata?.identityCheck?.status !== 'matched' && (
             <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
@@ -110,7 +111,7 @@ export const RecordSummaryModal: React.FC<RecordSummaryModalProps> = ({
             <button
               type="button"
               onClick={generateSummary}
-              disabled={loading}
+              disabled={loading || !ai.ready}
               className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-teal-500 dark:text-slate-950 dark:hover:bg-teal-400"
             >
               {loading ? (
@@ -118,7 +119,7 @@ export const RecordSummaryModal: React.FC<RecordSummaryModalProps> = ({
               ) : (
                 <Sparkles className="h-4 w-4" />
               )}
-              {loading ? 'Generating locally...' : 'Generate summary'}
+              {loading ? 'Generating...' : 'Generate summary'}
             </button>
           </div>
 
@@ -159,7 +160,7 @@ export const RecordSummaryModal: React.FC<RecordSummaryModalProps> = ({
               )}
               {model && (
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Generated locally with {model}.
+                  Generated with {model}.
                 </p>
               )}
             </div>

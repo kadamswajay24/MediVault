@@ -7,12 +7,14 @@ import jwt from 'jsonwebtoken';
 import { createCanvas } from '@napi-rs/canvas';
 import recordRoutes from './src/routes/recordRoutes.js';
 import claimRoutes from './src/routes/claimRoutes.js';
+import aiRoutes from './src/routes/aiRoutes.js';
 import { errorHandler } from './src/middleware/errorHandler.js';
 import { createAuthRateLimit } from './src/middleware/authRateLimit.js';
 import AuthRateLimit from './src/models/AuthRateLimit.js';
 import User from './src/models/User.js';
 import MedicalRecord from './src/models/MedicalRecord.js';
 import InsuranceClaim from './src/models/InsuranceClaim.js';
+import { withAiUsage } from './src/services/aiUsageService.js';
 
 // Explicit, local-only test server; never reads the application's MONGODB_URI.
 const uri = process.env.TEST_STORAGE_MONGO_URI;
@@ -35,11 +37,15 @@ test('GridFS upload, reconnect, authorization, deletion and concurrent shared ra
     app.use(express.json());
     app.use('/api/records', recordRoutes);
     app.use('/api/claims', claimRoutes);
+    app.use('/api/ai', aiRoutes);
     app.use(errorHandler);
     server = app.listen(0, '127.0.0.1');
     await new Promise((resolve) => server.once('listening', resolve));
     const base = `http://127.0.0.1:${server.address().port}`;
     const request = (route, user = owner, options = {}) => fetch(base + route, { ...options, headers: { Authorization: `Bearer ${token(user)}`, ...options.headers } });
+    assert.equal((await fetch(base + '/api/ai/config')).status, 401);
+    const aiConfig = await (await request('/api/ai/config')).json();
+    assert.deepEqual(Object.keys(aiConfig).sort(), ['externalProcessing', 'model', 'provider']);
     const canvas = createCanvas(400, 80);
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = 'white'; ctx.fillRect(0, 0, 400, 80);
@@ -65,6 +71,8 @@ test('GridFS upload, reconnect, authorization, deletion and concurrent shared ra
     assert.match(downloaded.headers.get('cache-control'), /no-store/);
     assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()), bytes);
     assert.equal((await request(`/api/records/${id}/download`, outsider)).status, 403);
+    assert.equal((await request(`/api/records/${id}/summary`, outsider)).status, 403);
+    assert.equal(await AuthRateLimit.countDocuments({ _id: /^ai/ }), 0);
     assert.equal((await request(`/api/records/${id}`, outsider, { method: 'DELETE' })).status, 403);
     assert.equal((await request('/api/records', owner, { method: 'POST', body: form(Buffer.from('spoofed')) })).status, 400);
     assert.equal((await request('/api/records', owner, { method: 'POST', body: form(Buffer.alloc(4 * 1024 * 1024 + 1)) })).status, 413);
@@ -104,6 +112,21 @@ test('GridFS upload, reconnect, authorization, deletion and concurrent shared ra
     assert.ok(counters.every((counter) => !counter._id.includes('example.com')));
     const indexes = await AuthRateLimit.collection.indexes();
     assert.ok(indexes.some((index) => index.expireAfterSeconds === 0));
+
+    await withAiUsage(owner._id, async () => {
+      await assert.rejects(withAiUsage(owner._id, () => assert.fail('Concurrent request admitted')), (error) => error.statusCode === 429);
+    });
+    for (let i = 0; i < 4; i++) await withAiUsage(owner._id, async () => 'ok');
+    await assert.rejects(withAiUsage(owner._id, () => assert.fail('User cap bypassed')), (error) => error.statusCode === 429);
+    assert.equal(await AuthRateLimit.countDocuments({ _id: `ai-lock:${owner._id}` }), 0);
+    await assert.rejects(withAiUsage(outsider._id, async () => { throw new Error('provider failed'); }), /provider failed/);
+    assert.equal(await withAiUsage(outsider._id, async () => 'lease released'), 'lease released');
+
+    // Test database is dedicated to this run. Reset only its AI counters.
+    await AuthRateLimit.deleteMany({ _id: /^ai:/ });
+    const globalResults = await Promise.allSettled(Array.from({ length: 15 }, (_, i) => withAiUsage(`global-user-${i}`, async () => 'ok')));
+    assert.equal(globalResults.filter((result) => result.status === 'fulfilled').length, 10);
+    assert.ok(globalResults.filter((result) => result.status === 'rejected').every((result) => result.reason.statusCode === 429));
   } finally {
     if (server) await new Promise((resolve) => server.close(resolve));
     if (mongoose.connection.readyState === 1 && mongoose.connection.name === dbName) await mongoose.connection.dropDatabase();

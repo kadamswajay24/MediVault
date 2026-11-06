@@ -10,7 +10,7 @@
     "test": "node test_mvp.js",
     "test:rbac": "node test_rbac.js",
     "test:ai": "node --test test_ai_summary.js",
-    "test:unit": "node --test test_security.js test_ai_summary.js test_insurance_plan_assistant.js test_medicine_catalog_search.js test_storage_security.js",
+    "test:unit": "node --test test_security.js test_ai_summary.js test_insurance_plan_assistant.js test_medicine_catalog_search.js test_storage_security.js test_ai_provider.js",
     "test:all": "npm run test:unit && node test_mvp.js && node test_rbac.js",
     "admin:promote": "node src/scripts/promoteAdmin.js",
     "policies:clear-legacy-demo": "node src/scripts/clearLegacyDemoPolicyEnrollments.js",

@@ -6,6 +6,7 @@ export const notFound = (req, res, next) => {
 
 export const errorHandler = (err, req, res, next) => {
   if (res.headersSent) return next(err);
+  if (err.retryAfter) res.set('Retry-After', String(err.retryAfter));
   const statusCode = err.code === 'LIMIT_FILE_SIZE' ? 413
     : err.name === 'MulterError' ? 400
     : err.statusCode || (res.statusCode === 200 ? 500 : res.statusCode);
