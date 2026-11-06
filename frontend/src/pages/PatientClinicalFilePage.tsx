@@ -9,7 +9,7 @@ import type { MedicalRecord, MedicalStaffClinicalOverview } from '../types';
 
 const formatDate = (value?: string) => {
   if (!value || Number.isNaN(Date.parse(value))) return 'Not recorded';
-  return new Date(value).toLocaleDateString(undefined, {
+  return new Date(value).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata',
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -139,7 +139,7 @@ export const PatientClinicalFilePage: React.FC = () => {
             Patient-approved clinical file
           </div>
           <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{patient.name}</h1>
-          <p className="mt-1 font-mono text-xs text-slate-500">{patient.mediVaultId}</p>
+          <p className="mt-1 font-sans text-xs text-slate-500">{patient.mediVaultId}</p>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
             {patient.email || 'No email recorded'}
             {patient.phone ? ` · ${patient.phone}` : ''}

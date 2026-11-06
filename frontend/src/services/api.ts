@@ -16,8 +16,12 @@ import type {
   InsuranceDetails,
   InsurancePolicyPlan,
   ManagedInsurancePolicyPlan,
+  InsurancePlanAssistantMessage,
+  InsurancePlanAssistantDraft,
   PolicyEnrollment,
+  MedicalRecordSummary,
 } from '../types';
+import type { CatalogSearchMedicine } from '../constants/specialtyMedicineCatalog';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
@@ -117,13 +121,25 @@ export const recordAPI = {
     category?: string;
     search?: string;
     sort?: string;
-  }): Promise<{ success: boolean; count: number; records: MedicalRecord[] }> => {
-    const res = await api.get('/records', { params });
+  }, signal?: AbortSignal): Promise<{ success: boolean; count: number; records: MedicalRecord[] }> => {
+    const res = await api.get('/records', { params, signal });
     return res.data;
   },
 
   getRecordById: async (id: string): Promise<{ success: boolean; record: MedicalRecord }> => {
     const res = await api.get(`/records/${id}`);
+    return res.data;
+  },
+
+  getRecordSummary: async (
+    id: string
+  ): Promise<{
+    success: boolean;
+    summary: MedicalRecordSummary;
+    model: string;
+    stored: false;
+  }> => {
+    const res = await api.get(`/records/${id}/summary`);
     return res.data;
   },
 
@@ -133,9 +149,13 @@ export const recordAPI = {
   },
 
   uploadRecord: async (
-    formData: FormData
+    formData: FormData,
+    onProgress?: (percent: number) => void
   ): Promise<{ success: boolean; message: string; record: MedicalRecord }> => {
     const res = await api.post('/records', formData, {
+      onUploadProgress: (event) => {
+        if (event.total) onProgress?.(Math.round(event.loaded * 100 / event.total));
+      },
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -240,6 +260,7 @@ export interface AppointmentEntry {
 }
 
 export const appointmentsAPI = {
+  cancel: async (id: string): Promise<{ success: boolean; message: string }> => (await api.put(`/appointments/${id}/cancel`)).data,
   getHospitals: async (): Promise<{
     success: boolean;
     hospitals: {
@@ -339,6 +360,7 @@ export const clinicalAccessAPI = {
   createRequest: async (data: {
     patientMediVaultId: string;
     reason: string;
+    reasonDetails?: string;
     requestedUntil: string;
   }): Promise<{ success: boolean; message: string; request: ClinicalAccessRequest }> => {
     const res = await api.post('/clinical-access', data);
@@ -458,6 +480,17 @@ export const policyAPI = {
 };
 
 export const medicalStaffAPI = {
+  searchMedicineCatalog: async (
+    query: string,
+    candidates: CatalogSearchMedicine[]
+  ): Promise<{ success: boolean; matches: string[]; model: string }> => {
+    const res = await api.post('/medical-staff/medicine-catalog/search', {
+      query,
+      candidates: candidates.map(({ id, name, searchText }) => ({ id, name, searchText })),
+    });
+    return res.data;
+  },
+
   searchPatients: async (search: string): Promise<{ success: boolean; patients: User[] }> => {
     const res = await api.get('/medical-staff/patients/search', { params: { search } });
     return res.data;
@@ -519,6 +552,20 @@ export const medicalStaffAPI = {
     patientId: string
   ): Promise<MedicalStaffClinicalOverview> => {
     const res = await api.get(`/medical-staff/patients/${patientId}/overview`);
+    return res.data;
+  },
+
+  getPatientAiSummary: async (
+    patientId: string
+  ): Promise<{
+    success: boolean;
+    summary: MedicalRecordSummary;
+    model: string;
+    stored: false;
+  }> => {
+    const res = await api.get(
+      `/medical-staff/patients/${encodeURIComponent(patientId)}/ai-summary`
+    );
     return res.data;
   },
 
@@ -621,6 +668,49 @@ export const adminAPI = {
     limit?: number;
   }): Promise<{ success: boolean; count: number; logs: AuditLog[] }> => {
     const res = await api.get('/admin/audit-logs', { params });
+    return res.data;
+  },
+};
+
+export const insuranceAPI = {
+  chatWithPlanAssistant: async (
+    messages: InsurancePlanAssistantMessage[]
+  ): Promise<{
+    success: boolean;
+    reply: string;
+    plan: InsurancePlanAssistantDraft;
+    model: string;
+  }> => {
+    const res = await api.post('/insurance/plan-assistant', { messages });
+    return res.data;
+  },
+
+  getPolicyPlans: async (): Promise<{
+    success: boolean;
+    plans: ManagedInsurancePolicyPlan[];
+  }> => {
+    const res = await api.get('/insurance/policy-plans');
+    return res.data;
+  },
+
+  createPolicyPlan: async (data: Omit<InsurancePolicyPlan, 'id'>): Promise<{
+    success: boolean;
+    message: string;
+    plan: ManagedInsurancePolicyPlan;
+  }> => {
+    const res = await api.post('/insurance/policy-plans', data);
+    return res.data;
+  },
+
+  updatePolicyPlan: async (
+    planId: string,
+    data: Partial<Omit<InsurancePolicyPlan, 'id'>>
+  ): Promise<{
+    success: boolean;
+    message: string;
+    plan: ManagedInsurancePolicyPlan;
+  }> => {
+    const res = await api.put(`/insurance/policy-plans/${planId}`, data);
     return res.data;
   },
 };

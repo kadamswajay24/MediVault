@@ -8,10 +8,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (savedTheme === 'dark' || savedTheme === 'light') {
       return savedTheme;
     }
-    // Default to dark mode for sleek healthcare aesthetic, or check system preference
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
-      ? 'light'
-      : 'dark';
+    return 'light';
   });
 
   useEffect(() => {

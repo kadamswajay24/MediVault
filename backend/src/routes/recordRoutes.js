@@ -3,11 +3,12 @@ import {
   uploadRecord,
   getRecords,
   getRecordById,
+  summarizeRecord,
   downloadRecord,
   deleteRecord,
 } from '../controllers/recordController.js';
 import { protect, resolvePatientContext } from '../middleware/authMiddleware.js';
-import { upload } from '../middleware/uploadMiddleware.js';
+import { upload, validateFileContent } from '../middleware/uploadMiddleware.js';
 
 const router = express.Router();
 
@@ -16,12 +17,13 @@ router.use(resolvePatientContext); // Resolve active patient context (caregiver 
 
 router.route('/')
   .get(getRecords)
-  .post(upload.single('file'), uploadRecord);
+  .post(upload.single('file'), validateFileContent, uploadRecord);
 
 router.route('/:id')
   .get(getRecordById)
   .delete(deleteRecord);
 
+router.get('/:id/summary', summarizeRecord);
 router.get('/:id/download', downloadRecord);
 
 export default router;

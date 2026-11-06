@@ -1,65 +1,125 @@
 import React from 'react';
-import { ArrowRight, FileText, ShieldCheck, UserRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import {
+  ArrowRight,
+  ClipboardList,
+  FileText,
+  Pill,
+  ShieldCheck,
+} from 'lucide-react';
+
+const sampleRecords = [
+  {
+    icon: FileText,
+    title: 'Blood test report',
+    detail: 'Lab report · PDF',
+  },
+  {
+    icon: Pill,
+    title: 'Prescription',
+    detail: 'Medication instructions',
+  },
+  {
+    icon: ClipboardList,
+    title: 'Visit summary',
+    detail: 'Clinical notes · PDF',
+  },
+];
 
 export const PatientLandingPage: React.FC = () => (
-  <main className="min-h-[calc(100vh-8rem)] px-4 py-12 sm:px-6">
-    <div className="mx-auto grid min-h-[60vh] max-w-6xl items-center gap-10 lg:grid-cols-2">
-      <section className="max-w-xl">
-        <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
-          <ShieldCheck className="h-4 w-4" />
-          Your personal health vault
+  <main className="portal-home">
+    <div className="portal-home__wrap">
+      <section className="portal-home__hero" aria-labelledby="portal-home-title">
+        <div className="portal-home__intro">
+          <div className="portal-home__eyebrow">
+            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+            Patient portal
+          </div>
+          <h1 id="portal-home-title">Your health records, care details, and access.</h1>
+          <p className="portal-home__description">
+            Keep reports and prescriptions together, update key health details, and review who
+            can access your records.
+          </p>
+          <div className="portal-home__actions">
+            <Link to="/patient/login" className="button-primary portal-home__primary">
+              Sign in
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+            <Link to="/patient/register" className="portal-home__secondary">
+              Create account
+            </Link>
+          </div>
+          <p className="portal-home__privacy">
+            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+            Your records are available after sign-in.
+          </p>
         </div>
-        <h1 className="text-4xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-5xl">
-          Your health records, in your hands.
-        </h1>
-        <p className="mt-5 max-w-lg text-base leading-7 text-slate-600 dark:text-slate-400">
-          Keep your medical records organized, manage your health profile, and decide when
-          approved care teams can access your information.
-        </p>
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <Link
-            to="/patient/login"
-            className="button-primary inline-flex items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-semibold shadow-sm"
-          >
-            Sign in to your account
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-          <Link
-            to="/patient/register"
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
-          >
-            Create a patient account
-          </Link>
-        </div>
+
+        <section className="portal-home__overview" aria-labelledby="portal-overview-title">
+          <div className="portal-preview">
+            <div className="portal-preview__topbar">
+              <span className="portal-preview__wordmark">
+                <img
+                  src="/medivault-icon.svg"
+                  alt=""
+                  aria-hidden="true"
+                  width="28"
+                  height="28"
+                  className="portal-preview__mark"
+                />
+                MediVault
+              </span>
+              <span className="portal-preview__sample-label">Sample workspace</span>
+            </div>
+
+            <div className="portal-preview__content">
+              <div className="portal-preview__heading">
+                <div>
+                  <p className="portal-preview__eyebrow">Patient portal</p>
+                  <h2 id="portal-overview-title">Health records</h2>
+                </div>
+                <span className="portal-preview__count">3 examples</span>
+              </div>
+
+              <ul className="portal-preview__records" aria-label="Illustrative sample records">
+                {sampleRecords.map(({ icon: Icon, title, detail }) => (
+                  <li key={title}>
+                    <span className="portal-preview__record-icon" aria-hidden="true">
+                      <Icon />
+                    </span>
+                    <span className="portal-preview__record-copy">
+                      <strong>{title}</strong>
+                      <span>{detail}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="portal-preview__access">
+                <span className="portal-preview__access-icon" aria-hidden="true">
+                  <ShieldCheck />
+                </span>
+                <span>
+                  <strong>Record access</strong>
+                  <span>Review requests and caregiver permissions</span>
+                </span>
+              </div>
+            </div>
+          </div>
+          <p className="portal-preview__caption">
+            Example content only. No patient information is shown.
+          </p>
+        </section>
       </section>
 
-      <section className="grid items-stretch gap-4 sm:grid-cols-2" aria-label="Patient portal features">
-        <article className="surface-card flex min-h-44 flex-col p-6">
-          <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-            <FileText className="h-5 w-5" />
-          </div>
-          <h2 className="font-semibold text-slate-900 dark:text-white">One organized record</h2>
-          <p className="mt-2 flex-1 text-sm leading-6 text-slate-600 dark:text-slate-400">
-            Store and find your reports, prescriptions, and medical history.
-          </p>
-        </article>
-        <article className="surface-card flex min-h-44 flex-col p-6">
-          <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
-            <UserRound className="h-5 w-5" />
-          </div>
-          <h2 className="font-semibold text-slate-900 dark:text-white">You control access</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-400">
-            Review requests and grant care teams access for a defined period.
-          </p>
-        </article>
+      <section className="portal-home__support" aria-label="MediVault portal access">
+        <nav className="portal-home__professional" aria-label="Professional portals">
+          <span>Professional portals</span>
+          <Link to="/clinical/login">Medical staff</Link>
+          <Link to="/insurance/login">Insurance</Link>
+          <Link to="/admin/login">Administrator</Link>
+        </nav>
       </section>
     </div>
-    <nav aria-label="Other MediVault portals" className="mx-auto mt-10 flex max-w-6xl flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-slate-200 pt-5 text-xs dark:border-slate-800">
-      <span className="font-semibold text-slate-500">Professional access</span>
-      <Link to="/clinical/login" className="font-semibold text-slate-700 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400">Medical staff</Link>
-      <Link to="/insurance/login" className="font-semibold text-slate-700 hover:text-amber-600 dark:text-slate-300 dark:hover:text-amber-400">Insurance</Link>
-      <Link to="/admin/login" className="font-semibold text-slate-700 hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-400">Administrator</Link>
-    </nav>
   </main>
 );

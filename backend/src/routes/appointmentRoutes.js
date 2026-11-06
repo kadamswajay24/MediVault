@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   createAppointment,
+  cancelAppointment,
   decideAppointment,
   getDoctorAvailability,
   getHospitalsAndDoctors,
@@ -18,6 +19,7 @@ router.use(protect);
 router.get('/hospitals', authorize('patient'), getHospitalsAndDoctors);
 router.get('/availability', authorize('patient'), getDoctorAvailability);
 router.get('/mine', authorize('patient'), resolvePatientContext, getMyAppointments);
+router.put('/:id/cancel', authorize('patient'), resolvePatientContext, cancelAppointment);
 router.post('/', authorize('patient'), resolvePatientContext, createAppointment);
 router.get('/mine/schedule', authorize('medical_staff'), getMySchedule);
 router.put('/mine/schedule', authorize('medical_staff'), updateMySchedule);

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  ShieldCheck,
   User,
   Mail,
   Lock,
@@ -145,23 +144,19 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
   };
 
   return (
-    <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center p-4">
-      <div className="max-w-lg w-full space-y-6">
-        {/* Header */}
-        <div className="text-center space-y-1">
-          <div className="inline-flex p-2.5 rounded-xl bg-emerald-500 text-slate-950 mb-2 shadow-sm">
-            <ShieldCheck className="w-6 h-6 stroke-[2.4]" />
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+    <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center px-4 py-8">
+      <div className="max-w-lg w-full space-y-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
             {isPatientPortal
-              ? 'Create a Patient Account'
+              ? 'Create your account'
               : portal === 'clinical'
-                ? 'Apply for Medical Staff Access'
-                : 'Apply for Insurance Access'}
+                ? 'Apply for medical staff access'
+                : 'Apply for insurance access'}
           </h1>
-          <p className="text-xs text-slate-500">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
             {isPatientPortal
-              ? 'Create your personal account to manage your health records and care.'
+              ? 'Enter your details to get started.'
               : 'Applications are reviewed by an administrator before access is granted.'}
           </p>
         </div>
@@ -177,12 +172,12 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
             </p>
             {issuedMediVaultId && (
               <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-950 dark:text-slate-300">
-                Your MediVault ID: <span className="font-mono font-semibold">{issuedMediVaultId}</span>
+                Your MediVault ID: <span className="font-sans font-semibold">{issuedMediVaultId}</span>
               </p>
             )}
             {issuedAgentId && (
               <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-950 dark:text-slate-300">
-                Portal-generated agent ID: <span className="font-mono font-semibold">{issuedAgentId}</span>
+                Portal-generated agent ID: <span className="font-sans font-semibold">{issuedAgentId}</span>
               </p>
             )}
             <Link
@@ -194,9 +189,9 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
           </div>
         ) : (
         /* Card Form */
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm">
+        <div className="surface-card p-5 sm:p-6">
           {error && (
-            <div className="mb-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
+            <div role="alert" className="mb-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               <span>{error}</span>
             </div>
@@ -251,13 +246,14 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="register-name-input" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Full Name *
                 </label>
                 <div className="relative">
                   <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
+                    id="register-name-input"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -268,7 +264,7 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="register-phone-input" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Phone Number *
                 </label>
                 <div className="relative">
@@ -278,6 +274,7 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
                   </span>
                   <input
                       type="tel"
+                      id="register-phone-input"
                       required
                       inputMode="numeric"
                       autoComplete="tel-national"
@@ -294,13 +291,14 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label htmlFor="register-email-input" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Email Address *
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="email"
+                  id="register-email-input"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -409,13 +407,14 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="register-password-input" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Password *
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="password"
+                    id="register-password-input"
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -426,13 +425,14 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="register-confirm-password-input" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Confirm Password *
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="password"
+                    id="register-confirm-password-input"
                     required
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
@@ -446,7 +446,7 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
             <button
               type="submit"
               disabled={loading}
-              className="button-primary w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold shadow-sm disabled:opacity-50"
+              className="button-primary w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50"
             >
               {loading ? (
                 <>
@@ -454,10 +454,7 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
                   <span>Creating Account...</span>
                 </>
               ) : (
-                <>
-                  <span>Complete Registration</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
+                <span>Create account</span>
               )}
             </button>
           </form>
@@ -470,7 +467,7 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
             to={signInPath}
             className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
           >
-            Sign in to your portal
+            Sign in
           </Link>
         </p>
       </div>

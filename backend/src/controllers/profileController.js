@@ -96,6 +96,16 @@ export const updateProfile = async (req, res, next) => {
       };
     }
 
+    // Validate before changing either document so invalid contact data cannot partially save.
+    try {
+      await profile.validate();
+    } catch (error) {
+      if (error.name === 'ValidationError') {
+        return res.status(400).json({ success: false, message: Object.values(error.errors).map((item) => item.message).join(' ') });
+      }
+      throw error;
+    }
+
     // Also update User name if fullName changed and updating self
     if (
       targetUserId.toString() === req.user._id.toString() &&

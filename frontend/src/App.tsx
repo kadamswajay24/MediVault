@@ -11,6 +11,7 @@ import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/useAuth';
 import { ThemeProvider } from './context/ThemeContext';
 import { Navbar } from './components/Navbar';
+import { PatientPortalLayout } from './components/PatientPortalLayout';
 import { ProtectedRoute, RoleRoute } from './components/ProtectedRoute';
 import { UploadModal } from './components/UploadModal';
 
@@ -21,6 +22,7 @@ import { RecordsPage } from './pages/RecordsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
 import { ClaimsPage } from './pages/ClaimsPage';
+import { InsuranceMarketplacePage } from './pages/InsuranceMarketplacePage';
 import { CaregiversPage } from './pages/CaregiversPage';
 import { PatientLandingPage } from './pages/PatientLandingPage';
 import { PoliciesPage } from './pages/PoliciesPage';
@@ -98,11 +100,11 @@ const AppLayout: React.FC = () => {
         <footer className="app-footer border-t py-5 text-xs text-slate-500 transition-colors duration-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-700 dark:text-slate-300">MediVault</span>
+            <span className="app-footer__brand">MediVault</span>
               <span>•</span>
-              <span>Your health records, on your terms.</span>
+              <span>Health records and care access</span>
             </div>
-            <div className="flex items-center gap-4 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
+          <div className="flex items-center gap-4 text-slate-500 dark:text-slate-400 text-xs">
               <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                 Access controls active
@@ -137,70 +139,82 @@ export function App() {
 
               {/* Protected Routes */}
               <Route element={<ProtectedRoute />}>
-                <Route element={<RoleRoute roles={['patient', 'medical_staff', 'admin']} />}>
+                <Route element={<PatientPortalLayout />}>
+                  <Route element={<RoleRoute roles={['patient', 'medical_staff', 'admin']} />}>
+                    <Route
+                      path="/access-requests"
+                      element={
+                        <React.Suspense fallback={<PageLoading />}>
+                          <AccessRequestsPage />
+                        </React.Suspense>
+                      }
+                    />
+                  </Route>
                   <Route
-                    path="/access-requests"
                     element={
-                      <React.Suspense fallback={<PageLoading />}>
-                        <AccessRequestsPage />
-                      </React.Suspense>
+                      <RoleRoute roles={['patient', 'medical_staff', 'admin', 'insurance_agent']} />
                     }
-                  />
-                </Route>
-                <Route path="/audit-logs" element={<AuditLogsPage />} />
-                <Route element={<RoleRoute roles={['patient', 'insurance_agent']} />}>
-                  <Route path="/claims" element={<ClaimsPage />} />
-                </Route>
-                <Route element={<RoleRoute roles={['patient']} />}>
-                  <Route path="/dashboard" element={<DashboardPage />} />
-                  <Route path="/policies" element={<PoliciesPage />} />
-                  <Route path="/records" element={<RecordsPage />} />
-                  <Route
-                    path="/prescriptions"
-                    element={
-                      <React.Suspense fallback={<PageLoading />}>
-                        <MedicalStaffPage />
-                      </React.Suspense>
-                    }
-                  />
-                  <Route path="/profile" element={<ProfilePage />} />
-                  <Route path="/caregivers" element={<CaregiversPage />} />
-                </Route>
-                <Route element={<RoleRoute roles={['medical_staff']} />}>
-                  <Route
-                    path="/medical-staff/appointments"
-                    element={
-                      <React.Suspense fallback={<PageLoading />}>
-                        <AppointmentsPage />
-                      </React.Suspense>
-                    }
-                  />
-                  <Route
-                    path="/medical-staff"
-                    element={
-                      <React.Suspense fallback={<PageLoading />}>
-                        <MedicalStaffPage />
-                      </React.Suspense>
-                    }
-                  />
-                  <Route
-                    path="/medical-staff/patients/:patientId"
-                    element={
-                      <React.Suspense fallback={<PageLoading />}>
-                        <PatientClinicalFilePage />
-                      </React.Suspense>
-                    }
-                  />
-                </Route>
-                <Route element={<RoleRoute roles={['admin']} />}>
-                  <Route
-                    path="/admin"
-                    element={
-                      <React.Suspense fallback={<PageLoading />}>
-                        <AdminPage />
-                      </React.Suspense>
-                    }
-                  />
+                  >
+                    <Route path="/audit-logs" element={<AuditLogsPage />} />
+                  </Route>
+                  <Route element={<RoleRoute roles={['patient', 'insurance_agent']} />}>
+                    <Route path="/claims" element={<ClaimsPage />} />
+                  </Route>
+                  <Route element={<RoleRoute roles={['insurance_agent']} />}>
+                    <Route path="/insurance/marketplace" element={<InsuranceMarketplacePage />} />
+                  </Route>
+                  <Route element={<RoleRoute roles={['patient']} />}>
+                    <Route path="/dashboard" element={<DashboardPage />} />
+                    <Route path="/appointments" element={<React.Suspense fallback={<PageLoading />}><AppointmentsPage /></React.Suspense>} />
+                    <Route path="/policies" element={<PoliciesPage />} />
+                    <Route path="/records" element={<RecordsPage />} />
+                    <Route
+                      path="/prescriptions"
+                      element={
+                        <React.Suspense fallback={<PageLoading />}>
+                          <MedicalStaffPage />
+                        </React.Suspense>
+                      }
+                    />
+                    <Route path="/profile" element={<ProfilePage />} />
+                    <Route path="/caregivers" element={<CaregiversPage />} />
+                  </Route>
+                  <Route element={<RoleRoute roles={['medical_staff']} />}>
+                    <Route
+                      path="/medical-staff/appointments"
+                      element={
+                        <React.Suspense fallback={<PageLoading />}>
+                          <AppointmentsPage />
+                        </React.Suspense>
+                      }
+                    />
+                    <Route
+                      path="/medical-staff"
+                      element={
+                        <React.Suspense fallback={<PageLoading />}>
+                          <MedicalStaffPage />
+                        </React.Suspense>
+                      }
+                    />
+                    <Route
+                      path="/medical-staff/patients/:patientId"
+                      element={
+                        <React.Suspense fallback={<PageLoading />}>
+                          <PatientClinicalFilePage />
+                        </React.Suspense>
+                      }
+                    />
+                  </Route>
+                  <Route element={<RoleRoute roles={['admin']} />}>
+                    <Route
+                      path="/admin"
+                      element={
+                        <React.Suspense fallback={<PageLoading />}>
+                          <AdminPage />
+                        </React.Suspense>
+                      }
+                    />
+                  </Route>
                 </Route>
               </Route>
 

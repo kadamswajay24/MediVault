@@ -11,12 +11,58 @@ import ProxyDelegation from './src/models/ProxyDelegation.js';
 import InsuranceClaim from './src/models/InsuranceClaim.js';
 import MedicalNote from './src/models/MedicalNote.js';
 import AuditLog from './src/models/AuditLog.js';
+import ClinicalAccessRequest from './src/models/ClinicalAccessRequest.js';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PASSWORD = process.env.DEMO_SEED_PASSWORD;
+
+const createDemoPdf = () => {
+  const lines = [
+    'MediVault - DEMONSTRATION ONLY',
+    'Report: Coronary Angiogram Diagnostic Report',
+    'Patient: Rohan Verma',
+    'Date: 2026-10-02',
+    'Synthetic sample; not a real clinical document.',
+    'Not for clinical care or insurance decisions.',
+  ];
+  const escapePdfText = (value) => value.replace(/([\\()])/g, '\\$1');
+  const content = [
+    'BT',
+    '/F1 18 Tf',
+    '72 740 Td',
+    `(${escapePdfText(lines[0])}) Tj`,
+    '/F1 11 Tf',
+    ...lines.slice(1).flatMap((line) => ['0 -24 Td', `(${escapePdfText(line)}) Tj`]),
+    'ET',
+  ].join('\n');
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${Buffer.byteLength(content, 'ascii')} >>\nstream\n${content}\nendstream`,
+  ];
+  const chunks = [Buffer.from('%PDF-1.4\n', 'ascii')];
+  const offsets = [0];
+
+  objects.forEach((object, index) => {
+    offsets.push(chunks.reduce((size, chunk) => size + chunk.length, 0));
+    chunks.push(Buffer.from(`${index + 1} 0 obj\n${object}\nendobj\n`, 'ascii'));
+  });
+
+  const xrefOffset = chunks.reduce((size, chunk) => size + chunk.length, 0);
+  const xref = [
+    `xref\n0 ${objects.length + 1}\n`,
+    '0000000000 65535 f \n',
+    ...offsets.slice(1).map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`),
+    `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`,
+  ];
+  chunks.push(Buffer.from(xref.join(''), 'ascii'));
+  return Buffer.concat(chunks);
+};
 
 if (process.env.NODE_ENV !== 'development') {
   throw new Error('Demo data can only be seeded when NODE_ENV=development.');
@@ -166,37 +212,78 @@ async function seedDemoData() {
     await admin.save();
   }
 
+  const existingClinicalAccess = await ClinicalAccessRequest.findOne({
+    patient: patient._id,
+    medicalStaff: doctor._id,
+  });
+  if (!existingClinicalAccess) {
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await ClinicalAccessRequest.create({
+      patient: patient._id,
+      medicalStaff: doctor._id,
+      reason: 'Synthetic demo patient-approved medication review',
+      requestedUntil: expiresAt,
+      expiresAt,
+      status: 'approved',
+      decidedBy: patient._id,
+      decidedAt: new Date(),
+    });
+  }
+
   // Ensure uploads directory exists
   const uploadsDir = path.resolve(__dirname, 'uploads');
   if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
   }
 
-  // Create sample document
-  const sampleDiskFile = path.join(uploadsDir, 'sample_angiogram_report.pdf');
-  if (!fs.existsSync(sampleDiskFile)) {
-    fs.writeFileSync(sampleDiskFile, '%PDF-1.4 Clinical Diagnostic Evaluation - MediVault');
-  }
+  const sampleFileName = 'medivault_demo_sample_report.pdf';
+  const sampleDiskFile = path.join(uploadsDir, sampleFileName);
+  const samplePdf = createDemoPdf();
+  fs.writeFileSync(sampleDiskFile, samplePdf);
 
   // Create sample medical record for patient
   let sampleRecord = await MedicalRecord.findOne({ user: patient._id });
   if (!sampleRecord) {
-    sampleRecord = await MedicalRecord.create({
+    sampleRecord = new MedicalRecord({
       user: patient._id,
       title: 'Coronary Angiogram Diagnostic Report',
       category: 'Laboratory Report',
-      description: 'Pre-procedure cardiac angiography evaluation at Apollo Hospital',
+      description: 'Synthetic demo document for testing record viewing and local summaries.',
       recordDate: new Date('2026-10-02'),
-      fileName: 'Coronary_Angiogram_Report.pdf',
-      storedFileName: 'sample_angiogram_report.pdf',
+      fileName: 'MediVault_Demo_Clinical_Record.pdf',
+      storedFileName: sampleFileName,
       fileType: 'application/pdf',
-      fileSize: 204850,
-      fileUrl: '/uploads/sample_angiogram_report.pdf',
+      fileSize: samplePdf.length,
+      fileUrl: '',
+      metadata: {
+        ocrExtractedText: '',
+        identityCheck: {
+          status: 'not_checked',
+          message: 'Automated identity checks were not run on this synthetic demo record.',
+          extractionMethod: 'unavailable',
+        },
+      },
     });
   }
+  sampleRecord.description = 'Synthetic demo document for testing record viewing and local summaries.';
+  sampleRecord.fileName = 'MediVault_Demo_Clinical_Record.pdf';
+  sampleRecord.storedFileName = sampleFileName;
+  sampleRecord.fileType = 'application/pdf';
+  sampleRecord.fileSize = samplePdf.length;
+  sampleRecord.fileUrl = `/api/records/${sampleRecord._id}/download`;
+  sampleRecord.set('metadata.ocrExtractedText', '');
+  sampleRecord.set('metadata.identityCheck', {
+    status: 'not_checked',
+    message: 'Automated identity checks were not run on this synthetic demo record.',
+    extractionMethod: 'unavailable',
+  });
+  await sampleRecord.save();
 
   // Create sample insurance claim
-  let sampleClaim = await InsuranceClaim.findOne({ patient: patient._id });
+  let sampleClaim = await InsuranceClaim.findOne({
+    patient: patient._id,
+    claimNumber: 'CLM-2026-781920',
+  });
   if (!sampleClaim) {
     sampleClaim = await InsuranceClaim.create({
       patient: patient._id,
@@ -213,9 +300,13 @@ async function seedDemoData() {
       admissionDate: new Date('2026-10-02'),
       dischargeDate: new Date('2026-10-06'),
       assignedAgent: agent._id,
-      agentRemarks: 'Discharge summary and angiography verified. Approved minus $3000 copay deductible.',
+      agentRemarks: 'Approved subject to an INR 3,000 copay deductible.',
       reviewedAt: new Date(),
     });
+  } else {
+    sampleClaim.records = [sampleRecord._id];
+    sampleClaim.agentRemarks = 'Approved subject to an INR 3,000 copay deductible.';
+    await sampleClaim.save();
   }
 
   // Create sample medical note from doctor

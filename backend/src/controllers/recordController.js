@@ -1,19 +1,26 @@
-import path from 'path';
-import fs from 'fs';
+import { randomUUID } from 'node:crypto';
+import { saveFile, readFile, deleteFile, sendFile } from '../services/fileStorageService.js';
 import MedicalRecord, { RECORD_CATEGORIES } from '../models/MedicalRecord.js';
+import HealthProfile from '../models/HealthProfile.js';
+import User from '../models/User.js';
 import ProxyDelegation from '../models/ProxyDelegation.js';
 import ClinicalAccessRequest from '../models/ClinicalAccessRequest.js';
 import { createAuditLog } from '../services/auditService.js';
-import { removePhysicalFile } from '../services/recordService.js';
-import { getUploadDirectory } from '../middleware/uploadMiddleware.js';
+import {
+  extractDocumentText,
+  inspectPatientIdentity,
+  LocalAiSummaryError,
+  summarizeDocumentLocally,
+} from '../services/localAiSummaryService.js';
 
 // Helper to check record access permissions
-const canAccessRecord = async (user, record, proxyDelegation = null) => {
+const canAccessRecord = async (user, record, action = 'read') => {
   // 1. Direct owner
   if (record.user.toString() === user._id.toString()) return true;
 
   // Medical staff require a current grant for each patient's records.
   if (user.role === 'medical_staff') {
+    if (action !== 'read') return false;
     return Boolean(await ClinicalAccessRequest.findOne({
       patient: record.user,
       medicalStaff: user._id,
@@ -22,15 +29,12 @@ const canAccessRecord = async (user, record, proxyDelegation = null) => {
     }));
   }
 
-  // 4. Caregiver / Proxy
-  if (proxyDelegation && proxyDelegation.patient._id.toString() === record.user.toString()) {
-    return true;
-  }
-
+  // Resolve permission from the record owner, independently of client context.
   const delegation = await ProxyDelegation.findOne({
     patient: record.user,
     proxyUser: user._id,
     status: 'active',
+    ...(action === 'delete' ? { accessLevel: 'full' } : {}),
   });
   if (delegation) return true;
 
@@ -41,6 +45,8 @@ const canAccessRecord = async (user, record, proxyDelegation = null) => {
 // @route   POST /api/records
 // @access  Private
 export const uploadRecord = async (req, res, next) => {
+  let storedFileId;
+  let recordSaved = false;
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -53,7 +59,6 @@ export const uploadRecord = async (req, res, next) => {
     const targetUserId = req.effectivePatientId || req.user._id;
 
     if (!title || !title.trim()) {
-      removePhysicalFile(req.file.path);
       return res.status(400).json({
         success: false,
         message: 'Record title is required.',
@@ -61,11 +66,50 @@ export const uploadRecord = async (req, res, next) => {
     }
 
     if (!category || !RECORD_CATEGORIES.includes(category)) {
-      removePhysicalFile(req.file.path);
       return res.status(400).json({
         success: false,
         message: `Category is required and must be one of: ${RECORD_CATEGORIES.join(', ')}.`,
       });
+    }
+
+    let extractedText = '';
+    let identityCheck;
+    try {
+      const extracted = await extractDocumentText(
+        req.file.buffer,
+        req.file.mimetype
+      );
+      extractedText = extracted.text;
+
+      const [owner, profile] = await Promise.all([
+        User.findById(targetUserId).select('name mediVaultId'),
+        HealthProfile.findOne({ user: targetUserId }).select('fullName dateOfBirth'),
+      ]);
+      if (!owner) {
+        throw new Error('The patient account for this upload could not be found.');
+      }
+
+      identityCheck = {
+        ...inspectPatientIdentity(extractedText, {
+          names: [profile?.fullName, owner.name],
+          dateOfBirth: profile?.dateOfBirth,
+          mediVaultId: owner.mediVaultId,
+          confidence: extracted.confidence,
+        }),
+        checkedAt: new Date(),
+        confidence: extracted.confidence,
+        extractionMethod: extracted.method,
+      };
+    } catch (error) {
+      if (!(error instanceof LocalAiSummaryError)) throw error;
+      console.error(`[Record OCR] ${error.code || 'extraction_failed'}: ${error.message}`);
+      identityCheck = {
+        status: 'unverified',
+        message: 'Local text extraction failed. Please review the original document manually.',
+        checkedAt: new Date(),
+        confidence: null,
+        extractionMethod: 'unavailable',
+      };
     }
 
     const record = new MedicalRecord({
@@ -75,13 +119,21 @@ export const uploadRecord = async (req, res, next) => {
       description: description ? description.trim() : '',
       recordDate: recordDate ? new Date(recordDate) : new Date(),
       fileName: req.file.originalname,
-      storedFileName: req.file.filename,
+      storedFileName: randomUUID(),
       fileType: req.file.mimetype,
       fileSize: req.file.size,
       fileUrl: '',
+      metadata: {
+        ocrExtractedText: extractedText,
+        identityCheck,
+      },
     });
     record.fileUrl = `/api/records/${record._id}/download`;
+    await record.validate();
+    storedFileId = await saveFile(req.file.buffer, record.storedFileName);
+    record.storageFileId = storedFileId;
     await record.save();
+    recordSaved = true;
 
     // Audit log
     const proxyNotice = req.isProxyActing ? ` on behalf of patient` : '';
@@ -89,7 +141,9 @@ export const uploadRecord = async (req, res, next) => {
       userId: targetUserId,
       performedBy: req.user._id,
       action: 'RECORD_UPLOAD',
-      details: `Uploaded record: "${record.title}" (${record.category})${proxyNotice}`,
+      details:
+        `Uploaded record: "${record.title}" (${record.category}); identity check: ` +
+        `${identityCheck?.status || 'unverified'}${proxyNotice}`,
       resourceId: record._id,
       resourceType: 'MedicalRecord',
       req,
@@ -101,8 +155,10 @@ export const uploadRecord = async (req, res, next) => {
       record,
     });
   } catch (error) {
-    if (req.file?.path) {
-      removePhysicalFile(req.file.path);
+    if (storedFileId && !recordSaved) {
+      await deleteFile({ storageFileId: storedFileId }).catch((cleanupError) => {
+        console.error("[Upload cleanup]", cleanupError.message);
+      });
     }
     next(error);
   }
@@ -164,7 +220,7 @@ export const getRecordById = async (req, res, next) => {
     }
 
     // Enforce authorization
-    const hasAccess = await canAccessRecord(req.user, record, req.proxyDelegation);
+    const hasAccess = await canAccessRecord(req.user, record);
     if (!hasAccess) {
       return res.status(403).json({
         success: false,
@@ -192,6 +248,59 @@ export const getRecordById = async (req, res, next) => {
   }
 };
 
+// @desc    Generate an ephemeral summary using local Ollama
+// @route   GET /api/records/:id/summary
+// @access  Private
+export const summarizeRecord = async (req, res, next) => {
+  try {
+    const record = await MedicalRecord.findById(req.params.id);
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: 'Medical record not found.',
+      });
+    }
+
+    const hasAccess = await canAccessRecord(req.user, record);
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized access. You do not have permission to summarize this record.',
+      });
+    }
+
+    const { summary, model } = await summarizeDocumentLocally(
+      await readFile(record),
+      record.fileType,
+      record.metadata?.ocrExtractedText || '',
+      req.user.role === 'medical_staff' ? 'clinician' : 'patient'
+    );
+
+    await createAuditLog({
+      userId: record.user,
+      performedBy: req.user._id,
+      action: 'RECORD_AI_SUMMARIZED',
+      details: 'Generated a local AI summary for a medical record.',
+      resourceId: record._id,
+      resourceType: 'MedicalRecord',
+      req,
+    });
+
+    res.set('Cache-Control', 'no-store');
+    return res.status(200).json({
+      success: true,
+      summary,
+      model,
+      stored: false,
+    });
+  } catch (error) {
+    if (error instanceof LocalAiSummaryError) {
+      res.statusCode = error.statusCode;
+    }
+    return next(error);
+  }
+};
+
 // @desc    Download medical record physical file
 // @route   GET /api/records/:id/download
 // @access  Private
@@ -207,7 +316,7 @@ export const downloadRecord = async (req, res, next) => {
     }
 
     // Enforce authorization
-    const hasAccess = await canAccessRecord(req.user, record, req.proxyDelegation);
+    const hasAccess = await canAccessRecord(req.user, record);
     if (!hasAccess) {
       return res.status(403).json({
         success: false,
@@ -215,15 +324,7 @@ export const downloadRecord = async (req, res, next) => {
       });
     }
 
-    const uploadDir = getUploadDirectory();
-    const filePath = path.join(uploadDir, record.storedFileName);
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({
-        success: false,
-        message: 'The requested physical file was not found on the server storage.',
-      });
-    }
+    const buffer = await readFile(record);
 
     // Audit log
     await createAuditLog({
@@ -236,7 +337,7 @@ export const downloadRecord = async (req, res, next) => {
       req,
     });
 
-    return res.download(filePath, record.fileName);
+    return sendFile(res, record, buffer);
   } catch (error) {
     next(error);
   }
@@ -265,7 +366,7 @@ export const deleteRecord = async (req, res, next) => {
     }
 
     // Enforce authorization
-    const hasAccess = await canAccessRecord(req.user, record, req.proxyDelegation);
+    const hasAccess = await canAccessRecord(req.user, record, 'delete');
     if (!hasAccess) {
       return res.status(403).json({
         success: false,
@@ -273,10 +374,7 @@ export const deleteRecord = async (req, res, next) => {
       });
     }
 
-    // Delete physical file
-    const uploadDir = getUploadDirectory();
-    const filePath = path.join(uploadDir, record.storedFileName);
-    removePhysicalFile(filePath);
+    await deleteFile(record);
 
     // Delete database entry
     await record.deleteOne();

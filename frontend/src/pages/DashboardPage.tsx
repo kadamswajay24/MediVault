@@ -1,27 +1,27 @@
+import { formatIndianNumber } from '../utils/indiaFormat';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  FileText,
   Heart,
   AlertTriangle,
-  Phone,
   Plus,
   ShieldCheck,
   Eye,
   Loader2,
-  FileCheck2,
   AlertCircle,
-  Pill,
+  CalendarDays,
+  ArrowUpRight,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
-import { dashboardAPI } from '../services/api';
+import { dashboardAPI, recordAPI } from '../services/api';
 import type { DashboardResponse, MedicalRecord } from '../types';
 import { UploadModal } from '../components/UploadModal';
 import { RecordViewerModal } from '../components/RecordViewerModal';
-import { AppointmentsPanel } from '../components/AppointmentsPanel';
+
 
 export const DashboardPage: React.FC = () => {
   const { user, activeDependent } = useAuth();
+  const readOnly = activeDependent?.accessLevel === 'read_only';
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +29,8 @@ export const DashboardPage: React.FC = () => {
   // Modals
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null);
+  const [openingRecordId, setOpeningRecordId] = useState<string | null>(null);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
 
   const fetchDashboardData = useCallback(async () => {
     try {
@@ -59,11 +61,34 @@ export const DashboardPage: React.FC = () => {
     fetchDashboardData();
   };
 
+  const handleOpenTimelineRecord = async (recordId: string) => {
+    const recentRecord = data?.recentRecords.find((record) => record._id === recordId);
+    if (recentRecord) {
+      setSelectedRecord(recentRecord);
+      return;
+    }
+
+    setOpeningRecordId(recordId);
+    setTimelineError(null);
+    try {
+      const response = await recordAPI.getRecordById(recordId);
+      if (response.success) {
+        setSelectedRecord(response.record);
+      } else {
+        setTimelineError('Unable to load this record.');
+      }
+    } catch (err: any) {
+      setTimelineError(err.response?.data?.message || 'Unable to load this record.');
+    } finally {
+      setOpeningRecordId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center gap-3">
-        <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
-        <p className="text-sm text-slate-500">Loading patient health vault...</p>
+        <Loader2 className="dashboard-loader w-8 h-8 animate-spin" />
+        <p className="text-sm text-slate-500">Loading your health overview</p>
       </div>
     );
   }
@@ -71,9 +96,9 @@ export const DashboardPage: React.FC = () => {
   if (error || !data) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-6 text-center">
+        <div className="dashboard-error-state bg-rose-500/10 border border-rose-500/20 rounded-xl p-6 text-center">
           <AlertCircle className="w-8 h-8 text-rose-500 mx-auto mb-2" />
-          <h2 className="text-base font-bold text-slate-900 dark:text-white">Unable to Load Vault Data</h2>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-white">Unable to load your health overview</h2>
           <p className="text-xs text-slate-500 mt-1">{error}</p>
           <button
             onClick={() => {
@@ -89,163 +114,138 @@ export const DashboardPage: React.FC = () => {
     );
   }
 
-  const { stats, healthProfile, recentRecords } = data;
-  const prescribedMedications = Array.from(
-    new Set([
-      ...(healthProfile.medications || []),
-      ...data.prescriptions.flatMap((prescription) =>
-        prescription.prescriptionItems.map((item) => item.medicineName)
-      ),
-    ])
-  );
+  const { stats, healthProfile } = data;
+  const prescribedMedications = Array.from(new Set(healthProfile.medications || []));
+  const attention = data.attention;
+  const upcoming = attention?.upcomingAppointments.filter((appointment) =>
+    new Date(`${appointment.appointmentDate}T${appointment.time}:00+05:30`).getTime() >= Date.now()
+  ) || [];
   const activeName = activeDependent ? activeDependent.name : healthProfile.fullName || user?.name || 'Patient';
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Patient Header Banner */}
-      <div className="surface-card p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-mono uppercase font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              {activeDependent ? `Dependent Vault: ${activeDependent.relationship}` : 'Personal Health Vault'}
-            </span>
-            <span className="text-xs text-slate-400 font-mono">MRN: MV-{user?.id?.slice(-6).toUpperCase()}</span>
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            {activeName}
-          </h1>
-          <p className="text-xs text-slate-500 max-w-xl">
-            {activeDependent
-              ? `You are managing health records, allergies, and claims on behalf of ${activeName}.`
-              : 'Lifelong digital health records, diagnostic panels, prescriptions, and insurance claims.'}
-          </p>
+    <div className="dashboard-page max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="dashboard-hero surface-card p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="dashboard-hero-pill inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-medium">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            {activeDependent ? `${activeDependent.relationship} profile` : 'Patient profile'}
+          </span>
+          <span className="dashboard-mrn text-xs text-slate-400 font-sans">{activeDependent?.mediVaultId || user?.mediVaultId}</span>
+        </div>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+          {activeName}
+        </h1>
+        <p className="text-xs text-slate-500 max-w-xl">
+          {activeDependent
+            ? `Health records and care access for ${activeName}.`
+            : 'Health records, prescriptions, and insurance claims.'}
+        </p>
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
-          <button
-            onClick={() => setIsUploadOpen(true)}
-            id="dashboard-upload-cta"
-            className="button-primary flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold shadow-sm"
-          >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>Upload Document</span>
-          </button>
-
-          <Link
-            to="/claims"
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 transition-all"
-          >
-            <FileCheck2 className="w-3.5 h-3.5 text-amber-500" />
-            <span>File Claim</span>
-          </Link>
-
-          <Link
-            to="/records"
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 transition-all"
-          >
-            <FileText className="w-3.5 h-3.5 text-slate-400" />
-            <span>Records Hub</span>
-          </Link>
+          {!readOnly && <button onClick={() => setIsUploadOpen(true)} id="dashboard-upload-cta" className="dashboard-cta-primary button-primary inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold"><Plus className="h-4 w-4" />Upload record</button>}
+          <Link to="/records" className="dashboard-cta-secondary inline-flex items-center gap-2 rounded-lg border px-5 py-3 text-sm font-semibold">View records<ArrowUpRight className="h-4 w-4" /></Link>
         </div>
       </div>
 
-      {/* Top 4 Key Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Records */}
-        <div className="surface-card min-h-36 p-4 flex flex-col">
-          <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-            <span className="font-semibold uppercase tracking-wider">Vault Records</span>
-            <FileText className="w-4 h-4 text-emerald-500" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
-            {stats.totalRecords}
-          </div>
-          <p className="text-[11px] text-slate-500 mt-0.5">Documents in your health vault</p>
+      <div className="dashboard-shortcuts">
+        <Link to="/appointments"><span className="dashboard-shortcut-icon"><CalendarDays /></span><span><strong>Appointments</strong><small>Book or manage visits</small></span><ArrowUpRight className="h-4 w-4" /></Link>
+        <Link to="/access-requests"><span className="dashboard-shortcut-icon"><ShieldCheck /></span><span><strong>Record access</strong><small>Review who can view your records</small></span><ArrowUpRight className="h-4 w-4" /></Link>
+        <Link to="/profile"><span className="dashboard-shortcut-icon"><Heart /></span><span><strong>Health profile</strong><small>Update allergies, conditions, and contacts</small></span><ArrowUpRight className="h-4 w-4" /></Link>
+      </div>
+
+      <section className="dashboard-metrics surface-card" aria-label="Health overview">
+        <div className="dashboard-metric dashboard-metric--records">
+          <span className="dashboard-metric-label">Health records</span>
+          <strong className="dashboard-metric-value">
+            {formatIndianNumber(stats.totalRecords)}
+          </strong>
+          <span className="dashboard-metric-note">Documents in your account</span>
         </div>
 
-        {/* Insurance Claims */}
         <Link
           to="/claims"
-          className="surface-card min-h-36 p-4 flex flex-col hover:border-amber-500/50 transition-colors"
+          className="dashboard-metric dashboard-metric--claims"
         >
-          <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-            <span className="font-semibold uppercase tracking-wider">Insurance Claims</span>
-            <FileCheck2 className="w-4 h-4 text-amber-500" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
-            {stats.claimsCount || 0}
-          </div>
-          <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">Reimbursements &amp; cashless</p>
+          <span className="dashboard-metric-label">Insurance claims</span>
+          <strong className="dashboard-metric-value">
+            {formatIndianNumber(stats.claimsCount || 0)}
+          </strong>
+          <span className="dashboard-metric-note">Reimbursement and cashless</span>
         </Link>
 
-        {/* Blood Group */}
-        <div className="surface-card min-h-36 p-4 flex flex-col">
-          <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-            <span className="font-semibold uppercase tracking-wider">Blood Group</span>
-            <Heart className="w-4 h-4 text-rose-500" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold font-mono text-rose-600 dark:text-rose-400">
+        <div className="dashboard-metric dashboard-metric--blood-group">
+          <span className="dashboard-metric-label">Blood group</span>
+          <strong className="dashboard-metric-value">
               {healthProfile.bloodGroup || 'Unknown'}
-            </span>
-            <span className="text-[10px] text-slate-400">{healthProfile.gender || 'Not set'}</span>
-          </div>
-          <p className="text-[11px] text-slate-400 mt-0.5">Clinical demographic</p>
+          </strong>
+          <span className="dashboard-metric-note">{healthProfile.gender || 'Not set'}</span>
         </div>
 
-        {/* Emergency Contact */}
-        <div className="surface-card min-h-36 p-4 flex flex-col">
-          <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-            <span className="font-semibold uppercase tracking-wider">Emergency Contact</span>
-            <Phone className="w-4 h-4 text-blue-500" />
-          </div>
+        <div className="dashboard-metric dashboard-metric--contact">
+          <span className="dashboard-metric-label">Emergency contact</span>
           {healthProfile.emergencyContact?.name ? (
-            <div>
-              <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+            <div className="dashboard-metric-contact">
+              <p className="dashboard-metric-contact-name">
                 {healthProfile.emergencyContact.name} ({healthProfile.emergencyContact.relationship || 'Contact'})
               </p>
               <a
                 href={`tel:${healthProfile.emergencyContact.phone}`}
-                className="text-[11px] font-mono text-emerald-600 hover:underline block mt-0.5"
+                className="dashboard-metric-link"
               >
                 {healthProfile.emergencyContact.phone}
               </a>
             </div>
           ) : (
-            <Link to="/profile" className="text-xs text-emerald-600 hover:underline block mt-2">
-              + Add Contact Info
+            <Link to="/profile" className="dashboard-metric-link">
+              Add a contact
             </Link>
           )}
         </div>
-      </div>
+      </section>
 
-      {/* Category Breakdown */}
-      <div className="surface-card p-4">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
-          Records by Clinical Category
+      <div className="surface-card dashboard-section p-4">
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+          Records by category
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
           {Object.entries(stats.categories).map(([category, count]) => (
             <Link
               key={category}
               to={`/records?category=${encodeURIComponent(category)}`}
-              className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 transition-colors flex items-center justify-between"
+              className="dashboard-category p-3 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 transition-colors flex items-center justify-between"
             >
               <span className="text-xs text-slate-600 dark:text-slate-400 truncate">{category}</span>
-              <span className="text-xs font-bold font-mono text-slate-900 dark:text-white ml-2">{count}</span>
+              <span className="text-xs font-bold font-sans text-slate-900 dark:text-white ml-2">{formatIndianNumber(count)}</span>
             </Link>
           ))}
         </div>
       </div>
 
-      <section className="surface-card space-y-4 p-4">
+      <section className="surface-card dashboard-attention p-5 space-y-3" aria-labelledby="attention-title">
+        <h2 id="attention-title" className="text-base font-semibold text-slate-900 dark:text-white">Needs your attention</h2>
+        {!attention ? <p className="text-sm text-slate-500">Attention updates are unavailable.</p> : <>
+          {!readOnly && attention.pendingAccessRequests > 0 && <Link to="/access-requests" className="block rounded-lg border border-amber-200 p-3 text-sm dark:border-amber-800">
+            {attention.pendingAccessRequests} access request{attention.pendingAccessRequests === 1 ? '' : 's'} awaiting your decision <span className="font-semibold">Review requests</span>
+          </Link>}
+          {attention.claimsNeedingInformation > 0 && <Link to="/claims" className="block rounded-lg border border-amber-200 p-3 text-sm dark:border-amber-800">
+            {attention.claimsNeedingInformation} claim{attention.claimsNeedingInformation === 1 ? '' : 's'} need more information <span className="font-semibold">View claims</span>
+          </Link>}
+          {upcoming.map((appointment) => <Link key={appointment._id} to="/appointments" className="block rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700">
+            <span className="font-semibold">{appointment.hospitalName}</span>
+            <span className="block mt-1 text-slate-500">{new Date(`${appointment.appointmentDate}T12:00:00+05:30`).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' })} at {appointment.time} IST - {appointment.status === 'confirmed' ? 'Confirmed' : 'Awaiting confirmation'}</span>
+          </Link>)}
+          {(!attention.pendingAccessRequests || readOnly) && !attention.claimsNeedingInformation && !upcoming.length && <p className="text-sm text-slate-500">You are all caught up. No pending actions or upcoming appointments.</p>}
+        </>}
+      </section>
+
+      <section className="surface-card dashboard-section space-y-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 dark:border-slate-800">
-          <h2 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-            <Pill className="h-4 w-4 text-blue-500" />
-            Recent Prescriptions
+          <h2 className="text-base font-semibold text-slate-700 dark:text-slate-300">
+            Prescriptions
           </h2>
-          <Link to="/prescriptions" className="text-xs text-emerald-600 hover:underline">
+          <Link to="/prescriptions" className="dashboard-link text-xs">
             View all prescriptions
           </Link>
         </div>
@@ -254,7 +254,8 @@ export const DashboardPage: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Digital prescriptions</h3>
+              <h3 className="text-sm font-semibold text-slate-500">Recent prescription history</h3>
+              <p className="text-sm text-slate-500">These prescriptions do not confirm current use. Keep your ongoing medications updated in your profile.</p>
               {data.prescriptions.length === 0 ? (
                 <p className="text-xs text-slate-500">No digital prescriptions from your care team.</p>
               ) : data.prescriptions.map((prescription) => (
@@ -262,9 +263,9 @@ export const DashboardPage: React.FC = () => {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h4 className="text-sm font-semibold text-slate-900 dark:text-white">{prescription.title}</h4>
-                      <p className="mt-0.5 text-xs text-slate-500">{new Date(prescription.createdAt).toLocaleDateString()}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">{new Date(prescription.createdAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
                     </div>
-                    <span className="rounded-full bg-blue-500/10 px-2 py-1 text-[10px] font-semibold text-blue-700 dark:text-blue-300">Digital Rx</span>
+                    <span className="dashboard-record-type">Digital prescription</span>
                   </div>
                   {prescription.prescriptionItems.length > 0 ? (
                     <ul className="mt-2 space-y-1.5">
@@ -285,14 +286,14 @@ export const DashboardPage: React.FC = () => {
               ))}
             </div>
             <div className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Prescription documents</h3>
+              <h3 className="text-sm font-semibold text-slate-500">Prescription documents</h3>
               {data.prescriptionRecords.length === 0 ? (
                 <p className="text-xs text-slate-500">No uploaded prescription documents.</p>
               ) : data.prescriptionRecords.map((record) => (
                 <div key={record._id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{record.title}</p>
-                    <p className="text-xs text-slate-500">{new Date(record.recordDate).toLocaleDateString()}</p>
+                    <p className="text-xs text-slate-500">{new Date(record.recordDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
                   </div>
                   <button
                     type="button"
@@ -308,7 +309,7 @@ export const DashboardPage: React.FC = () => {
         )}
       </section>
 
-      <AppointmentsPanel />
+
 
       {/* Split Grid: Allergies / Conditions & Recent Documents */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -316,17 +317,17 @@ export const DashboardPage: React.FC = () => {
         <div className="space-y-4">
           <div className="surface-card p-4 space-y-3">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                Allergies &amp; Clinical Alerts
+                Allergies and conditions
               </span>
-              <Link to="/profile" className="text-xs text-emerald-600 hover:underline">
+              <Link to="/profile" className="dashboard-link text-xs">
                 Edit
               </Link>
             </div>
 
             <div>
-              <span className="text-[11px] font-semibold text-slate-500 block mb-1">Known Allergies:</span>
+              <span className="text-xs font-semibold text-slate-500 block mb-1">Allergies</span>
               {healthProfile.allergies && healthProfile.allergies.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {healthProfile.allergies.map((a, i) => (
@@ -339,98 +340,111 @@ export const DashboardPage: React.FC = () => {
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-slate-400 italic">No drug allergies recorded</p>
+                <p className="text-xs text-slate-400">No drug allergies recorded</p>
               )}
             </div>
 
             <div>
-              <span className="text-[11px] font-semibold text-slate-500 block mb-1">Diagnosed Conditions:</span>
+              <span className="text-xs font-semibold text-slate-500 block mb-1">Conditions</span>
               {healthProfile.medicalConditions && healthProfile.medicalConditions.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {healthProfile.medicalConditions.map((c, i) => (
                     <span
                       key={i}
-                      className="text-xs px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-medium"
+                      className="dashboard-condition"
                     >
                       {c}
                     </span>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-slate-400 italic">No chronic conditions listed</p>
+                <p className="text-xs text-slate-400">No chronic conditions listed</p>
               )}
             </div>
 
             <div>
-              <span className="text-[11px] font-semibold text-slate-500 block mb-1">Prescribed Medications:</span>
+              <span className="text-xs font-semibold text-slate-500 block mb-1">Ongoing medications from your profile</span>
               {prescribedMedications.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {prescribedMedications.map((m, i) => (
                     <span
                       key={i}
-                      className="text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-medium"
+                      className="dashboard-medication"
                     >
                       {m}
                     </span>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-slate-400 italic">No prescriptions recorded</p>
+                <p className="text-xs text-slate-400">No ongoing medications listed in your profile.</p>
               )}
             </div>
           </div>
         </div>
 
-        {/* Right Column: Recent Records & Timeline */}
+        {/* Right Column: Health Record Timeline */}
         <div className="lg:col-span-2 space-y-4">
           <div className="surface-card p-4 space-y-3">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 text-emerald-500" />
-                Recent Diagnostic Documents
+              <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                Health record timeline
               </span>
-              <Link to="/records" className="text-xs text-emerald-600 hover:underline">
-                View All Records ({stats.totalRecords})
+              <Link to="/records" className="dashboard-link text-xs">
+                View all records ({formatIndianNumber(stats.totalRecords)})
               </Link>
             </div>
 
-            {recentRecords.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-400 italic">
-                No medical records uploaded yet.
+            {timelineError && (
+              <p role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
+                {timelineError}
+              </p>
+            )}
+
+            {data.timeline.length === 0 ? (
+              <div className="p-6 text-center text-xs text-slate-400">
+                No records are available in your timeline yet.
               </div>
             ) : (
-              <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                {recentRecords.map((rec) => (
-                  <div
-                    key={rec._id}
-                    className="py-2.5 flex items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/20 rounded-lg px-2 transition-colors"
-                  >
-                    <div className="flex items-center gap-3 truncate">
-                      <div className="w-8 h-8 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center font-bold text-[10px] uppercase">
-                        {rec.fileType.includes('pdf') ? 'PDF' : 'IMG'}
-                      </div>
-                      <div className="truncate">
-                        <button
-                          onClick={() => setSelectedRecord(rec)}
-                          className="text-xs font-bold text-slate-800 dark:text-slate-200 hover:text-emerald-600 text-left truncate block"
-                        >
-                          {rec.title}
-                        </button>
-                        <span className="text-[11px] text-slate-400">
-                          {rec.category} • {new Date(rec.recordDate).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => setSelectedRecord(rec)}
-                      className="px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded flex items-center gap-1"
+              <ol className="health-record-timeline" aria-label="Recent health records in date order">
+                {data.timeline.map((record) => (
+                  <li key={record._id} className="health-record-timeline__item">
+                    <time
+                      className="health-record-timeline__date"
+                      dateTime={record.recordDate}
                     >
-                      <Eye className="w-3.5 h-3.5" /> View
-                    </button>
-                  </div>
+                      {new Date(record.recordDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata',
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </time>
+                    <div className="health-record-timeline__content">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-200">
+                          {record.title}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
+                          {record.category} <span aria-hidden="true">·</span> {record.fileName}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleOpenTimelineRecord(record._id)}
+                        disabled={openingRecordId !== null}
+                        aria-label={`View ${record.title}`}
+                        className="records-action-button shrink-0"
+                      >
+                        {openingRecordId === record._id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <Eye className="h-4 w-4" aria-hidden="true" />
+                        )}
+                        View
+                      </button>
+                    </div>
+                  </li>
                 ))}
-              </div>
+              </ol>
             )}
           </div>
         </div>
@@ -440,6 +454,7 @@ export const DashboardPage: React.FC = () => {
       {selectedRecord && (
         <RecordViewerModal
           record={selectedRecord}
+          allowDelete={!readOnly}
           isOpen={true}
           onClose={() => setSelectedRecord(null)}
           onDeleteSuccess={handleDeleteSuccess}

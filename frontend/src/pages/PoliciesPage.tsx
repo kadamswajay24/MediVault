@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { policyAPI } from '../services/api';
 import type { InsurancePolicyPlan, PolicyEnrollment } from '../types';
+import { CashlessHospitalFinder } from '../components/CashlessHospitalFinder';
 
 const formatINR = (amount: number) =>
   new Intl.NumberFormat('en-IN', {
@@ -19,7 +20,7 @@ const formatINR = (amount: number) =>
   }).format(amount);
 
 const formatDate = (date: string) =>
-  new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }).format(
+  new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' }).format(
     new Date(date)
   );
 
@@ -147,6 +148,8 @@ export const PoliciesPage: React.FC = () => {
           {notice}
         </div>
       )}
+
+      <CashlessHospitalFinder />
 
       <section className="space-y-4">
         <div>

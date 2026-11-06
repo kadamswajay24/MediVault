@@ -1,4 +1,6 @@
-import ClinicalAccessRequest from '../models/ClinicalAccessRequest.js';
+import ClinicalAccessRequest, {
+  CLINICAL_ACCESS_REASONS,
+} from '../models/ClinicalAccessRequest.js';
 import ProxyDelegation from '../models/ProxyDelegation.js';
 import User from '../models/User.js';
 import { createAuditLog } from '../services/auditService.js';
@@ -34,19 +36,36 @@ export const createClinicalAccessRequest = async (req, res, next) => {
       });
     }
 
-    const { patientMediVaultId, reason, requestedUntil } = req.body;
+    const { patientMediVaultId, reason, reasonDetails, requestedUntil } = req.body;
     const expiration = new Date(requestedUntil);
 
     if (
       typeof patientMediVaultId !== 'string' ||
       !/^MV-[A-F0-9]{16}$/i.test(patientMediVaultId.trim()) ||
       typeof reason !== 'string' ||
-      !reason.trim() ||
-      reason.trim().length > 1000
+      !CLINICAL_ACCESS_REASONS.includes(reason)
     ) {
       return res.status(400).json({
         success: false,
-        message: 'A valid patient MediVault ID and a reason of up to 1000 characters are required.',
+        message: 'A valid patient MediVault ID and clinical access reason are required.',
+      });
+    }
+
+    if (
+      (reason === 'Other' &&
+        (typeof reasonDetails !== 'string' ||
+          reasonDetails.trim().length < 5 ||
+          reasonDetails.trim().length > 500)) ||
+      (reason !== 'Other' &&
+        reasonDetails !== undefined &&
+        (typeof reasonDetails !== 'string' || reasonDetails.trim()))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          reason === 'Other'
+            ? 'Provide details between 5 and 500 characters for the selected reason.'
+            : 'Additional reason details are only accepted when “Other” is selected.',
       });
     }
     if (!requestedUntil || Number.isNaN(expiration.getTime()) || expiration <= new Date()) {
@@ -89,10 +108,12 @@ export const createClinicalAccessRequest = async (req, res, next) => {
       });
     }
 
+    const clinicalPurpose =
+      reason === 'Other' ? `Other: ${reasonDetails.trim()}` : reason;
     const request = await ClinicalAccessRequest.create({
       patient: patient._id,
       medicalStaff: req.user._id,
-      reason: reason.trim(),
+      reason: clinicalPurpose,
       requestedUntil: expiration,
     });
     await request.populate([
@@ -104,7 +125,7 @@ export const createClinicalAccessRequest = async (req, res, next) => {
       userId: patient._id,
       performedBy: req.user._id,
       action: 'ACCESS_REQUESTED',
-      details: `Medical staff ${req.user.name} requested patient-specific clinical access until ${expiration.toISOString()}: ${reason.trim()}`,
+      details: `Medical staff ${req.user.name} requested patient-specific clinical access until ${expiration.toISOString()}: ${clinicalPurpose}`,
       resourceId: request._id,
       resourceType: 'ClinicalAccessRequest',
       req,

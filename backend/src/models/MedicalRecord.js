@@ -49,6 +49,7 @@ const medicalRecordSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    storageFileId: { type: mongoose.Schema.Types.ObjectId, default: null },
     fileType: {
       type: String,
       required: true,
@@ -61,12 +62,26 @@ const medicalRecordSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    // Extensible placeholders for future milestones (Blockchain, IPFS, OCR, Encryption)
     metadata: {
       ipfsHash: { type: String, default: null },
       blockchainTxHash: { type: String, default: null },
       isEncrypted: { type: Boolean, default: false },
       ocrExtractedText: { type: String, default: '' },
+      identityCheck: {
+        status: {
+          type: String,
+          enum: ['matched', 'needs_review', 'unverified', 'not_checked'],
+          default: 'unverified',
+        },
+        message: { type: String, default: '' },
+        checkedAt: { type: Date, default: null },
+        confidence: { type: Number, min: 0, max: 100, default: null },
+        extractionMethod: {
+          type: String,
+          enum: ['pdf_text', 'ocr', 'unavailable'],
+          default: 'unavailable',
+        },
+      },
     },
   },
   {

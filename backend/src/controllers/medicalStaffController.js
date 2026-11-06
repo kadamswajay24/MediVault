@@ -4,6 +4,11 @@ import HealthProfile from '../models/HealthProfile.js';
 import MedicalRecord from '../models/MedicalRecord.js';
 import ClinicalAccessRequest from '../models/ClinicalAccessRequest.js';
 import { createAuditLog } from '../services/auditService.js';
+import {
+  generateLocalSummary,
+  LocalAiSummaryError,
+  searchMedicineCatalogLocally,
+} from '../services/localAiSummaryService.js';
 
 const requireActiveClinicalAccess = async (staffId, patientId) => {
   const grant = await ClinicalAccessRequest.findOne({
@@ -13,6 +18,22 @@ const requireActiveClinicalAccess = async (staffId, patientId) => {
     expiresAt: { $gt: new Date() },
   });
   return grant;
+};
+
+export const searchMedicineCatalog = async (req, res, next) => {
+  try {
+    const { matches, model } = await searchMedicineCatalogLocally(
+      req.body?.query,
+      req.body?.candidates
+    );
+    res.set('Cache-Control', 'no-store');
+    return res.status(200).json({ success: true, matches, model });
+  } catch (error) {
+    if (error instanceof LocalAiSummaryError) {
+      res.statusCode = error.statusCode;
+    }
+    return next(error);
+  }
 };
 
 // @desc    Add clinical consultation note or digital prescription
@@ -343,6 +364,158 @@ export const getPatientClinicalOverview = async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+};
+
+export const getPatientAiSummary = async (req, res, next) => {
+  try {
+    const patientMediVaultId = String(req.params.patientId || '').trim().toUpperCase();
+    if (!/^MV-[A-F0-9]{16}$/.test(patientMediVaultId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'A valid patient MediVault ID is required.',
+      });
+    }
+
+    const patient = await User.findOne({
+      mediVaultId: patientMediVaultId,
+      role: 'patient',
+      isActive: true,
+    }).select('_id name mediVaultId');
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient account not found.',
+      });
+    }
+
+    const accessGrant = await requireActiveClinicalAccess(req.user._id, patient._id);
+    if (!accessGrant) {
+      return res.status(403).json({
+        success: false,
+        message: 'An active patient-specific clinical access grant is required.',
+      });
+    }
+
+    const [profile, records, notes] = await Promise.all([
+      HealthProfile.findOne({ user: patient._id }).select(
+        'fullName dateOfBirth allergies medicalConditions medications'
+      ),
+      MedicalRecord.find({ user: patient._id })
+        .sort({ recordDate: -1 })
+        .limit(10)
+        .select('title category description recordDate metadata'),
+      MedicalNote.find({ patient: patient._id, deletedAt: null })
+        .sort({ createdAt: -1 })
+        .limit(8)
+        .select('noteType title diagnosis prescriptionItems clinicalNotes followUpDate createdAt'),
+    ]);
+
+    const sensitiveValues = [patient.name, profile?.fullName, profile?.dateOfBirth]
+      .filter((value) => typeof value === 'string' && value.trim())
+      .sort((left, right) => right.length - left.length);
+    const redactPatientIdentifiers = (text) => {
+      let sanitized = String(text || '');
+      for (const value of sensitiveValues) {
+        sanitized = sanitized.replace(
+          new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+          '[patient identifier]'
+        );
+      }
+      return sanitized;
+    };
+
+    const sections = [];
+    if (profile) {
+      sections.push(
+        `Patient-reported profile (not independently verified):\n` +
+        `Conditions: ${profile.medicalConditions.join(', ') || 'Not recorded'}\n` +
+        `Allergies: ${profile.allergies.join(', ') || 'Not recorded'}\n` +
+        `Medications: ${profile.medications.join(', ') || 'Not recorded'}`
+      );
+    }
+
+    for (const record of records) {
+      const identityStatus = record.metadata?.identityCheck?.status || 'unverified';
+      const recordHeader =
+        `Report (${new Date(record.recordDate).toISOString().slice(0, 10)}): ` +
+        `${record.category} - ${record.title}. Identity check: ${identityStatus}.`;
+
+      if (identityStatus !== 'matched') {
+        sections.push(
+          `${recordHeader} Report content is excluded because patient identity was not confirmed; review the original document.`
+        );
+        continue;
+      }
+
+      const reportText =
+        record.metadata?.ocrExtractedText?.trim() || record.description?.trim();
+      sections.push(
+        reportText
+          ? `${recordHeader}\n${redactPatientIdentifiers(reportText)}`
+          : `${recordHeader} No readable report text is available.`
+      );
+    }
+
+    for (const note of notes) {
+      const medications = note.prescriptionItems
+        .map((item) =>
+          [item.medicineName, item.dosage, item.frequency, item.duration]
+            .filter(Boolean)
+            .join(' ')
+        )
+        .filter(Boolean);
+      sections.push(
+        `Clinician-authored note (${new Date(note.createdAt).toISOString().slice(0, 10)}; ${note.noteType}): ` +
+        `${redactPatientIdentifiers(
+          [
+            note.title,
+            note.diagnosis ? `Recorded diagnosis: ${note.diagnosis}` : '',
+            note.clinicalNotes || '',
+            medications.length ? `Medicines recorded: ${medications.join('; ')}` : '',
+          ]
+            .filter(Boolean)
+            .join('\n')
+        )}`
+      );
+    }
+
+    const sourceText = sections.join('\n\n').slice(0, 12_000);
+    if (!sourceText.trim()) {
+      throw new LocalAiSummaryError(
+        'There is not enough authorized clinical information to summarize.',
+        422
+      );
+    }
+
+    const { summary, model } = await generateLocalSummary(
+      sourceText,
+      'en',
+      'clinician'
+    );
+
+    await createAuditLog({
+      userId: patient._id,
+      performedBy: req.user._id,
+      action: 'RECORD_AI_SUMMARIZED',
+      details: 'Generated a local AI clinical overview from patient-authorized records.',
+      resourceId: patient._id,
+      resourceType: 'PatientClinicalOverview',
+      req,
+    });
+
+    res.set('Cache-Control', 'no-store');
+    return res.status(200).json({
+      success: true,
+      summary,
+      model,
+      stored: false,
+    });
+  } catch (error) {
+    if (error instanceof LocalAiSummaryError) {
+      res.statusCode = error.statusCode;
+    }
+    return next(error);
   }
 };
 

@@ -1,9 +1,8 @@
-import path from 'path';
-import fs from 'fs';
+const formatINR = (value) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(value);
 import InsuranceClaim, { CLAIM_STATUSES, ADJUDICATED_STATUSES } from '../models/InsuranceClaim.js';
 import MedicalRecord from '../models/MedicalRecord.js';
 import { createAuditLog } from '../services/auditService.js';
-import { getUploadDirectory } from '../middleware/uploadMiddleware.js';
+import { readFile, sendFile } from '../services/fileStorageService.js';
 
 // Helper to generate human-readable unique claim ID
 const generateClaimNumber = () => {
@@ -79,6 +78,7 @@ export const submitClaim = async (req, res, next) => {
       claimAmount: numericAmount,
       approvedAmount: 0,
       status: 'Submitted',
+      history: [{ status: 'Submitted', note: 'Claim submitted', actor: req.user._id }],
       records,
       patientNotes: patientNotes ? patientNotes.trim() : '',
       hospitalName: hospitalName ? hospitalName.trim() : '',
@@ -252,6 +252,7 @@ export const reviewClaim = async (req, res, next) => {
       claim.approvedAmount = claim.claimAmount;
     }
 
+    claim.history.push({ status: claim.status, note: claim.agentRemarks || 'Claim reviewed', actor: req.user._id });
     await claim.save();
 
     // Audit log
@@ -259,7 +260,7 @@ export const reviewClaim = async (req, res, next) => {
       userId: claim.patient._id,
       performedBy: req.user._id,
       action: 'CLAIM_REVIEWED',
-      details: `Insurance claim ${claim.claimNumber} evaluated to [${status}] by agent ${req.user.name}. Approved payout: $${claim.approvedAmount}`,
+      details: `Insurance claim ${claim.claimNumber} evaluated to [${status}] by agent ${req.user.name}. Approved payout: ${formatINR(claim.approvedAmount)}`,
       resourceId: claim._id,
       resourceType: 'InsuranceClaim',
       req,
@@ -311,7 +312,7 @@ export const supplementClaim = async (req, res, next) => {
     if (newTotal > claim.claimAmount) {
       return res.status(400).json({
         success: false,
-        message: `Supplemental payment would exceed the original claimed amount of $${claim.claimAmount.toLocaleString()}. Maximum additional amount allowed: $${(claim.claimAmount - claim.approvedAmount).toLocaleString()}.`,
+        message: `Supplemental payment would exceed the original claimed amount of ${formatINR(claim.claimAmount)}. Maximum additional amount allowed: ${formatINR((claim.claimAmount - claim.approvedAmount))}.`,
       });
     }
 
@@ -330,13 +331,14 @@ export const supplementClaim = async (req, res, next) => {
       claim.status = 'Approved';
     }
 
+    claim.history.push({ status: claim.status, note: reason?.trim() || 'Supplemental payment authorized', actor: req.user._id });
     await claim.save();
 
     await createAuditLog({
       userId: claim.patient._id,
       performedBy: req.user._id,
       action: 'CLAIM_REVIEWED',
-      details: `Supplemental payment of $${numericAdditional.toLocaleString()} issued on claim ${claim.claimNumber} by ${req.user.name}. Total approved: $${newTotal.toLocaleString()}. Reason: ${reason || 'N/A'}`,
+      details: `Supplemental payment of ${formatINR(numericAdditional)} issued on claim ${claim.claimNumber} by ${req.user.name}. Total approved: ${formatINR(newTotal)}. Reason: ${reason || 'N/A'}`,
       resourceId: claim._id,
       resourceType: 'InsuranceClaim',
       req,
@@ -344,7 +346,7 @@ export const supplementClaim = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      message: `Supplemental payment of $${numericAdditional.toLocaleString()} successfully deposited. New total approved amount: $${newTotal.toLocaleString()}.`,
+      message: `Supplemental payment of ${formatINR(numericAdditional)} successfully deposited. New total approved amount: ${formatINR(newTotal)}.`,
       claim,
     });
   } catch (error) {
@@ -367,6 +369,11 @@ export const downloadClaimRecord = async (req, res, next) => {
       });
     }
 
+    const company = req.user.insuranceDetails?.companyName?.trim().toLowerCase();
+    if (req.user.role !== 'insurance_agent' || !company || company !== claim.insuranceCompany?.trim().toLowerCase()) {
+      return res.status(403).json({ success: false, message: 'You cannot access documents for this insurance company.' });
+    }
+
     // Verify that the record is in this claim
     const hasRecord = claim.records.some((r) => r.toString() === recordId);
     if (!hasRecord) {
@@ -384,15 +391,10 @@ export const downloadClaimRecord = async (req, res, next) => {
       });
     }
 
-    const uploadDir = getUploadDirectory();
-    const filePath = path.join(uploadDir, record.storedFileName);
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({
-        success: false,
-        message: 'Physical document file missing from storage.',
-      });
+    if (record.user.toString() !== claim.patient.toString()) {
+      return res.status(403).json({ success: false, message: 'Document does not belong to this claim patient.' });
     }
+    const buffer = await readFile(record);
 
     // Audit view
     await createAuditLog({
@@ -405,7 +407,7 @@ export const downloadClaimRecord = async (req, res, next) => {
       req,
     });
 
-    return res.download(filePath, record.fileName);
+    return sendFile(res, record, buffer);
   } catch (error) {
     next(error);
   }

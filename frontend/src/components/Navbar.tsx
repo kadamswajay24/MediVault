@@ -39,6 +39,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openNavGroup, setOpenNavGroup] = useState<string | null>(null);
   const isRegistrationPage = location.pathname.endsWith('/register');
+  const isLoginPage = location.pathname.endsWith('/login');
+  const isPortalHome = location.pathname === '/';
   const guestPortal = location.pathname.startsWith('/clinical/')
     ? {
         signInPath: '/clinical/login',
@@ -60,7 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
         : {
             signInPath: '/patient/login',
             signInLabel: 'Sign In',
-            secondary: isRegistrationPage ? null : { path: '/patient/register', label: 'Get Started' },
+            secondary: isRegistrationPage ? null : { path: '/patient/register', label: 'Create account' },
           };
 
   const handleLogout = () => {
@@ -77,6 +79,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
         return {
           primary: [
             { name: 'Claims Queue', path: '/claims', icon: FileCheck2 },
+            { name: 'Marketplace Plans', path: '/insurance/marketplace', icon: ShieldCheck },
             { name: 'Audit Trail', path: '/audit-logs', icon: History },
           ],
           groups: [],
@@ -128,6 +131,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
               name: 'Care & Access',
               icon: Users,
               items: [
+                { name: 'Appointments', path: '/appointments', icon: CalendarDays },
                 { name: 'Caregivers', path: '/caregivers', icon: Users },
                 { name: 'Access Approvals', path: '/access-requests', icon: KeyRound },
                 { name: 'Audit Trail', path: '/audit-logs', icon: History },
@@ -189,23 +193,35 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
                 : user?.role === 'admin'
                 ? '/admin'
                 : user?.role === 'insurance_agent'
-                ? '/claims'
+                ? '/insurance/marketplace'
                 : user?.role === 'medical_staff'
                 ? '/medical-staff'
                 : '/dashboard'
             }
             className="flex items-center gap-2 group"
           >
-            <div className="h-8 w-8 rounded-lg bg-emerald-500 flex items-center justify-center text-slate-950 shadow-sm">
-              <ShieldCheck className="w-4 h-4 stroke-[2.4]" />
-            </div>
-            <span className="text-base font-bold tracking-tight text-slate-900 dark:text-white">
-              Medi<span className="text-emerald-600 dark:text-emerald-400">Vault</span>
+            <img
+              src="/medivault-icon.svg"
+              alt=""
+              aria-hidden="true"
+              width="40"
+              height="40"
+              className="shrink-0 dark:hidden"
+            />
+            <img
+              src="/medivault-logo.svg"
+              alt="MediVault"
+              width="172"
+              height="40"
+              className="hidden h-10 w-auto dark:block"
+            />
+            <span className="brand-wordmark text-base font-bold tracking-tight text-slate-900 dark:hidden">
+              Medi<span className="text-[#914B54]">Vault</span>
             </span>
           </Link>
 
           {/* Desktop Nav Links */}
-          {isAuthenticated && (
+          {isAuthenticated && user?.role !== 'patient' && (
             <nav className="hidden lg:flex items-center gap-1">
               {primaryNavItems.map((item) => {
                 const Icon = item.icon;
@@ -285,6 +301,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
             onClick={toggleTheme}
             id="theme-toggle-btn"
             title={`Switch to ${isDark ? 'Light' : 'Dark'} mode`}
+            aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
             className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800"
           >
             {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
@@ -292,7 +309,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
 
           {isAuthenticated ? (
             <>
-              {onOpenUpload && user?.role === 'patient' && (
+              {onOpenUpload && user?.role === 'patient' && activeDependent?.accessLevel !== 'read_only' && (
                 <button
                   onClick={onOpenUpload}
                   className="button-primary flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm"
@@ -310,12 +327,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
                       {user?.name}
                     </span>
                     <span
-                      className={`text-[9px] px-1.5 py-0.2 rounded border font-mono uppercase font-bold ${roleBadge.color}`}
+                      className={`text-[9px] px-1.5 py-0.2 rounded border uppercase font-bold ${roleBadge.color}`}
                     >
                       {roleBadge.label}
                     </span>
                   </div>
-                  <span className="text-[10px] text-slate-500 font-mono truncate max-w-[140px]" title="Your MediVault ID">
+                  <span className="text-[10px] text-slate-500 truncate max-w-[140px]" title="Your MediVault ID">
                     ID: {user?.mediVaultId}
                   </span>
                 </div>
@@ -333,6 +350,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
               {/* Mobile Menu */}
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+                aria-expanded={mobileMenuOpen}
                 className="lg:hidden p-1.5 text-slate-600 dark:text-slate-400"
               >
                 {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -340,13 +359,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
             </>
           ) : (
             <div className="flex items-center gap-2 text-xs">
-              <Link
-                to={guestPortal.signInPath}
-                className="px-3 py-1.5 font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900"
-              >
-                {guestPortal.signInLabel}
-              </Link>
-              {guestPortal.secondary && (
+              {!isLoginPage && !isPortalHome && (
+                <Link
+                  to={guestPortal.signInPath}
+                  className="px-3 py-1.5 font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900"
+                >
+                  {guestPortal.signInLabel}
+                </Link>
+              )}
+              {!isPortalHome && guestPortal.secondary && (
                 <Link
                   to={guestPortal.secondary.path}
                   className="button-primary px-3 py-1.5 rounded-lg font-semibold"
@@ -362,7 +383,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
       {/* Mobile Drawer */}
       {mobileMenuOpen && isAuthenticated && (
         <div className="lg:hidden border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 py-3 space-y-1">
-          <p className="px-3 py-2 text-xs font-mono text-slate-500">
+          <p className="px-3 py-2 text-xs text-slate-500">
             Your MediVault ID: <span className="font-semibold text-slate-700 dark:text-slate-300">{user?.mediVaultId}</span>
           </p>
 

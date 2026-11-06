@@ -146,9 +146,8 @@ export const getMyAppointments = async (req, res, next) => {
 export const createAppointment = async (req, res, next) => {
   try {
     const { doctorId, appointmentDate, time } = req.body;
-    const timeZoneOffsetMinutes = req.body.timeZoneOffsetMinutes === undefined
-      ? 0
-      : Number(req.body.timeZoneOffsetMinutes);
+    // Hospital schedules are always interpreted in India Standard Time.
+    const timeZoneOffsetMinutes = 330;
     if (
       typeof doctorId !== 'string' ||
       !/^[a-f\d]{24}$/i.test(doctorId) ||
@@ -468,4 +467,22 @@ export const decideAppointment = async (req, res, next) => {
   } catch (error) {
     return next(error);
   }
+};
+
+export const cancelAppointment = async (req, res, next) => {
+  try {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid appointment ID.' });
+    if (req.proxyDelegation?.accessLevel === 'read_only') return res.status(403).json({ success: false, message: 'Full caregiver access is required.' });
+    const now = new Date();
+    const date = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const time = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    const appointment = await Appointment.findOneAndUpdate({
+      _id: req.params.id, patient: req.effectivePatientId,
+      status: { $in: ['pending', 'confirmed'] },
+      $or: [{ appointmentDate: { $gt: date } }, { appointmentDate: date, time: { $gt: time } }],
+    }, { $set: { status: 'cancelled', slotReserved: false, cancelledAt: now, cancelledBy: req.user._id } }, { new: true, runValidators: true });
+    if (!appointment) return res.status(409).json({ success: false, message: 'This appointment is unavailable for cancellation. Refresh your appointments.' });
+    await createAuditLog({ userId: req.effectivePatientId, performedBy: req.user._id, action: 'APPOINTMENT_CANCELLED', details: `Appointment at ${appointment.hospitalName} on ${appointment.appointmentDate} at ${appointment.time} was cancelled.`, resourceId: appointment._id, resourceType: 'Appointment', req });
+    return res.json({ success: true, message: 'Appointment cancelled. The slot is available again.' });
+  } catch (error) { next(error); }
 };

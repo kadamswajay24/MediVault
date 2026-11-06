@@ -91,7 +91,22 @@ export interface MedicalRecord {
     blockchainTxHash?: string | null;
     isEncrypted?: boolean;
     ocrExtractedText?: string;
+    identityCheck?: {
+      status: 'matched' | 'needs_review' | 'unverified' | 'not_checked';
+      message: string;
+      checkedAt: string | null;
+      confidence: number | null;
+      extractionMethod: 'pdf_text' | 'ocr' | 'unavailable';
+    };
   };
+}
+
+export interface MedicalRecordSummary {
+  summary: string;
+  keyFindings: string[];
+  medicationMentions: string[];
+  datesAndValues: string[];
+  questionsForDoctor: string[];
 }
 
 export type ClaimType =
@@ -111,6 +126,7 @@ export type ClaimStatus =
   | 'More Information Needed';
 
 export interface InsuranceClaim {
+  history?: { status: ClaimStatus; note: string; at: string }[];
   _id: string;
   patient: User | string;
   claimNumber: string;
@@ -155,6 +171,19 @@ export interface ManagedInsurancePolicyPlan extends Omit<InsurancePolicyPlan, 'i
   status: 'draft' | 'published' | 'archived';
   createdAt: string;
   updatedAt: string;
+}
+
+export interface InsurancePlanAssistantMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface InsurancePlanAssistantDraft {
+  name: string | null;
+  description: string | null;
+  coverageAmount: number | null;
+  monthlyPremium: number | null;
+  highlights: string[];
 }
 
 export interface PolicyEnrollment {
@@ -270,6 +299,11 @@ export interface DashboardStats {
 
 export interface DashboardResponse {
   success: boolean;
+  attention?: {
+    pendingAccessRequests: number;
+    claimsNeedingInformation: number;
+    upcomingAppointments: { _id: string; hospitalName: string; appointmentDate: string; time: string; status: 'confirmed' | 'pending' }[];
+  };
   stats: DashboardStats;
   healthProfile: HealthProfile;
   recentRecords: MedicalRecord[];

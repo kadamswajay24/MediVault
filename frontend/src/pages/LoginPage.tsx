@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  ShieldCheck,
   Mail,
   Lock,
   Eye,
   EyeOff,
-  ArrowRight,
   AlertCircle,
   Loader2,
+  ArrowLeft,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import type { UserRole } from '../types';
@@ -83,38 +82,25 @@ export const LoginPage: React.FC<{ portal: LoginPortal }> = ({ portal }) => {
   return (
     <section
       aria-labelledby="login-page-title"
-      className="login-layout flex flex-col items-center justify-start px-4 py-6 sm:min-h-[calc(100vh-10rem)] sm:justify-center sm:py-10"
+      className="login-layout flex min-h-[calc(100vh-9rem)] items-center justify-center px-4 py-8"
     >
-      <div className="w-full max-w-md space-y-5 sm:space-y-7">
-        <div className="text-center">
-          <div className="mx-auto mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-500 ring-1 ring-emerald-500/20 sm:mb-4 sm:h-12 sm:w-12">
-            <ShieldCheck className="h-6 w-6 stroke-[2.2]" aria-hidden="true" />
-          </div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-600 dark:text-emerald-400">
-            {portal === 'patient' ? 'Your personal health space' : details.title}
-          </p>
-          <h1
-            id="login-page-title"
-            className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-[2rem]"
-          >
-            {portal === 'patient' ? 'Your health. Your records. Your control.' : 'Sign in to continue'}
-          </h1>
-          <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-600 dark:text-slate-400">
-            {portal === 'patient'
-              ? 'Access your health records and manage who can see them.'
-              : details.description}
-          </p>
-        </div>
-
-        <section className="surface-card p-6 sm:p-8" aria-labelledby="login-card-title">
+      <div className="w-full max-w-md">
+        <Link
+          to="/"
+          className="mb-4 inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#914B54] dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Back to portals
+        </Link>
+        <div className="surface-card p-6 sm:p-8">
           <div className="mb-6">
-            <h2 id="login-card-title" className="text-xl font-semibold text-slate-900 dark:text-white">
-              Welcome back
-            </h2>
+            <h1 id="login-page-title" className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+              {portal === 'patient' ? 'Sign in' : `Sign in to ${details.title}`}
+            </h1>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
               {portal === 'patient'
-                ? 'Sign in to continue to your personal health space.'
-                : 'Sign in with your approved account to continue.'}
+                ? 'Sign in to access your health records.'
+                : details.description}
             </p>
           </div>
 
@@ -132,7 +118,7 @@ export const LoginPage: React.FC<{ portal: LoginPortal }> = ({ portal }) => {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label htmlFor="login-email-input" className="mb-2 block text-sm font-medium text-slate-800 dark:text-slate-200">
-                Email Address
+                Email address
               </label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400" aria-hidden="true" />
@@ -146,7 +132,7 @@ export const LoginPage: React.FC<{ portal: LoginPortal }> = ({ portal }) => {
                   placeholder="you@example.com"
                   aria-invalid={Boolean(error)}
                   aria-describedby={error ? 'login-error' : undefined}
-                  className="h-12 w-full rounded-lg border border-slate-300 bg-slate-50 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-500 transition-colors focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/25 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:bg-slate-950"
+                  className="h-12 w-full rounded-lg border border-slate-300 bg-slate-50 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-500 transition-colors focus:border-[#914B54] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#914B54]/20 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:bg-slate-950"
                   required
                 />
               </div>
@@ -167,7 +153,7 @@ export const LoginPage: React.FC<{ portal: LoginPortal }> = ({ portal }) => {
                   placeholder="Enter your password"
                   aria-invalid={Boolean(error)}
                   aria-describedby={error ? 'login-error' : undefined}
-                  className="h-12 w-full rounded-lg border border-slate-300 bg-slate-50 py-2 pl-10 pr-14 text-sm text-slate-900 placeholder:text-slate-500 transition-colors focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/25 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:bg-slate-950"
+                  className="h-12 w-full rounded-lg border border-slate-300 bg-slate-50 py-2 pl-10 pr-14 text-sm text-slate-900 placeholder:text-slate-500 transition-colors focus:border-[#914B54] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#914B54]/20 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:bg-slate-950"
                   required
                 />
                 <button
@@ -188,22 +174,17 @@ export const LoginPage: React.FC<{ portal: LoginPortal }> = ({ portal }) => {
               type="submit"
               id="login-submit-btn"
               disabled={loading}
-              className="button-primary mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+              className="button-primary mt-1 flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>Signing in...</span>
                 </>
-              ) : (
-                <>
-                  <span>{portal === 'patient' ? 'Sign in securely' : 'Sign in'}</span>
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                </>
-              )}
+              ) : <span>Sign in</span>}
             </button>
           </form>
-        </section>
+        </div>
 
         <p className="text-center text-sm text-slate-600 dark:text-slate-400">
           {portal === 'admin' ? (
@@ -213,7 +194,7 @@ export const LoginPage: React.FC<{ portal: LoginPortal }> = ({ portal }) => {
               {portal === 'patient' ? 'New to MediVault?' : 'Need an account?'}{' '}
               <Link
                 to={portal === 'patient' ? '/patient/register' : portal === 'clinical' ? '/clinical/register' : '/insurance/register'}
-                className="font-semibold text-emerald-700 underline-offset-4 hover:underline dark:text-emerald-400"
+                className="font-semibold text-[#914B54] underline-offset-4 hover:underline dark:text-[#DDA6A3]"
               >
                 {portal === 'patient'
                   ? 'Create a patient account'
@@ -223,18 +204,6 @@ export const LoginPage: React.FC<{ portal: LoginPortal }> = ({ portal }) => {
               </Link>
             </>
           )}
-        </p>
-        <p className="flex items-center justify-center gap-2 text-center text-xs text-slate-600 dark:text-slate-400">
-          <Lock className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-          Privacy-first access to your health records.
-        </p>
-        <p className="text-center text-xs text-slate-600 dark:text-slate-400">
-          <Link
-            to="/"
-            className="font-medium underline-offset-4 hover:text-emerald-700 hover:underline dark:hover:text-emerald-300"
-          >
-            Back to MediVault home
-          </Link>
         </p>
       </div>
     </section>

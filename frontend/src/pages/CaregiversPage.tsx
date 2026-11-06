@@ -111,13 +111,13 @@ export const CaregiversPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="caregivers-page max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-              Family &amp; Caregiver Delegation
+              Caregivers &amp; family access
             </h1>
             <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium">
               Dual-Context Access
@@ -136,7 +136,7 @@ export const CaregiversPage: React.FC = () => {
           className="button-primary inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm"
         >
           <UserPlus className="w-4 h-4" />
-          Authorize New Caregiver
+          Authorize caregiver
         </button>
       </div>
 
@@ -197,7 +197,7 @@ export const CaregiversPage: React.FC = () => {
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Users className="w-4 h-4 text-emerald-500" />
-                Dependents I Manage ({dependents.length})
+                People I Manage ({dependents.length})
               </h2>
             </div>
 
@@ -228,7 +228,7 @@ export const CaregiversPage: React.FC = () => {
                               {dep.relationship}
                             </span>
                           </div>
-                          <p className="text-xs text-slate-500 mt-0.5 font-mono">
+                          <p className="text-xs text-slate-500 mt-0.5 font-sans">
                             MediVault ID: {dep.patient.mediVaultId}
                           </p>
 
@@ -273,13 +273,13 @@ export const CaregiversPage: React.FC = () => {
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                My Authorized Caregivers ({proxies.length})
+                People with access to my account ({proxies.length})
               </h2>
             </div>
 
             {proxies.length === 0 ? (
               <div className="p-6 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-slate-500 text-xs">
-                No caregivers currently have proxy access to your account. Click "Authorize New Caregiver" to grant access to a trusted family member.
+                No caregivers currently have proxy access to your account. Authorize a trusted person to help manage your health information.
               </div>
             ) : (
               <div className="space-y-3">
@@ -297,7 +297,7 @@ export const CaregiversPage: React.FC = () => {
                           {del.relationship}
                         </span>
                         <span
-                          className={`text-[10px] px-1.5 py-0.5 rounded font-mono uppercase ${
+                          className={`text-[10px] px-1.5 py-0.5 rounded font-sans uppercase ${
                             del.accessLevel === 'read_only'
                               ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
                               : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
@@ -306,11 +306,11 @@ export const CaregiversPage: React.FC = () => {
                           {del.accessLevel === 'read_only' ? 'Read-Only' : 'Full Access'}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5 font-mono">
+                      <p className="text-xs text-slate-500 mt-0.5 font-sans">
                         MediVault ID: {del.proxyUser.mediVaultId}
                       </p>
                       <p className="text-[11px] text-slate-400 mt-1">
-                        Granted {new Date(del.grantedAt).toLocaleDateString()}
+                        Granted {new Date(del.grantedAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' })}
                       </p>
                     </div>
 

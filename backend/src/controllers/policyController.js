@@ -106,7 +106,7 @@ export const payMonthlyPremium = async (req, res, next) => {
     if (policy.nextPremiumDue > paidAt) {
       return res.status(400).json({
         success: false,
-        message: `The next premium is not due until ${policy.nextPremiumDue.toLocaleDateString('en-IN')}.`,
+        message: `The next premium is not due until ${policy.nextPremiumDue.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}.`,
       });
     }
 

@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { randomBytes } from 'crypto';
 import User from '../models/User.js';
+import AuthRateLimit from '../models/AuthRateLimit.js';
 
 export const connectDB = async () => {
   try {
@@ -8,6 +9,7 @@ export const connectDB = async () => {
     console.log(`[MongoDB Connected]: ${conn.connection.host}/${conn.connection.name}`);
 
     await User.init();
+    await AuthRateLimit.init();
     const usersWithoutIds = await User.find({
       $or: [
         { mediVaultId: { $exists: false } },

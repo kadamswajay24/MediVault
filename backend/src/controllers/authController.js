@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { getJwtSecret } from '../config/auth.js';
 import User from '../models/User.js';
 import HealthProfile from '../models/HealthProfile.js';
 import { createAuditLog } from '../services/auditService.js';
@@ -8,7 +9,7 @@ import { generateCompanyAgentId } from '../services/agentIdService.js';
 const generateToken = (id) => {
   return jwt.sign(
     { id },
-    process.env.JWT_SECRET || 'medivault_super_secret_jwt_key_2026_dev_env',
+    getJwtSecret(),
     {
       expiresIn: process.env.JWT_EXPIRES_IN || '7d',
     }

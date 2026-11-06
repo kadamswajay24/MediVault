@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+<title id="title">MediVault medical shield</title>
+<desc id="desc">A warm ivory medical cross with an ECG pulse inside a muted rose shield.</desc>
+<rect x="4" y="4" width="120" height="120" rx="29" fill="#914B54"/>
+<path d="M64 13 C76 22 89 27 103 30 V57 C103 80 87 100 64 113 C41 100 25 80 25 57 V30 C39 27 52 22 64 13Z"
+ fill="none" stroke="#F4EEE8" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M54 35.5 Q54 32 57.5 32 H70.5 Q74 32 74 35.5 V51 H90.5 Q94 51 94 54.5 V69.5 Q94 73 90.5 73 H74 V89.5 Q74 93 70.5 93 H57.5 Q54 93 54 89.5 V73 H37.5 Q34 73 34 69.5 V54.5 Q34 51 37.5 51 H54Z" fill="#F4EEE8"/>
+<path d="M27 62.2 H43.5 L50.5 52 L59 76 L68.5 42.5 L78 70 L85 62.2 H101"
+ fill="none" stroke="#914B54" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,289 +1,137 @@
-import React, { useState, useRef } from 'react';
-import {
-  X,
-  UploadCloud,
-  FileText,
-  AlertCircle,
-  Loader2,
-} from 'lucide-react';
+import { indiaDateInput } from '../utils/indiaFormat';
+import React, { useRef, useState } from 'react';
+import { X, UploadCloud } from 'lucide-react';
 import { RECORD_CATEGORIES } from '../types';
-import type { RecordCategory, MedicalRecord } from '../types';
+import type { MedicalRecord, RecordCategory } from '../types';
 import { recordAPI } from '../services/api';
+import { formatFileSize } from '../utils/formatFileSize';
 
 interface UploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onUploadSuccess: (newRecord: MedicalRecord) => void;
+  onUploadSuccess: (record: MedicalRecord) => void;
 }
+interface UploadEntry {
+  id: number;
+  file: File;
+  title: string;
+  category: RecordCategory;
+  recordDate: string;
+  description: string;
+  status: 'ready' | 'uploading' | 'done' | 'error';
+  progress: number;
+  error?: string;
+}
+const inputClass = 'w-full rounded-lg border border-slate-300 bg-white p-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white';
+const today = indiaDateInput;
 
-export const UploadModal: React.FC<UploadModalProps> = ({
-  isOpen,
-  onClose,
-  onUploadSuccess,
-}) => {
-  const [file, setFile] = useState<File | null>(null);
-  const [title, setTitle] = useState('');
-  const [category, setCategory] = useState<RecordCategory>('Laboratory Report');
-  const [recordDate, setRecordDate] = useState(
-    () => new Date().toISOString().split('T')[0]
-  );
-  const [description, setDescription] = useState('');
+export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onUploadSuccess }) => {
+  const [entries, setEntries] = useState<UploadEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [notice, setNotice] = useState('');
+  const picker = useRef<HTMLInputElement>(null);
+  const nextId = useRef(0);
+  const busy = useRef(false);
+  const update = (id: number, changes: Partial<UploadEntry>) => setEntries(current => current.map(entry => entry.id === id ? { ...entry, ...changes } : entry));
 
-  if (!isOpen) return null;
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const selected = e.target.files[0];
-      const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
-      if (!validTypes.includes(selected.type)) {
-        setError('Unsupported format. Please select a PDF, PNG, or JPG/JPEG file.');
-        return;
+  const addFiles = (files: FileList | null) => {
+    if (!files || busy.current) return;
+    const messages: string[] = [];
+    const added: UploadEntry[] = [];
+    for (const file of Array.from(files)) {
+      if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type) || file.size === 0 || file.size > 4 * 1024 * 1024) {
+        messages.push(`${file.name}: select a nonempty PDF, PNG, or JPG up to 4 MB.`);
+        continue;
       }
-      if (selected.size > 10 * 1024 * 1024) {
-        setError('File size exceeds the 10 MB limit.');
-        return;
+      if ([...entries, ...added].some(entry => entry.file.name === file.name && entry.file.size === file.size && entry.file.lastModified === file.lastModified)) {
+        messages.push(`${file.name} is already in this queue.`);
+        continue;
       }
-      setError(null);
-      setFile(selected);
-      if (!title) {
-        const nameWithoutExt = selected.name.substring(0, selected.name.lastIndexOf('.')) || selected.name;
-        setTitle(nameWithoutExt.replace(/[-_]/g, ' '));
-      }
+      added.push({ id: nextId.current++, file, title: file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '), category: 'Laboratory Report', recordDate: today(), description: '', status: 'ready', progress: 0 });
     }
+    setEntries(current => [...current, ...added]);
+    setNotice(messages.join(' '));
+    if (picker.current) picker.current.value = '';
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const dropped = e.dataTransfer.files[0];
-      const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
-      if (!validTypes.includes(dropped.type)) {
-        setError('Unsupported format. Please drop a PDF, PNG, or JPG/JPEG file.');
-        return;
-      }
-      if (dropped.size > 10 * 1024 * 1024) {
-        setError('File size exceeds the 10 MB limit.');
-        return;
-      }
-      setError(null);
-      setFile(dropped);
-      if (!title) {
-        const nameWithoutExt = dropped.name.substring(0, dropped.name.lastIndexOf('.')) || dropped.name;
-        setTitle(nameWithoutExt.replace(/[-_]/g, ' '));
-      }
-    }
+  const close = () => {
+    if (busy.current) return;
+    setEntries([]);
+    setNotice('');
+    onClose();
   };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!file) {
-      setError('Please select or drop a medical document to upload.');
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (busy.current) return;
+    const pending = entries.filter(entry => entry.status !== 'done');
+    if (!pending.length) return;
+    if (pending.some(entry => !entry.title.trim() || !entry.recordDate)) {
+      setNotice('Give every document a title and record date.');
       return;
     }
-    if (!title.trim()) {
-      setError('Record title is required.');
-      return;
-    }
-
+    busy.current = true;
     setLoading(true);
-    setError(null);
-
+    setNotice('');
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('title', title.trim());
-      formData.append('category', category);
-      formData.append('recordDate', recordDate);
-      formData.append('description', description.trim());
-
-      const response = await recordAPI.uploadRecord(formData);
-      if (response.success && response.record) {
-        onUploadSuccess(response.record);
-        handleClose();
+      for (const entry of pending) {
+        update(entry.id, { status: 'uploading', progress: 0, error: undefined });
+        const form = new FormData();
+        form.append('file', entry.file);
+        form.append('title', entry.title.trim());
+        form.append('category', entry.category);
+        form.append('recordDate', entry.recordDate);
+        form.append('description', entry.description.trim());
+        try {
+          const response = await recordAPI.uploadRecord(form, progress => update(entry.id, { progress }));
+          if (!response.success || !response.record) throw new Error(response.message || 'Upload failed.');
+          update(entry.id, { status: 'done', progress: 100 });
+          onUploadSuccess(response.record);
+        } catch (error: unknown) {
+          const failure = error as { response?: { data?: { message?: string } }; message?: string };
+          update(entry.id, { status: 'error', error: failure.response?.data?.message || failure.message || 'Upload failed. Please try again.' });
+        }
       }
-    } catch (err: any) {
-      setError(
-        err.response?.data?.message || 'Failed to upload medical record. Please try again.'
-      );
     } finally {
+      busy.current = false;
       setLoading(false);
     }
   };
-
-  const handleClose = () => {
-    setFile(null);
-    setTitle('');
-    setDescription('');
-    setError(null);
-    onClose();
-  };
-
+  if (!isOpen) return null;
+  const pendingCount = entries.filter(entry => entry.status !== 'done').length;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 dark:bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto transition-colors duration-200">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20">
-              <UploadCloud className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Upload Medical Record</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">PDF, JPG, or PNG up to 10MB</p>
-            </div>
-          </div>
-          <button
-            onClick={handleClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="upload-heading" aria-busy={loading} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 dark:bg-slate-900">
+        <div className="flex items-start justify-between gap-4">
+          <div><h2 id="upload-heading" className="text-lg font-semibold">Upload medical records</h2><p className="mt-1 text-sm text-slate-500">Add several documents. Review each title and date before uploading.</p></div>
+          <button type="button" disabled={loading} onClick={close} aria-label="Close upload dialog" className="p-2 disabled:opacity-40"><X size={20} /></button>
         </div>
-
-        {error && (
-          <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300 text-sm flex items-center gap-2.5">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          {/* Dropzone */}
-          <div
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
-              file
-                ? 'border-teal-500/60 bg-teal-50/60 dark:bg-teal-500/5'
-                : 'border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600 bg-slate-50/60 dark:bg-slate-800/30'
-            }`}
-          >
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept=".pdf,.png,.jpg,.jpeg"
-              className="hidden"
-            />
-            {file ? (
-              <div className="flex items-center justify-center gap-3 text-left">
-                <div className="p-2.5 rounded-xl bg-teal-500/20 text-teal-700 dark:text-teal-300">
-                  <FileText className="w-6 h-6" />
-                </div>
-                <div className="truncate max-w-xs">
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{file.name}</p>
-                  <p className="text-xs text-teal-600 dark:text-teal-400 font-mono font-medium">
-                    {(file.size / (1024 * 1024)).toFixed(2)} MB • {file.type.split('/')[1]?.toUpperCase()}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                <UploadCloud className="w-8 h-8 text-teal-600 dark:text-teal-400 mx-auto" />
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                  Click to browse or drag & drop document
-                </p>
-                <p className="text-xs text-slate-500">Supports PDF, PNG, JPG (Max 10MB)</p>
-              </div>
-            )}
-          </div>
-
-          {/* Title */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-400 mb-1.5">
-              Record Title <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              id="upload-record-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Complete Blood Count (CBC) Report"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700/80 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
-              required
-            />
-          </div>
-
-          {/* Category & Date Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-400 mb-1.5">
-                Category <span className="text-rose-500">*</span>
-              </label>
-              <select
-                id="upload-record-category"
-                value={category}
-                onChange={(e) => setCategory(e.target.value as RecordCategory)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700/80 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
-              >
-                {RECORD_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
+        <p className="my-4 text-sm text-slate-500">Documents are checked against the patient profile. Unreadable details or mismatches may need review; this does not verify document authenticity.</p>
+        {notice && <p role="alert" className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{notice}</p>}
+        <form onSubmit={submit} className="space-y-4">
+          <button type="button" disabled={loading} onClick={() => picker.current?.click()} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); addFiles(event.dataTransfer.files); }} className="w-full rounded-xl border-2 border-dashed border-slate-300 p-5 text-center disabled:opacity-40 dark:border-slate-700">
+            <UploadCloud className="mx-auto mb-2" /><span className="block text-sm font-medium">Choose files or drag them here</span><span className="text-sm text-slate-500">PDF, PNG, JPG - Up to 4 MB each</span>
+          </button>
+          <input ref={picker} type="file" multiple accept=".pdf,.png,.jpg,.jpeg" onChange={event => addFiles(event.target.files)} className="hidden" />
+          {entries.map(entry => <fieldset key={entry.id} disabled={loading || entry.status === 'done'} className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+            <legend className="max-w-full truncate px-1 text-sm font-semibold">{entry.file.name}</legend>
+            <div className="flex items-center justify-between text-sm"><span className="text-slate-500">{formatFileSize(entry.file.size)}</span>{entry.status !== 'done' && <button type="button" onClick={() => setEntries(current => current.filter(item => item.id !== entry.id))} className="text-rose-600">Remove</button>}</div>
+            <label className="block text-sm">Record title<input required maxLength={200} value={entry.title} onChange={event => update(entry.id, { title: event.target.value })} className={inputClass} /></label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm">Category<select value={entry.category} onChange={event => update(entry.id, { category: event.target.value as RecordCategory })} className={inputClass}>{RECORD_CATEGORIES.map(category => <option key={category}>{category}</option>)}</select></label>
+              <label className="block text-sm">Record date<input required type="date" value={entry.recordDate} onChange={event => update(entry.id, { recordDate: event.target.value })} className={inputClass} /></label>
             </div>
-
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-400 mb-1.5">
-                Record Date
-              </label>
-              <input
-                type="date"
-                id="upload-record-date"
-                value={recordDate}
-                onChange={(e) => setRecordDate(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700/80 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
-              />
+            <label className="block text-sm">Notes (optional)<textarea rows={2} value={entry.description} onChange={event => update(entry.id, { description: event.target.value })} className={inputClass} /></label>
+            <div aria-live="polite" className="text-sm">
+              {entry.status === 'uploading' && <><progress className="w-full" value={entry.progress} max={100} aria-label={`Upload progress for ${entry.file.name}`} /><p>{entry.progress < 100 ? `Uploading ${entry.progress}%` : 'File transferred. Checking and saving...'}</p></>}
+              {entry.status === 'done' && <p className="text-teal-700 dark:text-teal-300">Uploaded successfully</p>}
+              {entry.status === 'error' && <p role="alert" className="text-rose-600">{entry.error}</p>}
             </div>
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-400 mb-1.5">
-              Clinical Notes / Description
-            </label>
-            <textarea
-              id="upload-record-description"
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Doctor's recommendations, diagnostic lab name, dosage details..."
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700/80 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
-            />
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={loading}
-              className="px-4 py-2 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              id="upload-submit-btn"
-              disabled={loading || !file}
-              className="button-primary flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Securing Record...</span>
-                </>
-              ) : (
-                <>
-                  <UploadCloud className="w-4 h-4" />
-                  <span>Upload & Secure</span>
-                </>
-              )}
-            </button>
+          </fieldset>)}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
+            <p role="status" className="text-sm text-slate-500">{entries.filter(entry => entry.status === 'done').length} of {entries.length} uploaded</p>
+            <div className="flex gap-3"><button type="button" disabled={loading} onClick={close} className="rounded-lg border px-4 py-2 disabled:opacity-40">{entries.length && !pendingCount ? 'Done' : 'Close'}</button>
+              {!!pendingCount && <button type="submit" disabled={loading} className="button-primary rounded-lg px-4 py-2 disabled:opacity-50">{loading ? 'Uploading...' : `Upload ${pendingCount} remaining`}</button>}
+            </div>
           </div>
         </form>
       </div>

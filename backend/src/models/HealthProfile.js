@@ -43,7 +43,20 @@ const healthProfileSchema = new mongoose.Schema(
     emergencyContact: {
       name: { type: String, trim: true, default: '' },
       relationship: { type: String, trim: true, default: '' },
-      phone: { type: String, trim: true, default: '' },
+      phone: {
+        type: String, trim: true, default: '',
+        set: (value) => {
+          if (typeof value !== 'string') return value;
+          const compact = value.trim().replace(/[ () .-]/g, '');
+          if (/^[0-9]{10}$/.test(compact)) return `+91${compact}`;
+          if (/^\+91[0-9]{10}$/.test(compact)) return compact;
+          return value.trim();
+        },
+        validate: {
+          validator: (value) => !value || /^\+91[0-9]{10}$/.test(value),
+          message: 'Emergency phone number must be +91 followed by exactly 10 digits.',
+        },
+      },
     },
   },
   {

@@ -5,12 +5,15 @@ export const notFound = (req, res, next) => {
 };
 
 export const errorHandler = (err, req, res, next) => {
-  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+  if (res.headersSent) return next(err);
+  const statusCode = err.code === 'LIMIT_FILE_SIZE' ? 413
+    : err.name === 'MulterError' ? 400
+    : err.statusCode || (res.statusCode === 200 ? 500 : res.statusCode);
   console.error(`[API Error] [${req.method} ${req.url}]:`, err.message);
 
   res.status(statusCode).json({
     success: false,
-    message: err.message || 'An unexpected internal server error occurred',
+    message: err.code === 'LIMIT_FILE_SIZE' ? 'Files must be 4 MB or smaller.' : err.message || 'An unexpected internal server error occurred',
     stack: process.env.NODE_ENV === 'production' ? null : err.stack,
   });
 };

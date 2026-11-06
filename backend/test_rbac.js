@@ -180,7 +180,7 @@ async function runRBACTests() {
     },
     body: JSON.stringify({
       patientMediVaultId: patient.user.mediVaultId,
-      reason: 'Evaluate current cardiac symptoms',
+      reason: 'Diagnosis or treatment planning',
       requestedUntil: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
     }),
   });
@@ -281,7 +281,7 @@ async function runRBACTests() {
     },
     body: JSON.stringify({
       patientMediVaultId: patient.user.mediVaultId,
-      reason: 'Follow-up cardiac evaluation',
+      reason: 'Follow-up care',
       requestedUntil: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
     }),
   });
@@ -396,7 +396,7 @@ async function runRBACTests() {
     throw new Error(`Claim submission failed: ${claimSubmitData.message}`);
   }
   const claimId = claimSubmitData.claim._id;
-  console.log('✓ Claim Submitted:', claimSubmitData.claim.claimNumber, `Amount: $${claimSubmitData.claim.claimAmount}`);
+  console.log('✓ Claim Submitted:', claimSubmitData.claim.claimNumber, `Amount: INR ${claimSubmitData.claim.claimAmount}`);
 
   // Insurance Agent fetches claims for Star Health
   const agentClaimsRes = await fetch(`${BASE_URL}/claims`, {
@@ -417,14 +417,14 @@ async function runRBACTests() {
     body: JSON.stringify({
       status: 'Approved',
       approvedAmount: 82000,
-      agentRemarks: 'Discharge summary and angiography verified. Approved subject to $3000 copay deductible.',
+      agentRemarks: 'Discharge summary and angiography verified. Approved subject to an INR 3,000 copay deductible.',
     }),
   });
   const reviewData = await reviewRes.json();
   if (!reviewData.success || reviewData.claim.status !== 'Approved') {
     throw new Error('Claim evaluation failed');
   }
-  console.log('✓ Insurance Agent approved claim. Approved Amount: $', reviewData.claim.approvedAmount);
+  console.log('✓ Insurance Agent approved claim. Approved Amount: INR', reviewData.claim.approvedAmount);
 
   // Insurance Agent downloads attached claim document (privacy-preserving)
   const agentDlRes = await fetch(`${BASE_URL}/claims/${claimId}/records/${recordId}/download`, {

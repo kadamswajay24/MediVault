@@ -1,3 +1,4 @@
+import { ClaimTimeline } from '../components/ClaimTimeline';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   FileCheck2,
@@ -239,6 +240,45 @@ export const ClaimsPage: React.FC = () => {
     }
   };
 
+  const renderClaimActions = (claim: InsuranceClaim) => {
+    if (isAgent || isAdmin) {
+      if (isAdjudicated(claim)) {
+        return (
+          <div className="flex items-center justify-end gap-2">
+            <span className="inline-flex items-center gap-1 text-[11px] font-sans text-slate-400 dark:text-slate-500">
+              <Lock className="w-3 h-3" />
+              Locked
+            </span>
+            {claim.approvedAmount < claim.claimAmount && (
+              <button
+                onClick={() => handleOpenSupplementModal(claim)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 transition-colors"
+              >
+                <TrendingUp className="w-3.5 h-3.5" />
+                Modify Claim
+              </button>
+            )}
+          </div>
+        );
+      }
+
+      return (
+        <button
+          onClick={() => handleOpenReviewModal(claim)}
+          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 transition-colors"
+        >
+          Adjudicate
+        </button>
+      );
+    }
+
+    return (
+      <span className="text-xs text-slate-400">
+        {claim.status === 'Approved' ? 'Approved' : claim.status === 'Rejected' ? 'Rejected' : claim.status === 'More Information Needed' ? 'Action needed' : 'Awaiting review'}
+      </span>
+    );
+  };
+
   const getStatusBadge = (status: ClaimStatus) => {
     switch (status) {
       case 'Approved':
@@ -288,7 +328,7 @@ export const ClaimsPage: React.FC = () => {
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
               {isAgent ? 'Insurance Claims Review Portal' : 'Health Insurance Claims'}
             </h1>
-            <span className="text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 font-mono font-medium">
+            <span className="text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 font-sans font-medium">
               {isAgent ? user?.insuranceDetails?.companyName || 'Claims Adjuster' : 'Reimbursement & Cashless'}
             </span>
           </div>
@@ -333,7 +373,7 @@ export const ClaimsPage: React.FC = () => {
 
         {/* Status Filters */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-          {['All', 'Submitted', 'Under Review', 'Approved', 'Rejected'].map((status) => (
+          {['All', 'Submitted', 'Under Review', 'More Information Needed', 'Approved', 'Rejected'].map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
@@ -374,28 +414,116 @@ export const ClaimsPage: React.FC = () => {
           )}
         </div>
       ) : (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
+        <>
+          <div className="space-y-3 xl:hidden">
+            {claims.map((claim) => (
+              <article
+                key={claim._id}
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+              >
+                <header className="flex flex-col gap-3 border-b border-slate-200 pb-3 dark:border-slate-800 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <h2 className="break-all font-sans text-sm font-bold text-slate-900 dark:text-white">
+                      {claim.claimNumber}
+                    </h2>
+                    <p className="mt-1 break-all text-xs text-slate-500">
+                      Policy {claim.policyNumber}
+                    </p>
+                    {typeof claim.patient === 'object' && claim.patient?.name && (
+                      <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                        Patient: {claim.patient.name}
+                      </p>
+                    )}
+                  </div>
+                  <div className="shrink-0">{getStatusBadge(claim.status)}</div>
+                </header>
+
+                <dl className="grid grid-cols-1 gap-3 py-3 text-sm sm:grid-cols-2">
+                  <div className="min-w-0">
+                    <dt className="text-xs font-medium text-slate-500">Insurance provider</dt>
+                    <dd className="mt-0.5 break-words font-medium text-slate-800 dark:text-slate-200">
+                      {claim.insuranceCompany}
+                    </dd>
+                    <dd className="mt-0.5 text-xs text-slate-500">
+                      Filed {new Date(claim.createdAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-xs font-medium text-slate-500">Claim details</dt>
+                    <dd className="mt-0.5 break-words font-medium text-slate-800 dark:text-slate-200">
+                      {claim.claimType}
+                    </dd>
+                    <dd className="mt-0.5 break-words text-xs text-slate-500">
+                      {claim.hospitalName || 'Outpatient Facility'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium text-slate-500">Claim amount</dt>
+                    <dd className="mt-0.5 font-semibold text-slate-900 dark:text-white">
+                      {formatINR(claim.claimAmount)}
+                    </dd>
+                    {claim.approvedAmount > 0 && (
+                      <dd className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                        Approved: {formatINR(claim.approvedAmount)}
+                      </dd>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-xs font-medium text-slate-500">Attached vault documents</dt>
+                    <dd className="mt-1 flex min-w-0 flex-col gap-1">
+                      {claim.records?.length ? (
+                        claim.records.map((record) => (
+                          <button
+                            key={record._id}
+                            type="button"
+                            onClick={() => setSelectedRecordToView(record)}
+                            className="flex min-w-0 items-center gap-1.5 text-left text-xs text-emerald-600 hover:underline dark:text-emerald-400"
+                          >
+                            <FileText className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">{record.title}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <span className="text-xs italic text-slate-400">No attachments</span>
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+
+                {claim.agentRemarks && (
+                  <p className="border-t border-slate-200 pt-3 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-400">
+                    {claim.agentRemarks}
+                  </p>
+                )}
+                <footer className="mt-3 flex justify-end border-t border-slate-200 pt-3 dark:border-slate-800">
+                  <div>{renderClaimActions(claim)}<ClaimTimeline claim={claim} /></div>
+                </footer>
+              </article>
+            ))}
+          </div>
+
+          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 xl:block">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full min-w-[1080px] table-fixed text-left text-sm">
               <thead className="bg-slate-50 dark:bg-slate-950/70 border-b border-slate-200 dark:border-slate-800 text-xs text-slate-500 font-semibold uppercase tracking-wider">
                 <tr>
-                  <th className="px-4 py-3.5">Claim Ref &amp; Policy</th>
-                  <th className="px-4 py-3.5">Insurance Provider</th>
-                  <th className="px-4 py-3.5">Type &amp; Hospital</th>
-                  <th className="px-4 py-3.5">Claim Amount</th>
-                  <th className="px-4 py-3.5">Status</th>
-                  <th className="px-4 py-3.5">Attached Vault Docs</th>
-                  <th className="px-4 py-3.5 text-right">Actions</th>
+                  <th className="w-[16%] px-4 py-3.5">Claim Ref &amp; Policy</th>
+                  <th className="w-[14%] px-4 py-3.5">Insurance Provider</th>
+                  <th className="w-[14%] px-4 py-3.5">Type &amp; Hospital</th>
+                  <th className="w-[12%] px-4 py-3.5">Claim Amount</th>
+                  <th className="w-[15%] px-4 py-3.5">Status</th>
+                  <th className="w-[14%] px-4 py-3.5">Attached Vault Docs</th>
+                  <th className="w-[15%] px-4 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                 {claims.map((claim) => (
                   <tr key={claim._id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="px-4 py-3.5">
-                      <div className="font-mono font-bold text-xs text-slate-900 dark:text-slate-100">
+                      <div className="font-sans font-bold text-xs text-slate-900 dark:text-slate-100">
                         {claim.claimNumber}
                       </div>
-                      <div className="text-xs text-slate-500 font-mono mt-0.5">
+                      <div className="break-all text-xs text-slate-500 font-sans mt-0.5">
                         Pol: {claim.policyNumber}
                       </div>
                       {typeof claim.patient === 'object' && claim.patient?.name && (
@@ -410,15 +538,15 @@ export const ClaimsPage: React.FC = () => {
                         {claim.insuranceCompany}
                       </div>
                       <div className="text-xs text-slate-400">
-                        Filed {new Date(claim.createdAt).toLocaleDateString()}
+                        Filed {new Date(claim.createdAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' })}
                       </div>
                     </td>
 
                     <td className="px-4 py-3.5">
-                      <div className="text-slate-800 dark:text-slate-200 font-medium">
+                      <div className="break-words text-slate-800 dark:text-slate-200 font-medium">
                         {claim.claimType}
                       </div>
-                      <div className="text-xs text-slate-500">
+                      <div className="break-words text-xs text-slate-500">
                         {claim.hospitalName || 'Outpatient Facility'}
                       </div>
                     </td>
@@ -464,45 +592,15 @@ export const ClaimsPage: React.FC = () => {
                     </td>
 
                     <td className="px-4 py-3.5 text-right whitespace-nowrap">
-                      {isAgent || isAdmin ? (
-                        isAdjudicated(claim) ? (
-                          <div className="flex items-center justify-end gap-2">
-                            {/* Locked adjudication badge */}
-                            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-slate-400 dark:text-slate-500">
-                              <Lock className="w-3 h-3" />
-                              Locked
-                            </span>
-                            {/* Modify Claim button — only if room for more */}
-                            {claim.approvedAmount < claim.claimAmount && (
-                              <button
-                                onClick={() => handleOpenSupplementModal(claim)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 transition-colors"
-                              >
-                                <TrendingUp className="w-3.5 h-3.5" />
-                                Modify Claim
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => handleOpenReviewModal(claim)}
-                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 transition-colors"
-                          >
-                            Adjudicate
-                          </button>
-                        )
-                      ) : (
-                        <span className="text-xs text-slate-400">
-                          {claim.status === 'Approved' ? 'Settlement Ready' : 'In Adjudication'}
-                        </span>
-                      )}
+                      <div>{renderClaimActions(claim)}<ClaimTimeline claim={claim} /></div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
+          </div>
+        </>
       )}
 
       {/* Patient: Submit Claim Modal */}
@@ -760,15 +858,15 @@ export const ClaimsPage: React.FC = () => {
             <div className="mb-4 p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-2">
               <div className="flex justify-between text-xs">
                 <span className="text-slate-500 font-medium">Original Claimed</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-white">{formatINR(supplementingClaim.claimAmount)}</span>
+                <span className="font-sans font-bold text-slate-900 dark:text-white">{formatINR(supplementingClaim.claimAmount)}</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-slate-500 font-medium">Initially Approved</span>
-                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{formatINR(supplementingClaim.approvedAmount)}</span>
+                <span className="font-sans font-bold text-emerald-600 dark:text-emerald-400">{formatINR(supplementingClaim.approvedAmount)}</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-slate-500 font-medium">Remaining Ceiling</span>
-                <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                <span className="font-sans font-bold text-amber-600 dark:text-amber-400">
                   {formatINR(supplementingClaim.claimAmount - supplementingClaim.approvedAmount)}
                 </span>
               </div>
@@ -781,7 +879,7 @@ export const ClaimsPage: React.FC = () => {
                   {supplementingClaim.supplementalPayments.map((sp) => (
                     <div key={sp._id} className="flex justify-between text-[11px] text-slate-500">
                       <span className="truncate max-w-[200px]">{sp.reason}</span>
-                      <span className="font-mono text-amber-600 dark:text-amber-400 ml-2">+{formatINR(sp.amount)}</span>
+                      <span className="font-sans text-amber-600 dark:text-amber-400 ml-2">+{formatINR(sp.amount)}</span>
                     </div>
                   ))}
                 </div>

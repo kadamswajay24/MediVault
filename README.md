@@ -10,7 +10,7 @@ MediVault is a secure, personal health management platform designed for patients
 - **Backend**: Node.js + Express (ES Modules)
 - **Database**: MongoDB + Mongoose ODM
 - **Authentication**: JWT (JSON Web Tokens) + bcryptjs
-- **File Management**: Multer (Local storage with MIME validation & size limits)
+- **File Management**: Multer + MongoDB GridFS (private storage, file signature validation, and size limits)
 
 ---
 
@@ -34,7 +34,7 @@ MediVault is a secure, personal health management platform designed for patients
    - Emergency contact card: Contact name, relationship, and direct phone link.
 
 4. **Medical Record Upload**:
-   - Supported formats: **PDF**, **PNG**, **JPG/JPEG** (up to 10 MB).
+   - Supported formats: **PDF**, **PNG**, **JPG/JPEG** (up to 4 MB).
    - Metadata: Title, category, clinical notes/description, record date.
    - 6 Standard Categories:
      - *Laboratory Report*
@@ -52,7 +52,7 @@ MediVault is a secure, personal health management platform designed for patients
 
 6. **Personal Health Dashboard**:
    - Real-time stat cards (Total records, category counts, profile completeness score).
-   - Prescription category totals include both uploaded prescription documents and digital prescriptions; prescribed medicines are also shown in the dashboard.
+   - Prescription category totals include both uploaded prescription documents and digital prescriptions; ongoing profile medications are shown separately from recent prescription history. Prescription history does not confirm current medication use.
    - Emergency contact quick-dial card & blood group badge.
    - Recent records list with one-click preview.
    - Basic chronological health record timeline.
@@ -64,12 +64,20 @@ MediVault is a secure, personal health management platform designed for patients
    - Doctors can assign other approved medical staff at their hospital to review appointment requests.
 
 8. **Insurance Policy Marketplace**:
-   - Administrators can create and edit custom illustrative plans, then publish, unpublish, or archive listings from the administration area.
+   - Insurance agents can create draft listings for their assigned company and edit only listings they created; administrators can manage all custom illustrative plans and publish, unpublish, or archive them.
+   - The insurer plan assistant uses the configured local Ollama model to help draft listings. Chat suggestions are not saved until the agent applies them in the plan form and creates a draft; the assistant does not invent plan terms or publish listings.
+   - Patients can search hospitals affiliated with active, approved MediVault clinicians. These are intended MediVault cashless-network facilities; actual cashless use requires an eligible active policy and authorization. Current marketplace enrollments remain demonstrations and do not provide real coverage.
    - New plans are saved as drafts; patients see only published plans and can keep demo enrollments together in the Policies area.
    - Monthly premium dates and simulated payment history are recorded for demo enrollments. Listings and payments do not bind insurance coverage or charge money.
    - Remove existing enrollments for the built-in sample plans with `npm run policies:clear-legacy-demo -- --confirm` from `backend`. This only deletes enrollments whose plan IDs are `essential`, `family`, or `plus`; remote MongoDB targets additionally require `--allow-remote`.
 
-9. **System & Clinical Audit Logs**:
+9. **Prescription medicine search reference**:
+   - Specialty-to-medicine search mappings are maintained in `frontend/data/medivault_specialty_medicine_catalog.csv` and loaded into the medical-staff prescription form.
+   - Shared general entries appear alongside specialty-specific search references for the dropdown professions listed in the CSV. These are not recommendations or a claim that a medicine is suitable for every patient.
+   - Active entries require prescriber validation; risk labels and clinical review flags identify additional review requirements. Clinicians may also search all active catalog entries by name or search terms, or enter a medicine manually; all results must be clinically validated.
+   - AI matching uses only the configured local Ollama service and returns IDs from the supplied catalog entries. Patient information is not sent; when local AI is unavailable, the interface falls back to keyword matching. Search does not assess medicine suitability or generate recommendations.
+
+10. **System & Clinical Audit Logs**:
    - Automatic background logging for:
      - `LOGIN`
      - `ACCESS_REQUESTED` / `ACCESS_REQUEST_DECIDED` / `ACCESS_REVOKED`
@@ -83,16 +91,15 @@ MediVault is a secure, personal health management platform designed for patients
 10. **Strict User-Level Authorization & Security**:
    - Patients can access their own records; proxies and clinicians can access patient data only through authorized, patient-specific grants.
    - Unauthorized attempts by other users return `403 Forbidden`.
-   - Medical staff request access to one identified patient, state a clinical purpose, and request an access end time.
+   - Medical staff request access to one identified patient, select a clinical purpose (with a required explanation for “Other”), and request an access end time.
    - The patient, their authorized full-access proxy, or an administrator may approve for a chosen end time or deny the request.
    - Patients, proxies, staff, or administrators may revoke an active grant; approved access expires automatically and is enforced by the API.
 
-11. **Architectural Readiness for Future Milestones**:
+11. **Future Interoperability**:
    - Future hook interfaces in `recordService.js` for:
      - Blockchain hash anchoring
      - IPFS decentralized file pinning
-     - OCR text extraction (Tesseract / Vision API)
-     - Role-Based Access Control (Doctor portal & FHIR format)
+     - FHIR format
 
 ---
 
@@ -140,7 +147,7 @@ medivault/
 │   │   │   ├── agentIdService.js     # Company-prefixed insurance agent IDs
 │   │   │   └── recordService.js      # File cleaner & future extension hooks
 │   │   └── server.js                 # Express server entrypoint
-│   ├── uploads/                      # Uploaded document storage
+│   ├── uploads/                      # Legacy/demo document storage
 │   ├── test_mvp.js                   # Automated end-to-end verification tests
 │   ├── .env.example
 │   ├── .env
@@ -202,6 +209,35 @@ npm run dev
 # Server will run at: http://localhost:5000
 ```
 
+Before starting the backend, generate a unique JWT secret with
+`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+and set `JWT_SECRET` in `backend/.env`. Startup rejects missing secrets, secrets
+shorter than 32 characters, and the former shared development secret. Replacing
+an existing secret invalidates existing sessions; users must sign in again.
+
+Run isolated backend checks with `npm run test:unit` from `backend`, and frontend
+catalog tests with `npm test` from `frontend`. Backend `npm run test:all` also runs
+the integration scripts, which require a running test API and configured test
+administrator credentials.
+
+### Seed an Isolated Stakeholder Demo
+
+The demo seed creates synthetic patient, medical staff, insurance, and admin accounts plus
+sample records. It also adds a seven-day, patient-approved clinical access grant so the
+clinician workspace has a patient to review. Run it only against a dedicated development
+database, never a production or existing user database. Set `NODE_ENV=development`,
+`MONGODB_URI` to that isolated database, and `DEMO_SEED_PASSWORD` to a password of at least
+12 characters before running:
+
+```bash
+cd backend
+node seed_demo.js
+```
+
+The accounts use `patient@medivault.io`, `doctor@medivault.io`, `agent@medivault.io`, and
+`admin@medivault.io`; each uses the configured demo password. The generated clinical PDF
+is explicitly marked as synthetic and is not for clinical or insurance decisions.
+
 ### 2. Setup Frontend
 
 ```bash
@@ -243,8 +279,23 @@ go to the frontend. The API remains a normal local Express server outside Vercel
   `MONGODB_URI=mongodb://127.0.0.1:27017/medivault`.
 - Keep `frontend/.env` set to `VITE_API_BASE_URL=/api`; Vite proxies API and upload
   requests to the local backend.
-- Start the backend and frontend using the setup steps above. Local uploads remain in
-  `backend/uploads`.
+- Start the backend and frontend using the setup steps above. New uploads are stored in MongoDB GridFS. `backend/uploads` is used only for legacy/demo files.
+- Optional local AI summaries, medicine search, and insurer plan drafting use Ollama. Install Ollama, run
+  `ollama pull qwen2.5:3b`, and start Ollama on `http://127.0.0.1:11434`. Set
+  `OLLAMA_BASE_URL` and `OLLAMA_MODEL` in `backend/.env` if needed. The backend only
+  accepts loopback Ollama URLs; AI requests stay on that local instance. English
+  summaries for patients and authorized doctors and insurer plan suggestions are
+  generated on demand and not stored. English OCR runs locally for images and
+  scanned PDFs (up to three pages); searchable PDFs use their embedded text.
+  Extracted text and an identity-consistency status are stored with each record
+  to support clinician overviews. The check compares readable patient details
+  with the account/profile and is only a review aid: a match does not prove a
+  report is authentic, and uncertain or mismatching uploads remain available for
+  manual review. OCR text is sensitive health data and is stored in the database.
+  Hindi is not enabled because the current model output needs accuracy
+  validation. AI summaries and OCR can be inaccurate and are not medical advice;
+  verify findings against the original report with a healthcare professional.
+- Run the local AI service tests with `cd backend && npm run test:ai`.
 
 ### Hosted deployment
 
@@ -265,11 +316,35 @@ go to the frontend. The API remains a normal local Express server outside Vercel
    no `VITE_API_BASE_URL` override for this routing setup.
 5. Deploy and check `https://your-app.vercel.app/api/health`.
 
-Vercel serverless filesystems are ephemeral. The backend currently stores medical uploads
-on disk, so uploads written to `/tmp` may disappear between invocations and are not
-durable. Configure external persistent object storage and adapt upload/download handling
-before relying on uploads in production. The existing 10 MB upload limit may also exceed
-Vercel's function request-body limit.
+New uploads are stored privately in the `medicalFiles.files` and `medicalFiles.chunks`
+GridFS collections in the configured MongoDB database. No additional storage account or
+new environment variable is required. The database user needs read/write and index-creation
+permissions. Downloads still pass through authenticated API authorization, including
+company and patient checks on insurance claim downloads. New uploads no longer depend
+on Vercel temporary disk. Existing disk-backed records remain readable only while their
+original files exist; missing files must be uploaded again.
+
+Uploads are limited to 4 MB each (frontend and backend) to leave multipart overhead below
+Vercel's 4.5 MB function payload limit. File signatures must match PDF, PNG, or JPEG;
+this is not a malware scan. Files consume your Atlas storage allowance. Monitor cluster
+usage during testing; object storage is the next step if document volume grows.
+
+Login attempts are limited per 15-minute fixed window to 30 per IP and 10 per normalized
+email address. Registration is limited to 10 attempts per IP per hour. Successful attempts
+also count. Counters are shared in MongoDB, with TTL cleanup; a 429 includes Retry-After.
+If counter storage fails, authentication returns 503 rather than bypassing the limit.
+On Vercel, the platform-overwritten forwarding header identifies the client; other hosts
+use the socket address. Configure trusted proxy handling before deploying behind another
+proxy. Limits reset at window boundaries, so bursts can occur across a boundary.
+
+Run `npm run test:unit` in `backend` for isolated checks. To run the storage integration
+test against a dedicated local MongoDB server, set `TEST_STORAGE_MONGO_URI` to its
+loopback URL (for example, `mongodb://127.0.0.1:27028`) and run `npm run test:storage`.
+The test creates and removes its own randomly named database and never uses `MONGODB_URI`.
+
+After deploying, upload a synthetic file, redeploy, and verify download and deletion with
+the same account. Verify that another patient cannot download it. Existing local Ollama
+AI features still require a local model service and are not supplied by Vercel.
 
 Never commit `.env` files or expose production secrets in `VITE_*` variables. MediVault
 handles sensitive health information; this deployment setup does not by itself make the
@@ -387,6 +462,10 @@ The sign-in forms accept only the account roles assigned to their portal. Backen
 | `GET` | `/api/admin/policy-plans` | List custom marketplace plans, including drafts and archived listings | Admin |
 | `POST` | `/api/admin/policy-plans` | Create a custom plan as a draft | Admin |
 | `PUT` | `/api/admin/policy-plans/:planId` | Edit, publish, unpublish, or archive a custom plan | Admin |
+| `GET` | `/api/insurance/policy-plans` | List marketplace plans created by the authenticated agent | Insurance Agent |
+| `POST` | `/api/insurance/policy-plans` | Create a draft listing for the agent's assigned insurance company | Insurance Agent |
+| `PUT` | `/api/insurance/policy-plans/:planId` | Edit the agent's own listing without changing provider or publication status | Insurance Agent |
+| `POST` | `/api/insurance/plan-assistant` | Chat with the local AI to prepare marketplace plan suggestions | Insurance Agent |
 | `GET` | `/api/policies/plans` | Browse published custom marketplace listings | Patient |
 | `GET` | `/api/health` | Service health status check | Public |
 
@@ -397,5 +476,46 @@ The sign-in forms accept only the account roles assigned to their portal. Backen
 - **Multi-Stakeholder RBAC**: Strict role enforcement (`patient`, `medical_staff`, `insurance_agent`, `admin`) with route guards.
 - **Dual-Context Caregiver Delegation**: Authorized proxies can switch context using the patient's MediVault ID in the `x-patient-context` header with granular `read_only` or `full` privileges.
 - **Privacy-Preserving Insurance Verification**: Insurance agents can only inspect records explicitly attached to an active claim.
-- **MIME Validation & Sanitization**: Restricts uploads strictly to `application/pdf`, `image/jpeg`, `image/png` with random timestamp hashed filenames.
+- **Upload Validation**: Checks MIME types and file signatures for PDF, JPEG, and PNG; stores new documents in private GridFS storage under random identifiers.
 - **Immutable Cross-Stakeholder Audit Trail**: Captures logins, proxy delegations, caregiver actions, claim submissions, claim reviews, and administrative changes with IP and user agent.
+
+## Recent interface updates
+
+- **Dashboard attention:** Links to pending, unexpired clinical access requests, claims needing more information, and up to five upcoming confirmed or pending appointments. Items follow the selected patient context; read-only caregivers do not receive access-approval prompts. Appointment times use India Standard Time.
+- **Multi-file uploads:** Select or drop multiple PDF, PNG, or JPG documents (up to 4 MB each), review each title, category, date, and notes, and track per-file transfer and processing status. Titles are suggested from filenames; dates default to today. Retry failed entries without re-uploading successful entries.
+- **Duplicate warnings:** Match filename, size, and modification time within the current upload queue only. Existing vault records are not checked for duplicates.
+- **Medication display:** Ongoing medications come from the health profile. Recent prescriptions are displayed separately without inferring whether treatment is active or completed.
+- **Indian emergency contacts:** A fixed `+91` prefix accompanies exactly 10 national digits. Frontend and backend validation enforce this format; numbers are saved as `+91XXXXXXXXXX`. The phone field remains optional.
+- **Consistent typography:** Self-hosted Source Sans 3 is used throughout app text, headings, IDs, forms, and numbers.
+- **Light theme:** White cards, a cool grey background, burgundy actions, soft rose highlights, stronger borders, and tighter dashboard spacing. Dark mode retains its existing palette. Styles live in `frontend/src/index.css`.
+
+## Focused verification
+
+Run from the repository root:
+
+```bash
+npm --prefix frontend test
+npm --prefix frontend run build
+node --test backend/test_dashboard_attention.js
+```
+
+Dashboard tests use mocked database queries to check patient scoping and read-only caregiver behavior. They do not replace browser or live database testing. On Windows PowerShell, use `npm.cmd` if execution policy blocks `npm.ps1`.
+
+## Files excluded from Git
+
+The root `.gitignore` excludes dependencies, local environment files, build outputs, uploaded documents, logs, coverage reports, TypeScript build metadata, local Vercel state, and generated OCR language caches. Keep example environment files, source code, tests, medicine catalogs, fonts, and public assets in Git. OCR language data comes from the backend dependency; generated cache copies do not need committing.
+
+## Notifications, claim progress, and appointment cancellation
+
+- The patient portal includes an inbox of the latest 50 recorded appointment, claim, access, and clinical-note events. It refreshes every 30 seconds and stores read receipts separately for each viewer. Read-only caregivers can view updates but cannot mark them read. Notifications are in-app only and depend on successful audit-event recording.
+- Claim progress shows dated status and remark entries for new submissions, reviews, and supplemental authorizations. Older claims identify missing historical steps. Approval is not presented as confirmation of payment.
+- Patients and full-access caregivers can cancel future pending or confirmed appointments after confirmation. Cancellation atomically releases the slot, retains the appointment as cancelled, and records the actor and timestamp. Past, declined, and already-cancelled appointments cannot be cancelled again.
+- Run `node --test backend/test_appointment_cancellation.js backend/test_dashboard_attention.js` for focused cancellation, claim-history, and dashboard checks. These use mocked database operations and schema validation, not a live database.
+
+## Indian locale conventions
+
+- Display dates use `en-IN` (day first); timestamps and appointment schedules use `Asia/Kolkata` (IST), independent of device timezone.
+- Appointment booking interprets hospital slots in IST. Access-expiry form values are converted from IST to UTC for API storage.
+- Currency uses INR and Indian digit grouping (for example, `1,23,456`). Claim notifications and validation messages also use INR.
+- Emergency contact numbers use fixed `+91` followed by 10 digits.
+- Native date/time pickers may render their controls according to browser settings; API date values remain ISO-formatted. Existing audit message text is preserved.

@@ -1,3 +1,4 @@
+import { formatIndianNumber } from '../utils/indiaFormat';
 import React, { useCallback, useState, useEffect } from 'react';
 import {
   Search,
@@ -10,7 +11,7 @@ import type { User, UserRole, AdminStatsResponse, AuditLog } from '../types';
 import { MEDICAL_SPECIALIZATIONS } from '../constants/medicalSpecializations';
 import { HOSPITAL_AFFILIATIONS } from '../constants/hospitalAffiliations';
 import { INSURANCE_COMPANIES } from '../constants/insuranceCompanies';
-import { AdminPolicyPlans } from '../components/AdminPolicyPlans';
+import { PolicyPlanManager } from '../components/AdminPolicyPlans';
 
 export const AdminPage: React.FC = () => {
   const [stats, setStats] = useState<AdminStatsResponse['stats'] | null>(null);
@@ -35,6 +36,9 @@ export const AdminPage: React.FC = () => {
   const [customCompanyName, setCustomCompanyName] = useState('');
   const [updatingRole, setUpdatingRole] = useState(false);
   const [approvingUserId, setApprovingUserId] = useState<string | null>(null);
+  const [statusChangeUser, setStatusChangeUser] = useState<User | null>(null);
+  const [changingStatus, setChangingStatus] = useState(false);
+  const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
 
   const fetchAdminData = useCallback(async () => {
     try {
@@ -64,30 +68,34 @@ export const AdminPage: React.FC = () => {
     return () => clearTimeout(timer);
   }, [fetchAdminData]);
 
-  const handleToggleStatus = async (user: User) => {
+  const requestStatusChange = (user: User) => {
     if (!user.id) {
       alert('This user record is missing its database ID. Refresh the page and try again.');
       return;
     }
 
-    const nextStatus = !user.isActive;
-    if (
-      !confirm(
-        `Are you sure you want to ${nextStatus ? 'activate' : 'deactivate'} account: ${user.name}?`
-      )
-    ) {
-      return;
-    }
+    setStatusChangeError(null);
+    setStatusChangeUser(user);
+  };
 
+  const handleToggleStatus = async () => {
+    if (!statusChangeUser?.id) return;
+    const user = statusChangeUser;
+    const nextStatus = !user.isActive;
+    setChangingStatus(true);
+    setStatusChangeError(null);
     try {
       const res = await adminAPI.toggleUserStatus(user.id, nextStatus);
       if (res.success) {
         setUsers((prev) =>
           prev.map((u) => (u.id === user.id ? { ...u, isActive: nextStatus } : u))
         );
+        setStatusChangeUser(null);
       }
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to update user status.');
+      setStatusChangeError(err.response?.data?.message || 'Failed to update user status.');
+    } finally {
+      setChangingStatus(false);
     }
   };
 
@@ -194,27 +202,27 @@ export const AdminPage: React.FC = () => {
           <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
             <span className="text-xs text-slate-500 font-semibold uppercase">Total Users</span>
             <div className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-              {stats.totalUsers}
+              {formatIndianNumber(stats.totalUsers)}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
-              {stats.usersByRole.patient} Patients • {stats.usersByRole.medical_staff} Staff
+              {formatIndianNumber(stats.usersByRole.patient)} Patients • {formatIndianNumber(stats.usersByRole.medical_staff)} Staff
             </div>
           </div>
 
           <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
             <span className="text-xs text-slate-500 font-semibold uppercase">Insurers</span>
             <div className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-              {stats.usersByRole.insurance_agent}
+              {formatIndianNumber(stats.usersByRole.insurance_agent)}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
-              {stats.totalClaims} Claims Processed
+              {formatIndianNumber(stats.totalClaims)} Claims Processed
             </div>
           </div>
 
           <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
             <span className="text-xs text-slate-500 font-semibold uppercase">Total Records</span>
             <div className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-              {stats.totalRecords}
+              {formatIndianNumber(stats.totalRecords)}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">Medical records stored</div>
           </div>
@@ -222,7 +230,7 @@ export const AdminPage: React.FC = () => {
           <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
             <span className="text-xs text-slate-500 font-semibold uppercase">Caregiver Proxies</span>
             <div className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-              {stats.activeDelegations}
+              {formatIndianNumber(stats.activeDelegations)}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">Active Delegations</div>
           </div>
@@ -230,7 +238,7 @@ export const AdminPage: React.FC = () => {
           <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm col-span-2 lg:col-span-1">
             <span className="text-xs text-slate-500 font-semibold uppercase">Audit Events</span>
             <div className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-              {stats.totalAuditLogs}
+              {formatIndianNumber(stats.totalAuditLogs)}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">Recorded platform activity</div>
           </div>
@@ -330,12 +338,12 @@ export const AdminPage: React.FC = () => {
                           <div className="font-bold text-slate-900 dark:text-white text-xs">
                             {u.name}
                           </div>
-                          <div className="text-xs text-slate-500 font-mono mt-0.5">{u.email}</div>
+                          <div className="text-xs text-slate-500 font-sans mt-0.5">{u.email}</div>
                         </td>
 
                         <td className="px-4 py-3.5">
                           <span
-                            className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold uppercase ${
+                            className={`px-2 py-0.5 rounded text-[11px] font-sans font-bold uppercase ${
                               u.role === 'admin'
                                 ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
                                 : u.role === 'medical_staff'
@@ -364,7 +372,7 @@ export const AdminPage: React.FC = () => {
                             <div>
                               <span>Co: {u.insuranceDetails?.companyName || '—'}</span>
                               {u.insuranceDetails?.agentId && (
-                                <span className="block text-[11px] font-mono text-slate-500">
+                                <span className="block text-[11px] font-sans text-slate-500">
                                   ID: {u.insuranceDetails.agentId}
                                 </span>
                               )}
@@ -397,7 +405,7 @@ export const AdminPage: React.FC = () => {
                         </td>
 
                         <td className="px-4 py-3.5 text-xs text-slate-500">
-                          {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}
+                          {u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
                         </td>
 
                         <td className="px-4 py-3.5 text-right whitespace-nowrap space-x-2">
@@ -420,7 +428,7 @@ export const AdminPage: React.FC = () => {
 
                           {u.approvalStatus !== 'pending' && (
                             <button
-                              onClick={() => handleToggleStatus(u)}
+                              onClick={() => requestStatusChange(u)}
                               disabled={!u.id}
                               className={`px-2.5 py-1 text-xs font-semibold rounded ${
                                 u.isActive
@@ -441,7 +449,7 @@ export const AdminPage: React.FC = () => {
           )}
         </div>
       ) : activeTab === 'policies' ? (
-        <AdminPolicyPlans />
+        <PolicyPlanManager audience="admin" />
       ) : (
         /* Global Compliance Audit Log */
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
@@ -457,11 +465,11 @@ export const AdminPage: React.FC = () => {
                   <th className="px-4 py-3">IP Address</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs font-mono">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs font-sans">
                 {auditLogs.map((log) => (
                   <tr key={log._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
                     <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
-                      {new Date(log.timestamp).toLocaleString()}
+                      {new Date(log.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true, timeZoneName: 'short' })}
                     </td>
                     <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">
                       {typeof log.user === 'object' && log.user?.name ? log.user.name : String(log.user)}
@@ -495,7 +503,7 @@ export const AdminPage: React.FC = () => {
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">
                   Reassign Role for {editingUser.name}
                 </h3>
-                <p className="text-xs text-slate-500 font-mono">{editingUser.email}</p>
+                <p className="text-xs text-slate-500 font-sans">{editingUser.email}</p>
               </div>
               <button
                 onClick={() => setEditingUser(null)}
@@ -629,7 +637,7 @@ export const AdminPage: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-600 dark:text-slate-400">Portal-generated Agent ID</label>
-                    <p className="mt-1 font-mono text-xs text-slate-700 dark:text-slate-300">
+                    <p className="mt-1 font-sans text-xs text-slate-700 dark:text-slate-300">
                       {editingUser?.insuranceDetails?.agentId || 'Generated when company is saved'}
                     </p>
                   </div>
@@ -654,6 +662,70 @@ export const AdminPage: React.FC = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+      {statusChangeUser && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !changingStatus) {
+              setStatusChangeUser(null);
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="account-status-title"
+            aria-describedby="account-status-description"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape' && !changingStatus) {
+                setStatusChangeUser(null);
+              }
+            }}
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+          >
+            <h2 id="account-status-title" className="text-lg font-bold text-slate-900 dark:text-white">
+              {statusChangeUser.isActive ? 'Deactivate account?' : 'Reactivate account?'}
+            </h2>
+            <p id="account-status-description" className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+              {statusChangeUser.isActive
+                ? `This will prevent ${statusChangeUser.name} from signing in until the account is reactivated.`
+                : `This will allow ${statusChangeUser.name} to sign in again.`}
+            </p>
+            {statusChangeError && (
+            <p role="alert" className="mt-3 text-sm text-rose-600 dark:text-rose-400">
+              {statusChangeError}
+            </p>
+            )}
+            <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              autoFocus
+              disabled={changingStatus}
+                onClick={() => setStatusChangeUser(null)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={changingStatus}
+                onClick={() => void handleToggleStatus()}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
+                  statusChangeUser.isActive
+                    ? 'bg-rose-600 hover:bg-rose-500'
+                    : 'bg-emerald-600 hover:bg-emerald-500'
+                }`}
+              >
+                {changingStatus
+                  ? 'Updating...'
+                  : statusChangeUser.isActive
+                    ? 'Deactivate account'
+                    : 'Reactivate account'}
+              </button>
+            </div>
+          </section>
         </div>
       )}
     </div>

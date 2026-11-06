@@ -1,5 +1,16 @@
 import mongoose from 'mongoose';
 
+export const CLINICAL_ACCESS_REASONS = [
+  'Continuity of care',
+  'Reviewing test results',
+  'Diagnosis or treatment planning',
+  'Medication or prescription review',
+  'Follow-up care',
+  'Emergency or urgent care',
+  'Second opinion',
+  'Other',
+];
+
 const clinicalAccessRequestSchema = new mongoose.Schema(
   {
     patient: {

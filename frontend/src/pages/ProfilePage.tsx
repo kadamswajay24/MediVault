@@ -58,7 +58,8 @@ export const ProfilePage: React.FC = () => {
           setMedicalConditions(p.medicalConditions || []);
           setMedications(p.medications || []);
           setEmergencyContact(
-            p.emergencyContact || { name: '', relationship: '', phone: '' }
+            { name: p.emergencyContact?.name || '', relationship: p.emergencyContact?.relationship || '',
+              phone: (p.emergencyContact?.phone || '').replace(/^\+91/, '').replace(/[ () .-]/g, '') }
           );
         }
       } catch {
@@ -106,6 +107,13 @@ export const ProfilePage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const phone = emergencyContact.phone.trim();
+    if (phone && !/^[0-9]{10}$/.test(phone)) {
+      setSuccessMsg(null);
+      setErrorMsg('Enter exactly 10 digits for the Indian emergency contact number.');
+      document.getElementById('profile-emergency-phone')?.focus();
+      return;
+    }
     setSaving(true);
     setSuccessMsg(null);
     setErrorMsg(null);
@@ -119,7 +127,7 @@ export const ProfilePage: React.FC = () => {
         allergies,
         medicalConditions,
         medications,
-        emergencyContact,
+        emergencyContact: { ...emergencyContact, phone: phone ? `+91${phone}` : '' },
       };
 
       const res = await profileAPI.updateProfile(payload);
@@ -240,7 +248,7 @@ export const ProfilePage: React.FC = () => {
                 id="profile-bloodgroup-select"
                 value={bloodGroup}
                 onChange={(e) => setBloodGroup(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/80 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 font-mono"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/80 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 font-sans"
               >
                 {BLOOD_GROUPS.map((bg) => (
                   <option key={bg} value={bg}>
@@ -419,7 +427,7 @@ export const ProfilePage: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-400 mb-1.5">
+              <label htmlFor="profile-emergency-name" className="block text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1.5">
                 Contact Name
               </label>
               <input
@@ -435,7 +443,7 @@ export const ProfilePage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-400 mb-1.5">
+              <label htmlFor="profile-emergency-rel" className="block text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1.5">
                 Relationship
               </label>
               <input
@@ -451,19 +459,39 @@ export const ProfilePage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-400 mb-1.5">
+              <label htmlFor="profile-emergency-phone" className="block text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1.5">
                 Phone Number
               </label>
+              <div className="flex items-center gap-2">
+                <span className="shrink-0 rounded-lg border border-slate-300 bg-slate-100 px-3 py-2.5 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800" aria-label="India country code">+91</span>
               <input
                 type="tel"
                 id="profile-emergency-phone"
+                inputMode="numeric"
+                autoComplete="tel-national"
+                maxLength={10}
+                pattern="[0-9]{10}"
+                title="Enter exactly 10 digits. The +91 country code is added automatically."
+                aria-describedby="emergency-phone-help"
                 value={emergencyContact.phone}
                 onChange={(e) =>
-                  setEmergencyContact({ ...emergencyContact, phone: e.target.value })
+                  setEmergencyContact({ ...emergencyContact, phone: e.target.value.replace(/[^0-9]/g, '') })
                 }
-                placeholder="+91 98765 43210"
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/80 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 font-mono"
+                onPaste={(event) => {
+                  const pasted = event.clipboardData.getData('text').trim().replace(/[ () .-]/g, '');
+                  const national = pasted.startsWith('+91') ? pasted.slice(3) : pasted;
+                  event.preventDefault();
+                  if (/^[0-9]{10}$/.test(national)) {
+                    setEmergencyContact({ ...emergencyContact, phone: national });
+                  } else {
+                    setErrorMsg('Paste a 10-digit Indian number, optionally starting with +91.');
+                  }
+                }}
+                placeholder="9876543210"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/80 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 font-sans"
               />
+              </div>
+              <p id="emergency-phone-help" className="mt-1.5 text-xs text-slate-500">Enter 10 digits. India country code +91 is added automatically.</p>
             </div>
           </div>
         </div>

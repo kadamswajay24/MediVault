@@ -1,0 +1,13 @@
+Healthcare image assets downloaded from Unsplash on 2026-11-01.
+
+clinical-consultation.jpg
+https://images.unsplash.com/photo-1576091160399-112ba8d25d1d
+
+healthcare-team.jpg
+https://images.unsplash.com/photo-1576091160550-2173dba999ef
+
+hospital-care.jpg
+https://images.unsplash.com/photo-1538108149393-fbbd81895907
+
+Unsplash License
+https://unsplash.com/license

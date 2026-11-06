@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import type { MedicalRecord } from '../types';
 import { recordAPI } from '../services/api';
+import { formatFileSize } from '../utils/formatFileSize';
 
 interface RecordViewerModalProps {
   record: MedicalRecord | null;
@@ -120,7 +121,7 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
               </span>
               <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5" />
-                {new Date(record.recordDate).toLocaleDateString(undefined, {
+                {new Date(record.recordDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata',
                   year: 'numeric',
                   month: 'short',
                   day: 'numeric',
@@ -145,6 +146,31 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
 
         {/* Content Body */}
         <div className="py-4 space-y-4 overflow-y-auto flex-1">
+          {record.metadata?.identityCheck && (
+            <div
+              role="status"
+              className={`rounded-xl border p-3 text-sm ${
+                record.metadata.identityCheck.status === 'matched'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200'
+                  : 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200'
+              }`}
+            >
+              <p className="font-semibold">
+                {record.metadata.identityCheck.status === 'matched'
+                  ? 'Patient details appear to match'
+                  : record.metadata.identityCheck.status === 'needs_review'
+                    ? 'Patient identity needs review'
+                    : record.metadata.identityCheck.status === 'not_checked'
+                      ? 'Automated identity check not run'
+                    : 'Patient identity could not be verified'}
+              </p>
+              <p className="mt-1 text-xs">{record.metadata.identityCheck.message}</p>
+              <p className="mt-1 text-xs">
+                OCR matching is not proof that a document is authentic.
+              </p>
+            </div>
+          )}
+
           {/* Document Preview Box */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 p-4 flex flex-col items-center justify-center min-h-[220px]">
             {isImage ? (
@@ -173,7 +199,7 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
                 <div>
                   <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{record.fileName}</p>
                   <p className="text-xs text-slate-500">
-                    PDF Document • {(record.fileSize / (1024 * 1024)).toFixed(2)} MB
+                    PDF Document • {formatFileSize(record.fileSize)}
                   </p>
                 </div>
                 {previewUrl ? (
@@ -192,7 +218,7 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
               <div className="text-center space-y-2 py-6">
                 <FileText className="w-10 h-10 text-teal-500 dark:text-teal-400 mx-auto" />
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{record.fileName}</p>
-                <p className="text-xs text-slate-500">{(record.fileSize / 1024).toFixed(1)} KB</p>
+                <p className="text-xs text-slate-500">{formatFileSize(record.fileSize)}</p>
               </div>
             )}
           </div>
@@ -208,7 +234,7 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
           )}
 
           {/* Metadata Specs */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs text-slate-600 dark:text-slate-400 bg-slate-100/70 dark:bg-slate-950/40 p-3 rounded-xl border border-slate-200 dark:border-slate-800/60 font-mono">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs text-slate-600 dark:text-slate-400 bg-slate-100/70 dark:bg-slate-950/40 p-3 rounded-xl border border-slate-200 dark:border-slate-800/60 font-sans">
             <div>
               <span className="text-slate-500 block">File Name:</span>
               <span className="text-slate-800 dark:text-slate-200 truncate block font-medium">{record.fileName}</span>
@@ -216,7 +242,7 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
             <div>
               <span className="text-slate-500 block">File Size:</span>
               <span className="text-slate-800 dark:text-slate-200 font-medium">
-                {(record.fileSize / (1024 * 1024)).toFixed(2)} MB
+                {formatFileSize(record.fileSize)}
               </span>
             </div>
             <div>

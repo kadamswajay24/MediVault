@@ -4,6 +4,8 @@ import InsuranceClaim from '../models/InsuranceClaim.js';
 import MedicalNote from '../models/MedicalNote.js';
 import ProxyDelegation from '../models/ProxyDelegation.js';
 import User from '../models/User.js';
+import Appointment from '../models/Appointment.js';
+import ClinicalAccessRequest from '../models/ClinicalAccessRequest.js';
 
 // @desc    Get dashboard statistics, health summary, and timeline
 // @route   GET /api/dashboard/stats
@@ -11,6 +13,10 @@ import User from '../models/User.js';
 export const getDashboardStats = async (req, res, next) => {
   try {
     const userId = req.effectivePatientId || req.user._id;
+
+    const appointmentNow = new Date();
+    const appointmentToday = appointmentNow.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const appointmentTime = appointmentNow.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
     // Run parallel queries for optimal performance
     const [
@@ -24,6 +30,9 @@ export const getDashboardStats = async (req, res, next) => {
       prescriptionNotes,
       prescriptionsCount,
       prescriptionRecords,
+      pendingAccessRequests,
+      claimsNeedingInformation,
+      upcomingAppointments,
     ] = await Promise.all([
       MedicalRecord.countDocuments({ user: userId }),
       MedicalRecord.find({ user: userId })
@@ -45,6 +54,12 @@ export const getDashboardStats = async (req, res, next) => {
       MedicalRecord.find({ user: userId, category: 'Prescription' })
         .sort({ recordDate: -1, createdAt: -1 })
         .limit(5),
+      req.proxyDelegation?.accessLevel === 'read_only' ? Promise.resolve(0) :
+        ClinicalAccessRequest.countDocuments({ patient: userId, status: 'pending', requestedUntil: { $gt: new Date() } }),
+      InsuranceClaim.countDocuments({ patient: userId, status: 'More Information Needed' }),
+      Appointment.find({ patient: userId, status: { $in: ['confirmed', 'pending'] },
+        $or: [{ appointmentDate: { $gt: appointmentToday } }, { appointmentDate: appointmentToday, time: { $gte: appointmentTime } }] })
+        .select('hospitalName appointmentDate time status').sort({ appointmentDate: 1, time: 1 }).limit(5),
     ]);
 
     // Format category breakdown with default zeroes for all categories
@@ -86,6 +101,7 @@ export const getDashboardStats = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
+      attention: { pendingAccessRequests, claimsNeedingInformation, upcomingAppointments },
       stats: {
         totalRecords,
         categories: categoryMap,

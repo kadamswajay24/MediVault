@@ -1,3 +1,4 @@
+import { indiaDateTimeInput, indiaInputToISO } from '../utils/indiaFormat';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Clock3, Loader2, Search, ShieldAlert, Stethoscope, X } from 'lucide-react';
@@ -5,11 +6,7 @@ import { useAuth } from '../context/useAuth';
 import { clinicalAccessAPI } from '../services/api';
 import type { ClinicalAccessRequest } from '../services/api';
 
-const toDateTimeInput = (date: string) => {
-  const value = new Date(date);
-  value.setMinutes(value.getMinutes() - value.getTimezoneOffset());
-  return value.toISOString().slice(0, 16);
-};
+const toDateTimeInput = indiaDateTimeInput;
 
 export const AccessRequestsPage: React.FC = () => {
   const { user } = useAuth();
@@ -64,7 +61,7 @@ export const AccessRequestsPage: React.FC = () => {
     try {
       await clinicalAccessAPI.decideRequest(request._id, {
         decision,
-        expiresAt: decision === 'approved' ? new Date(expiryInputs[request._id]).toISOString() : undefined,
+        expiresAt: decision === 'approved' ? indiaInputToISO(expiryInputs[request._id]) : undefined,
       });
       await fetchRequests();
     } catch (err: any) {
@@ -109,9 +106,30 @@ export const AccessRequestsPage: React.FC = () => {
         ].some((value) => value.toLocaleLowerCase().includes(normalizedSearch))
       )
     : requests;
+  const accessSummary = requests.reduce(
+    (summary, request) => {
+      const expired =
+        request.isExpired ||
+        (request.status === 'approved' && request.expiresAt
+          ? new Date(request.expiresAt).getTime() <= currentTime
+          : false);
+
+      if (expired) {
+        summary.expired += 1;
+      } else if (request.status === 'pending') {
+        summary.pending += 1;
+      } else if (request.status === 'approved') {
+        summary.active += 1;
+      } else {
+        summary.ended += 1;
+      }
+      return summary;
+    },
+    { pending: 0, active: 0, expired: 0, ended: 0 }
+  );
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="access-requests-page max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       <div className="border-b border-slate-200 dark:border-slate-800 pb-5">
         <div className="flex items-center gap-2">
           <ShieldAlert className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
@@ -129,9 +147,36 @@ export const AccessRequestsPage: React.FC = () => {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
+        <div role="alert" className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
           {error}
         </div>
+      )}
+
+      {!loading && requests.length > 0 && (
+        <section className="access-summary" aria-label="Clinical access summary">
+          <div className="access-summary__heading">
+            <h2>Access overview</h2>
+            <p>Active grants are approved and have not expired.</p>
+          </div>
+          <dl className="access-summary__counts">
+            <div className="access-summary__count access-summary__count--pending">
+              <dt>Pending review</dt>
+              <dd>{accessSummary.pending}</dd>
+            </div>
+            <div className="access-summary__count access-summary__count--active">
+              <dt>Active grants</dt>
+              <dd>{accessSummary.active}</dd>
+            </div>
+            <div className="access-summary__count access-summary__count--expired">
+              <dt>Expired</dt>
+              <dd>{accessSummary.expired}</dd>
+            </div>
+            <div className="access-summary__count access-summary__count--ended">
+              <dt>Denied or revoked</dt>
+              <dd>{accessSummary.ended}</dd>
+            </div>
+          </dl>
+        </section>
       )}
 
       {!loading && requests.length > 0 && (
@@ -170,7 +215,7 @@ export const AccessRequestsPage: React.FC = () => {
             return (
               <section
                 key={request._id}
-                className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+                className="access-request-card flex h-full flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
               >
                 <div className="flex flex-1 flex-col gap-3">
                   <div className="min-w-0 space-y-1.5">
@@ -178,11 +223,15 @@ export const AccessRequestsPage: React.FC = () => {
                       <h2 className="font-semibold text-slate-900 dark:text-white">
                         {isStaff ? request.patient.name : request.medicalStaff.name}
                       </h2>
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      <span
+                        role="status"
+                        aria-label={`Request status: ${status}`}
+                        className={`access-request-status access-request-status--${status} rounded-full px-2 py-0.5 text-[11px] font-semibold`}
+                      >
                         {status}
                       </span>
                     </div>
-                    <p className="text-xs font-mono text-slate-500">
+                    <p className="text-xs font-sans text-slate-500">
                       {isStaff ? request.patient.mediVaultId : request.medicalStaff.mediVaultId}
                     </p>
                     {!isStaff && (
@@ -194,8 +243,8 @@ export const AccessRequestsPage: React.FC = () => {
                     <p className="inline-flex items-start gap-1.5 text-xs text-slate-500">
                       <Clock3 className="w-3.5 h-3.5" />
                       {request.status === 'approved' && request.expiresAt
-                        ? `Access ends ${new Date(request.expiresAt).toLocaleString()}`
-                        : `Requested until ${new Date(request.requestedUntil).toLocaleString()}`}
+                        ? `Access ends ${new Date(request.expiresAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true, timeZoneName: 'short' })}`
+                        : `Requested until ${new Date(request.requestedUntil).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true, timeZoneName: 'short' })}`}
                     </p>
                     {request.decidedBy && (
                       <p className="text-xs text-slate-500">
@@ -219,7 +268,7 @@ export const AccessRequestsPage: React.FC = () => {
                         {request.status === 'pending' && (
                           <>
                             <label className="sr-only" htmlFor={`grant-expiry-${request._id}`}>
-                              Grant access until
+                              Grant access until (IST)
                             </label>
                             <input
                               id={`grant-expiry-${request._id}`}

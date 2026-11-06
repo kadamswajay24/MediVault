@@ -1,3 +1,4 @@
+import { indiaDateTimeInput, indiaInputToISO } from '../utils/indiaFormat';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -17,63 +18,32 @@ import {
   Check,
   X,
   ChevronDown,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
+import {
+  CATALOG_SEARCH_MEDICINES,
+  MEDICATION_CATALOG,
+  getSpecialtyMedications,
+} from '../constants/prescriptionMedications';
+import {
+  findCatalogTextMatches,
+  medicineRiskLabels,
+  type CatalogSearchMedicine,
+} from '../constants/specialtyMedicineCatalog';
 import { clinicalAccessAPI, medicalStaffAPI } from '../services/api';
 import { RecordViewerModal } from '../components/RecordViewerModal';
+import { RecordSummaryModal } from '../components/RecordSummaryModal';
 import type {
   MedicalNote,
   MedicalRecord,
+  MedicalRecordSummary,
   MedicalStaffClinicalOverview,
   PrescriptionItem,
   User as UserType,
 } from '../types';
 import type { ClinicalAccessRequest } from '../services/api';
 
-const MEDICATION_CATALOG = [
-  {
-    name: 'Paracetamol (acetaminophen) 500 mg',
-    ingredient: 'Paracetamol / acetaminophen',
-    use: 'Pain and fever relief',
-    caution: 'Check for duplicate acetaminophen-containing products and liver disease.',
-  },
-  {
-    name: 'Ibuprofen 200 mg',
-    ingredient: 'Ibuprofen',
-    use: 'Pain, fever, and inflammation',
-    caution: 'Review gastrointestinal, kidney, cardiovascular, and pregnancy risks.',
-  },
-  {
-    name: 'Amoxicillin 500 mg',
-    ingredient: 'Amoxicillin',
-    use: 'A penicillin antibiotic for selected bacterial infections',
-    caution: 'Check penicillin allergy; antibiotics are not for viral infections.',
-  },
-  {
-    name: 'Cetirizine 10 mg',
-    ingredient: 'Cetirizine',
-    use: 'Allergy symptoms',
-    caution: 'May cause drowsiness; consider kidney function and other sedatives.',
-  },
-  {
-    name: 'Metformin 500 mg',
-    ingredient: 'Metformin',
-    use: 'Blood glucose management in type 2 diabetes',
-    caution: 'Review kidney function and relevant acute illness or contrast procedures.',
-  },
-  {
-    name: 'Amlodipine 5 mg',
-    ingredient: 'Amlodipine',
-    use: 'Hypertension or angina',
-    caution: 'Monitor blood pressure; ankle swelling and dizziness can occur.',
-  },
-  {
-    name: 'Omeprazole 20 mg',
-    ingredient: 'Omeprazole',
-    use: 'Acid-related conditions',
-    caution: 'Review duration, interactions, and ongoing need.',
-  },
-];
 
 const DOSAGE_OPTIONS = ['1 tab', '1 tablet', '1 capsule', '2 tablets', '5 mL', '10 mL', '1 puff', '1 drop'];
 const FREQUENCY_OPTIONS = [
@@ -111,6 +81,7 @@ type PrescriptionDraft = PrescriptionItem & {
 export const MedicalStaffPage: React.FC = () => {
   const { user } = useAuth();
   const isDoctor = user?.role === 'medical_staff';
+  const medicationOptions = getSpecialtyMedications(user?.medicalStaffDetails?.specialization);
 
   const [notes, setNotes] = useState<MedicalNote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -118,23 +89,33 @@ export const MedicalStaffPage: React.FC = () => {
   // Patient Lookup State (For Doctor)
   const [patientSearch, setPatientSearch] = useState('');
   const [matchedPatients, setMatchedPatients] = useState<UserType[]>([]);
+  const [patientSearchLoading, setPatientSearchLoading] = useState(false);
+  const [patientSearchAttempted, setPatientSearchAttempted] = useState(false);
   const [approvedPatients, setApprovedPatients] = useState<UserType[]>([]);
   const [approvedPatientsLoading, setApprovedPatientsLoading] = useState(true);
+  const [approvedPatientsError, setApprovedPatientsError] = useState<string | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<UserType | null>(null);
   const [patientOverview, setPatientOverview] = useState<MedicalStaffClinicalOverview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null);
+  const [summaryRecord, setSummaryRecord] = useState<MedicalRecord | null>(null);
+  const [doctorSummary, setDoctorSummary] = useState<MedicalRecordSummary | null>(null);
+  const [doctorSummaryModel, setDoctorSummaryModel] = useState<string | null>(null);
+  const [doctorSummaryLoading, setDoctorSummaryLoading] = useState(false);
+  const [doctorSummaryError, setDoctorSummaryError] = useState<string | null>(null);
   const [requestReason, setRequestReason] = useState('');
+  const [requestReasonDetails, setRequestReasonDetails] = useState('');
   const [requestedUntil, setRequestedUntil] = useState(() => {
     const date = new Date(Date.now() + 8 * 60 * 60 * 1000);
-    date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-    return date.toISOString().slice(0, 16);
+    return indiaDateTimeInput(date);
   });
   const [requestingAccess, setRequestingAccess] = useState(false);
   const [accessRequestMessage, setAccessRequestMessage] = useState<string | null>(null);
   const [patientSearchError, setPatientSearchError] = useState<string | null>(null);
   const selectedPatientRef = useRef<UserType | null>(null);
   const overviewRequestsInProgress = useRef(new Set<string>());
+  const patientSearchRequestId = useRef(0);
+  const doctorSummaryRequestId = useRef(0);
 
   // New Note Modal
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
@@ -147,11 +128,31 @@ export const MedicalStaffPage: React.FC = () => {
   const [prescriptionRows, setPrescriptionRows] = useState<PrescriptionDraft[]>([
     { medicineName: '', dosage: '', frequency: '', duration: '', instructions: '', isCustom: false },
   ]);
+  const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
+  const [catalogSearchResults, setCatalogSearchResults] = useState<CatalogSearchMedicine[]>([]);
+  const [catalogSearchMessage, setCatalogSearchMessage] = useState<string | null>(null);
+  const [catalogSearchError, setCatalogSearchError] = useState<string | null>(null);
+  const [catalogSearchLoading, setCatalogSearchLoading] = useState(false);
   const [submittingNote, setSubmittingNote] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
   const [noteActionMessage, setNoteActionMessage] = useState<string | null>(null);
   const [noteActionBusyId, setNoteActionBusyId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(() => Date.now());
+  const specialtyMedicineNames = new Set(medicationOptions.medicines);
+  const crossCatalogOptions = [...new Map(
+    [
+      ...catalogSearchResults,
+      ...prescriptionRows.flatMap((row) => {
+        if (row.isCustom || !row.medicineName || specialtyMedicineNames.has(row.medicineName)) {
+          return [];
+        }
+        const selected = CATALOG_SEARCH_MEDICINES.find(
+          (medicine) => medicine.name === row.medicineName
+        );
+        return selected ? [selected] : [];
+      }),
+    ].map((medicine) => [medicine.id, medicine])
+  ).values()];
 
   const fetchDoctorData = useCallback(async () => {
     try {
@@ -193,95 +194,159 @@ export const MedicalStaffPage: React.FC = () => {
     return () => window.clearInterval(timer);
   }, [isDoctor]);
 
+  const loadApprovedPatients = useCallback(async (showLoading = false) => {
+    if (showLoading) setApprovedPatientsLoading(true);
+
+    try {
+      const response = await clinicalAccessAPI.getRequests();
+      setApprovedPatientsError(null);
+      const now = Date.now();
+      const activeGrants: ClinicalAccessRequest[] = response.requests
+        .filter((request) =>
+          request.status === 'approved' &&
+          !request.isExpired &&
+          request.expiresAt &&
+          new Date(request.expiresAt).getTime() > now
+        )
+        .sort((left, right) =>
+          new Date(right.expiresAt!).getTime() - new Date(left.expiresAt!).getTime()
+        );
+      const patientsById = new Map<string, UserType>();
+      activeGrants.forEach((request) =>
+        patientsById.set(request.patient.mediVaultId, request.patient)
+      );
+      setApprovedPatients(Array.from(patientsById.values()));
+    } catch (err: any) {
+      setApprovedPatientsError(err.response?.data?.message || 'Unable to load approved patients.');
+    } finally {
+      setApprovedPatientsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isDoctor) return;
 
-    let isCurrent = true;
-    clinicalAccessAPI.getRequests()
-      .then((response) => {
-        if (!isCurrent) return;
-        const now = Date.now();
-        const activeGrants: ClinicalAccessRequest[] = response.requests
-          .filter((request) =>
-            request.status === 'approved' &&
-            !request.isExpired &&
-            request.expiresAt &&
-            new Date(request.expiresAt).getTime() > now
-          )
-          .sort((left, right) =>
-            new Date(right.expiresAt!).getTime() - new Date(left.expiresAt!).getTime()
-          );
-        const patientsById = new Map<string, UserType>();
-        activeGrants.forEach((request) => patientsById.set(request.patient.id, request.patient));
-        setApprovedPatients(Array.from(patientsById.values()));
-      })
-      .catch((err: any) => {
-        if (isCurrent) {
-          setPatientSearchError(err.response?.data?.message || 'Unable to load approved patients.');
-        }
-      })
-      .finally(() => {
-        if (isCurrent) setApprovedPatientsLoading(false);
-      });
+    const initialLoadTimer = window.setTimeout(() => {
+      void loadApprovedPatients();
+    }, 0);
+    const timer = window.setInterval(() => {
+      void loadApprovedPatients();
+    }, 30_000);
+    const refreshOnFocus = () => {
+      void loadApprovedPatients();
+    };
+    window.addEventListener('focus', refreshOnFocus);
 
     return () => {
-      isCurrent = false;
+      window.clearTimeout(initialLoadTimer);
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refreshOnFocus);
     };
-  }, [isDoctor]);
+  }, [isDoctor, loadApprovedPatients]);
 
-  // Patient search for doctor
-  const handleSearchPatient = async (query: string) => {
-    setPatientSearch(query);
-    setPatientSearchError(null);
-    if (!query.trim()) {
-      setMatchedPatients([]);
+  useEffect(() => {
+    const query = patientSearch.trim().toUpperCase();
+
+    if (!/^MV-[A-F0-9]{16}$/.test(query)) {
       return;
     }
 
-    try {
-      const res = await medicalStaffAPI.searchPatients(query.trim());
-      if (res.success) {
-        setMatchedPatients(res.patients);
+    const requestId = patientSearchRequestId.current;
+    let isCurrent = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await medicalStaffAPI.searchPatients(query);
+        if (!isCurrent || requestId !== patientSearchRequestId.current) return;
+        if (response.success) setMatchedPatients(response.patients);
+        setPatientSearchAttempted(true);
+      } catch (err: any) {
+        if (isCurrent && requestId === patientSearchRequestId.current) {
+          setPatientSearchError(err.response?.data?.message || 'Unable to search patients.');
+        }
+      } finally {
+        if (isCurrent && requestId === patientSearchRequestId.current) {
+          setPatientSearchLoading(false);
+        }
       }
-    } catch (err: any) {
-      setPatientSearchError(err.response?.data?.message || 'Unable to search patients.');
-    }
-  };
+    }, 250);
+
+    return () => {
+      isCurrent = false;
+      window.clearTimeout(timer);
+    };
+  }, [patientSearch]);
 
   const loadPatientOverview = useCallback(async (patient: UserType, showLoading = false) => {
-    if (overviewRequestsInProgress.current.has(patient.id)) return;
-    overviewRequestsInProgress.current.add(patient.id);
+    if (overviewRequestsInProgress.current.has(patient.mediVaultId)) return;
+    overviewRequestsInProgress.current.add(patient.mediVaultId);
     if (showLoading) setOverviewLoading(true);
 
     try {
       const res = await medicalStaffAPI.getPatientClinicalOverview(patient.mediVaultId);
-      if (selectedPatientRef.current?.id === patient.id && res.success) {
+      if (selectedPatientRef.current?.mediVaultId === patient.mediVaultId && res.success) {
         setPatientOverview(res);
         setAccessRequestMessage(null);
       }
     } catch (err: any) {
-      if (selectedPatientRef.current?.id !== patient.id) return;
+      if (selectedPatientRef.current?.mediVaultId !== patient.mediVaultId) return;
       setPatientOverview(null);
       if (err.response?.status !== 403) {
         setAccessRequestMessage(err.response?.data?.message || 'Unable to load patient overview.');
       }
     } finally {
-      overviewRequestsInProgress.current.delete(patient.id);
-      if (showLoading && selectedPatientRef.current?.id === patient.id) {
+      overviewRequestsInProgress.current.delete(patient.mediVaultId);
+      if (showLoading && selectedPatientRef.current?.mediVaultId === patient.mediVaultId) {
         setOverviewLoading(false);
       }
     }
   }, []);
 
   const handleSelectPatient = async (p: UserType) => {
+    patientSearchRequestId.current += 1;
     selectedPatientRef.current = p;
     setSelectedPatient(p);
-    setMatchedPatients([]);
+    setRequestReason('');
+    setRequestReasonDetails('');
     setPatientSearch('');
+    setMatchedPatients([]);
+    setPatientSearchLoading(false);
+    setPatientSearchAttempted(false);
+    setPatientSearchError(null);
     setPatientOverview(null);
+    setDoctorSummary(null);
+    setDoctorSummaryModel(null);
+    setDoctorSummaryError(null);
+    doctorSummaryRequestId.current += 1;
     setOverviewLoading(true);
     setAccessRequestMessage(null);
     await loadPatientOverview(p, true);
+  };
+
+  const handleGenerateDoctorSummary = async () => {
+    if (!selectedPatient) return;
+    const patientMediVaultId = selectedPatient.mediVaultId;
+    const requestId = ++doctorSummaryRequestId.current;
+    setDoctorSummaryLoading(true);
+    setDoctorSummaryError(null);
+    setDoctorSummary(null);
+    setDoctorSummaryModel(null);
+    try {
+      const response = await medicalStaffAPI.getPatientAiSummary(
+        patientMediVaultId
+      );
+      if (requestId !== doctorSummaryRequestId.current) return;
+      setDoctorSummary(response.summary);
+      setDoctorSummaryModel(response.model);
+    } catch (err: any) {
+      if (requestId !== doctorSummaryRequestId.current) return;
+      setDoctorSummaryError(
+        err.response?.data?.message || 'Unable to generate the local AI overview.'
+      );
+    } finally {
+      if (requestId === doctorSummaryRequestId.current) {
+        setDoctorSummaryLoading(false);
+      }
+    }
   };
 
   useEffect(() => {
@@ -295,18 +360,26 @@ export const MedicalStaffPage: React.FC = () => {
 
   const handleRequestAccess = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!selectedPatient || !requestReason.trim()) return;
+    if (
+      !selectedPatient ||
+      !requestReason ||
+      (requestReason === 'Other' && requestReasonDetails.trim().length < 5)
+    ) return;
 
     setRequestingAccess(true);
     setAccessRequestMessage(null);
     try {
       const response = await clinicalAccessAPI.createRequest({
         patientMediVaultId: selectedPatient.mediVaultId,
-        reason: requestReason.trim(),
-        requestedUntil: new Date(requestedUntil).toISOString(),
+        reason: requestReason,
+        ...(requestReason === 'Other'
+          ? { reasonDetails: requestReasonDetails.trim() }
+          : {}),
+        requestedUntil: indiaInputToISO(requestedUntil),
       });
       setAccessRequestMessage(response.message);
       setRequestReason('');
+      setRequestReasonDetails('');
     } catch (err: any) {
       setAccessRequestMessage(err.response?.data?.message || 'Unable to request patient access.');
     } finally {
@@ -323,6 +396,61 @@ export const MedicalStaffPage: React.FC = () => {
 
   const handleRemovePrescriptionRow = (index: number) => {
     setPrescriptionRows((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleCatalogSearch = async () => {
+    const query = catalogSearchQuery.trim();
+    if (query.length < 2) {
+      setCatalogSearchError('Enter at least 2 characters to search the catalog.');
+      setCatalogSearchMessage(null);
+      return;
+    }
+
+    setCatalogSearchLoading(true);
+    setCatalogSearchError(null);
+    setCatalogSearchMessage(null);
+    setCatalogSearchResults([]);
+    try {
+      const response = await medicalStaffAPI.searchMedicineCatalog(
+        query,
+        CATALOG_SEARCH_MEDICINES
+      );
+      const catalogById = new Map(
+        CATALOG_SEARCH_MEDICINES.map((medicine) => [medicine.id, medicine])
+      );
+      const results = response.matches
+        .map((id) => catalogById.get(id))
+        .filter((medicine): medicine is CatalogSearchMedicine => Boolean(medicine));
+      setCatalogSearchResults(results);
+      setCatalogSearchMessage(
+        results.length
+          ? `${results.length} catalog match${results.length === 1 ? '' : 'es'} found. Matches are based on search terms only.`
+          : 'No catalog entries matched that search phrase.'
+      );
+    } catch (error: unknown) {
+      const fallbackIds = findCatalogTextMatches(CATALOG_SEARCH_MEDICINES, query);
+      const catalogById = new Map(
+        CATALOG_SEARCH_MEDICINES.map((medicine) => [medicine.id, medicine])
+      );
+      const fallbackResults = fallbackIds
+        .map((id) => catalogById.get(id))
+        .filter((medicine): medicine is CatalogSearchMedicine => Boolean(medicine));
+      const aiErrorMessage =
+        (error as { response?: { data?: { message?: string } } }).response?.data?.message ||
+        'The local AI search service could not be reached.';
+      setCatalogSearchResults(fallbackResults);
+      if (fallbackResults.length) {
+        setCatalogSearchMessage(
+          `Local keyword matches shown because AI matching failed: ${aiErrorMessage} These are search results, not recommendations.`
+        );
+      } else {
+        setCatalogSearchError(
+          `AI catalog search failed: ${aiErrorMessage} No keyword matches were found; check the local Ollama service or try catalog terms.`
+        );
+      }
+    } finally {
+      setCatalogSearchLoading(false);
+    }
   };
 
   const handleUpdatePrescriptionRow = (index: number, field: keyof PrescriptionItem, val: string) => {
@@ -353,6 +481,10 @@ export const MedicalStaffPage: React.FC = () => {
     setPrescriptionRows([
       { medicineName: '', dosage: '', frequency: '', duration: '', instructions: '', isCustom: false },
     ]);
+    setCatalogSearchQuery('');
+    setCatalogSearchResults([]);
+    setCatalogSearchMessage(null);
+    setCatalogSearchError(null);
     setNoteError(null);
     setIsNoteModalOpen(true);
   };
@@ -365,6 +497,8 @@ export const MedicalStaffPage: React.FC = () => {
     }
     setSelectedPatient(patient);
     selectedPatientRef.current = patient;
+    setRequestReason('');
+    setRequestReasonDetails('');
     setEditingNote(note);
     setNoteTitle(note.title);
     setNoteType(note.noteType);
@@ -374,7 +508,8 @@ export const MedicalStaffPage: React.FC = () => {
     setPrescriptionRows(note.prescriptionItems.length
       ? note.prescriptionItems.map((item) => ({
           ...item,
-          isCustom: !MEDICATION_CATALOG.some((medication) => medication.name === item.medicineName),
+          isCustom: !medicationOptions.medicines.includes(item.medicineName) &&
+            !CATALOG_SEARCH_MEDICINES.some((medicine) => medicine.name === item.medicineName),
           dosageIsCustom: Boolean(item.dosage) && !DOSAGE_OPTIONS.includes(item.dosage),
           frequencyIsCustom: Boolean(item.frequency) && !FREQUENCY_OPTIONS.includes(item.frequency),
           durationIsCustom: Boolean(item.duration) && !DURATION_OPTIONS.includes(item.duration),
@@ -382,6 +517,10 @@ export const MedicalStaffPage: React.FC = () => {
         }))
       : [{ medicineName: '', dosage: '', frequency: '', duration: '', instructions: '', isCustom: false }]
     );
+    setCatalogSearchQuery('');
+    setCatalogSearchResults([]);
+    setCatalogSearchMessage(null);
+    setCatalogSearchError(null);
     setNoteError(null);
     setIsNoteModalOpen(true);
   };
@@ -390,6 +529,10 @@ export const MedicalStaffPage: React.FC = () => {
     setIsNoteModalOpen(false);
     setEditingNote(null);
     setNoteError(null);
+    setCatalogSearchQuery('');
+    setCatalogSearchResults([]);
+    setCatalogSearchMessage(null);
+    setCatalogSearchError(null);
   };
 
   const handleSaveNote = async (e: React.FormEvent) => {
@@ -487,7 +630,7 @@ export const MedicalStaffPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="clinical-workspace max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
         <div>
@@ -500,24 +643,24 @@ export const MedicalStaffPage: React.FC = () => {
             </span>
           </div>
           {isDoctor && user?.mediVaultId && (
-          <p className="mt-1 text-xs font-mono text-slate-500">
+          <p className="mt-2 text-sm text-slate-500">
             Your MediVault ID: <span className="font-semibold text-slate-700 dark:text-slate-300">{user.mediVaultId}</span>
           </p>
           )}
           {isDoctor && user?.medicalStaffDetails && (
-            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 mt-1">
-              <span className="flex items-center gap-1 font-mono">
+            <div className="clinical-credentials flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500 mt-2">
+              <span className="inline-flex items-center gap-2">
                 <Award className="w-3.5 h-3.5 text-blue-500" />
                 License: {user.medicalStaffDetails.licenseNumber || 'Verified Medical Officer'}
               </span>
-              <span>•</span>
-              <span className="flex items-center gap-1">
+
+              <span className="inline-flex items-center gap-2">
                 <Building className="w-3.5 h-3.5 text-slate-400" />
                 {user.medicalStaffDetails.hospitalAffiliation || 'Primary Clinical Care'}
               </span>
               {user.medicalStaffDetails.specialization && (
                 <>
-                  <span>•</span>
+
                   <span className="font-semibold text-slate-700 dark:text-slate-300">
                     {user.medicalStaffDetails.specialization}
                   </span>
@@ -545,7 +688,7 @@ export const MedicalStaffPage: React.FC = () => {
               onClick={openNewNote}
               disabled={!selectedPatient || !patientOverview}
               title="Creates a prescription or clinical note on the selected patient's record"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold button-primary shadow-sm transition-all disabled:opacity-50"
             >
               <Plus className="w-4 h-4" />
               Issue Digital Rx / Note
@@ -569,14 +712,31 @@ export const MedicalStaffPage: React.FC = () => {
             Select Patient for Clinical Consultation
           </label>
           <div className="max-w-xl">
-            <label htmlFor="approved-patient" className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-              Approved patients
-            </label>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <label htmlFor="approved-patient" className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                Approved patients
+              </label>
+              <button
+                type="button"
+                onClick={() => void loadApprovedPatients(true)}
+                disabled={approvedPatientsLoading}
+                className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:text-blue-800 disabled:opacity-50 dark:text-blue-300"
+              >
+                <RefreshCw className={`h-3 w-3 ${approvedPatientsLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
             <select
               id="approved-patient"
-              value={selectedPatient?.id || ''}
+              value={approvedPatients.some(
+                (patient) => patient.mediVaultId === selectedPatient?.mediVaultId
+              )
+                ? selectedPatient?.mediVaultId
+                : ''}
               onChange={(event) => {
-                const patient = approvedPatients.find((item) => item.id === event.target.value);
+                const patient = approvedPatients.find(
+                  (item) => item.mediVaultId === event.target.value
+                );
                 if (patient) void handleSelectPatient(patient);
               }}
               disabled={approvedPatientsLoading || approvedPatients.length === 0}
@@ -585,25 +745,42 @@ export const MedicalStaffPage: React.FC = () => {
               <option value="">
                 {approvedPatientsLoading
                   ? 'Loading approved patients...'
-                  : approvedPatients.length
-                    ? 'Choose an approved patient'
-                    : 'No active approved patients'}
+                  : approvedPatientsError
+                    ? 'Could not load approved patients'
+                    : approvedPatients.length
+                      ? 'Choose an approved patient'
+                      : 'No active approved patients'}
               </option>
               {approvedPatients.map((patient) => (
-                <option key={patient.id} value={patient.id}>
+                <option key={patient.mediVaultId} value={patient.mediVaultId}>
                   {patient.name} - ID ending {patient.mediVaultId.slice(-4)}
                 </option>
               ))}
             </select>
+            {approvedPatientsError && (
+              <p role="alert" className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+                {approvedPatientsError}
+              </p>
+            )}
           </div>
           <div className="relative max-w-xl">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={patientSearch}
-              onChange={(e) => handleSearchPatient(e.target.value.toUpperCase())}
+              onChange={(event) => {
+                const query = event.target.value.toUpperCase();
+                patientSearchRequestId.current += 1;
+                setPatientSearch(query);
+                setMatchedPatients([]);
+                setPatientSearchError(null);
+                setPatientSearchAttempted(false);
+                setPatientSearchLoading(/^MV-[A-F0-9]{16}$/.test(query.trim()));
+              }}
               maxLength={19}
+              autoComplete="off"
               placeholder="Enter the patient's MediVault ID (e.g. MV-1A2B3C4D5E6F7A8B)..."
+              aria-label="Search patient by MediVault ID"
               className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white"
             />
 
@@ -612,14 +789,14 @@ export const MedicalStaffPage: React.FC = () => {
               <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-xl z-30 max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
                 {matchedPatients.map((p) => (
                   <button
-                    key={p.id}
+                    key={p.mediVaultId}
                     type="button"
                     onClick={() => handleSelectPatient(p)}
                     className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center justify-between text-xs transition-colors"
                   >
                     <div>
                       <span className="font-bold text-slate-900 dark:text-white">{p.name}</span>
-                      <span className="text-slate-500 ml-2 font-mono">{p.mediVaultId}</span>
+                      <span className="text-slate-500 ml-2 font-sans">{p.mediVaultId}</span>
                     </div>
                     <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-600">
                       Select
@@ -627,6 +804,21 @@ export const MedicalStaffPage: React.FC = () => {
                   </button>
                 ))}
               </div>
+            )}
+            {patientSearch.trim() && !/^MV-[A-F0-9]{16}$/.test(patientSearch.trim()) && (
+              <p className="mt-1 text-xs text-slate-500">
+                Enter the complete 19-character MediVault ID to search.
+              </p>
+            )}
+            {patientSearchLoading && (
+              <p role="status" className="mt-1 text-xs text-slate-500">
+                Searching for patient...
+              </p>
+            )}
+            {patientSearchAttempted && !patientSearchLoading && matchedPatients.length === 0 && !patientSearchError && (
+              <p className="mt-1 text-xs text-slate-500">
+                No active patient account found for this MediVault ID.
+              </p>
             )}
           </div>
           {patientSearchError && (
@@ -645,14 +837,14 @@ export const MedicalStaffPage: React.FC = () => {
                     <h3 className="font-bold text-sm text-slate-900 dark:text-white">
                       {selectedPatient.name}
                     </h3>
-                    <p className="text-xs text-slate-500 font-mono">MediVault ID: {selectedPatient.mediVaultId}</p>
+                    <p className="text-xs text-slate-500 font-sans">MediVault ID: {selectedPatient.mediVaultId}</p>
                   </div>
                 </div>
 
                 <button
                   onClick={() => setIsNoteModalOpen(true)}
                   disabled={!patientOverview}
-                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-500"
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold button-primary"
                 >
                   Create Prescription
                 </button>
@@ -673,6 +865,19 @@ export const MedicalStaffPage: React.FC = () => {
                     Open patient file
                   </Link>
                 )}
+                {patientOverview && (
+                  <button
+                    type="button"
+                    onClick={() => void handleGenerateDoctorSummary()}
+                    disabled={doctorSummaryLoading}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 px-3.5 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-50 dark:border-violet-700 dark:text-violet-200 dark:hover:bg-violet-950/30"
+                  >
+                    {doctorSummaryLoading
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <Sparkles className="h-3.5 w-3.5" />}
+                    {doctorSummaryLoading ? 'Summarizing...' : 'AI clinical overview'}
+                  </button>
+                )}
               </div>
 
               {overviewLoading ? (
@@ -682,6 +887,46 @@ export const MedicalStaffPage: React.FC = () => {
                 </div>
               ) : patientOverview ? (
                 <>
+                {doctorSummaryError && (
+                  <p
+                    role="alert"
+                    className="mb-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
+                  >
+                    {doctorSummaryError}
+                  </p>
+                )}
+                {doctorSummary && (
+                  <section className="mb-4 rounded-xl border border-violet-200 bg-violet-50/70 p-4 dark:border-violet-500/20 dark:bg-violet-500/5">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-violet-600 dark:text-violet-300" />
+                      <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
+                        AI clinical overview
+                      </h4>
+                      <span className="ml-auto text-[10px] text-slate-500">
+                        {doctorSummaryModel || 'Local model'} · not saved
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">
+                      {doctorSummary.summary}
+                    </p>
+                    {[
+                      { title: 'Key findings', items: doctorSummary.keyFindings },
+                      { title: 'Medicines mentioned', items: doctorSummary.medicationMentions },
+                      { title: 'Dates and values', items: doctorSummary.datesAndValues },
+                      { title: 'Points to verify', items: doctorSummary.questionsForDoctor },
+                    ].map(({ title, items }) => items.length > 0 && (
+                      <div key={title} className="mt-3">
+                        <h5 className="text-xs font-semibold text-slate-800 dark:text-slate-100">{title}</h5>
+                        <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-slate-700 dark:text-slate-300">
+                          {items.map((item, index) => <li key={`${title}-${index}`}>{item}</li>)}
+                        </ul>
+                      </div>
+                    ))}
+                    <p className="mt-3 text-[10px] leading-4 text-slate-500 dark:text-slate-400">
+                      AI-generated from records covered by your active patient-approved grant. Verify findings in the original records; this is not a diagnosis or treatment recommendation.
+                    </p>
+                  </section>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                   <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800">
                     <span className="text-[10px] uppercase font-bold text-slate-500">Clinical Profile</span>
@@ -749,7 +994,7 @@ export const MedicalStaffPage: React.FC = () => {
                           <article key={note._id} className="border-l-2 border-blue-300 pl-3 text-xs dark:border-blue-700">
                             <div className="flex flex-wrap items-center justify-between gap-1">
                               <p className="font-semibold text-slate-800 dark:text-slate-200">{note.title}</p>
-                              <time className="text-slate-500">{new Date(note.createdAt).toLocaleDateString()}</time>
+                              <time className="text-slate-500">{new Date(note.createdAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' })}</time>
                             </div>
                             {note.diagnosis && <p className="mt-1 text-slate-600 dark:text-slate-400">Diagnosis: {note.diagnosis}</p>}
                             {note.clinicalNotes && <p className="mt-1 whitespace-pre-wrap text-slate-600 dark:text-slate-400">{note.clinicalNotes}</p>}
@@ -790,10 +1035,28 @@ export const MedicalStaffPage: React.FC = () => {
                                   <FileText className="h-4 w-4 shrink-0 text-blue-500" />
                                   <h5 className="font-semibold text-sm text-slate-900 dark:text-white">{record.title}</h5>
                                   <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">{record.category}</span>
+                                  {record.metadata?.identityCheck && (
+                                    <span
+                                      title={record.metadata.identityCheck.message}
+                                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                        record.metadata.identityCheck.status === 'matched'
+                                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                          : 'bg-amber-100 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300'
+                                      }`}
+                                    >
+                                      {record.metadata.identityCheck.status === 'matched'
+                                        ? 'Patient details appear to match'
+                                        : record.metadata.identityCheck.status === 'needs_review'
+                                          ? 'Identity needs review'
+                                          : record.metadata.identityCheck.status === 'not_checked'
+                                            ? 'Identity check not run'
+                                          : 'Identity not verified'}
+                                    </span>
+                                  )}
                                 </div>
                                 <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
                                   <CalendarDays className="h-3.5 w-3.5" />
-                                  {new Date(record.recordDate).toLocaleDateString()} · {record.fileName}
+                                  {new Date(record.recordDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' })} · {record.fileName}
                                 </p>
                                 {record.description && (
                                   <p className="mt-2 text-xs leading-5 text-slate-700 dark:text-slate-300">
@@ -810,14 +1073,24 @@ export const MedicalStaffPage: React.FC = () => {
                                   <p className="mt-2 text-xs text-slate-500">No summary is available; open the report to review its contents.</p>
                                 )}
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => setSelectedRecord(record)}
-                                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                              >
-                                <Eye className="h-3.5 w-3.5" />
-                                Open report
-                              </button>
+                              <div className="flex shrink-0 flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setSummaryRecord(record)}
+                                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-violet-300 px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-200 dark:hover:bg-violet-950/30"
+                                >
+                                  <Sparkles className="h-3.5 w-3.5" />
+                                  AI summary
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedRecord(record)}
+                                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                  Open report
+                                </button>
+                              </div>
                             </div>
                           </article>
                         );
@@ -843,20 +1116,46 @@ export const MedicalStaffPage: React.FC = () => {
                   </div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Clinical purpose
-                    <textarea
+                    <select
                       value={requestReason}
-                      onChange={(event) => setRequestReason(event.target.value)}
+                      onChange={(event) => {
+                        setRequestReason(event.target.value);
+                        setRequestReasonDetails('');
+                      }}
                       required
-                      maxLength={1000}
-                      rows={2}
-                      placeholder="Explain why you need this patient's records."
                       className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                    />
+                    >
+                      <option value="" disabled>Select a reason for access</option>
+                      <option value="Continuity of care">Continuity of care</option>
+                      <option value="Reviewing test results">Reviewing test results</option>
+                      <option value="Diagnosis or treatment planning">Diagnosis or treatment planning</option>
+                      <option value="Medication or prescription review">Medication or prescription review</option>
+                      <option value="Follow-up care">Follow-up care</option>
+                      <option value="Emergency or urgent care">Emergency or urgent care</option>
+                      <option value="Second opinion">Second opinion</option>
+                      <option value="Other">Other (please specify)</option>
+                    </select>
                   </label>
+                  {requestReason === 'Other' && (
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Please specify
+                      <textarea
+                        value={requestReasonDetails}
+                        onChange={(event) => setRequestReasonDetails(event.target.value)}
+                        required
+                        minLength={5}
+                        maxLength={500}
+                        rows={2}
+                        placeholder="Briefly explain why you need access."
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      />
+                    </label>
+                  )}
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Requested access end
+                    Requested access end (IST)
                     <input
                       type="datetime-local"
+                      aria-label="Access end time in India Standard Time"
                       value={requestedUntil}
                       onChange={(event) => setRequestedUntil(event.target.value)}
                       required
@@ -871,8 +1170,12 @@ export const MedicalStaffPage: React.FC = () => {
                   )}
                   <button
                     type="submit"
-                    disabled={requestingAccess || !requestReason.trim()}
-                    className="rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                    disabled={
+                      requestingAccess ||
+                      !requestReason ||
+                      (requestReason === 'Other' && requestReasonDetails.trim().length < 5)
+                    }
+                    className="rounded-lg button-primary px-3.5 py-2 text-xs font-semibold disabled:opacity-50"
                   >
                     {requestingAccess ? 'Sending request...' : 'Send access request'}
                   </button>
@@ -929,12 +1232,12 @@ export const MedicalStaffPage: React.FC = () => {
                         )}
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Issued on {new Date(note.createdAt).toLocaleDateString()}
+                      Issued on {new Date(note.createdAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' })}
                     </p>
                   </div>
 
                   {note.diagnosis && (
-                    <span className="text-xs font-mono px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                    <span className="text-xs font-sans px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                       Dx: {note.diagnosis}
                     </span>
                   )}
@@ -1143,8 +1446,62 @@ export const MedicalStaffPage: React.FC = () => {
                       <Plus className="w-3.5 h-3.5" /> Add Medication
                     </button>
                   </div>
-                  <p className="text-[11px] text-slate-500">
-                    Reference examples only. Confirm the selected ingredient, allergies, interactions, local formulary, and dose before issuing.
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm dark:border-emerald-900 dark:bg-emerald-950/30">
+                    <p className="font-semibold text-emerald-800 dark:text-emerald-200">{medicationOptions.specialty}</p>
+                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                      {!medicationOptions.hasSuggestions
+                        ? 'No default medicine list is configured for this specialty. Search the full catalog by name or keyword, or enter a medicine manually.'
+                        : 'Search-only reference examples from the specialty catalog—not recommendations. Verify clinical suitability, local guidance, allergies, interactions, formulation, and dose before prescribing.'}
+                    </p>
+                  </div>
+                  <div className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                    <label htmlFor="medicine-catalog-search" className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Search the full catalog
+                      <span className="mt-0.5 block font-normal text-slate-500">
+                        Search terms only; results are not recommendations for this specialty.
+                      </span>
+                    </label>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input
+                        id="medicine-catalog-search"
+                        type="search"
+                        maxLength={160}
+                        value={catalogSearchQuery}
+                        onChange={(event) => setCatalogSearchQuery(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            void handleCatalogSearch();
+                          }
+                        }}
+                        placeholder="Medicine, class, dosage form, or keyword"
+                        className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void handleCatalogSearch()}
+                        disabled={catalogSearchLoading}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        {catalogSearchLoading
+                          ? <Loader2 className="h-4 w-4 animate-spin" />
+                          : <Sparkles className="h-4 w-4" />}
+                        {catalogSearchLoading ? 'Searching...' : 'AI catalog search'}
+                      </button>
+                    </div>
+                    {catalogSearchError && (
+                      <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">
+                        {catalogSearchError}
+                      </p>
+                    )}
+                    {catalogSearchMessage && (
+                      <p role="status" className="text-xs text-slate-600 dark:text-slate-400">
+                        {catalogSearchMessage}
+                      </p>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Shared general entries and specialty search references are not recommendations. Catalog entries require prescriber validation; confirm the review flags, clinical suitability, allergies, interactions, local policy, formulation, and strength.
                   </p>
 
                   <div className="space-y-2">
@@ -1158,10 +1515,13 @@ export const MedicalStaffPage: React.FC = () => {
                           value={row.isCustom ? 'custom' : row.medicineName}
                           onChange={(event) => {
                             const isCustom = event.target.value === 'custom';
-                            const medication = MEDICATION_CATALOG.find((item) => item.name === event.target.value);
+                            const medicineName = [
+                              ...medicationOptions.medicines,
+                              ...crossCatalogOptions.map((medicine) => medicine.name),
+                            ].find((name) => name === event.target.value);
                             setPrescriptionRows((current) =>
                               current.map((item, rowIndex) => rowIndex === idx
-                                ? { ...item, isCustom, medicineName: isCustom ? '' : medication?.name || '' }
+                                ? { ...item, isCustom, medicineName: isCustom ? '' : medicineName || '' }
                                 : item)
                             );
                           }}
@@ -1169,29 +1529,75 @@ export const MedicalStaffPage: React.FC = () => {
                           className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded"
                         >
                           <option value="">Select medication...</option>
-                          {MEDICATION_CATALOG.map((medication) => (
-                            <option key={medication.name} value={medication.name}>{medication.name}</option>
-                          ))}
-                          <option value="custom">Other / not listed</option>
+                          {medicationOptions.medicines.length > 0 && (
+                            <optgroup label={medicationOptions.listLabel}>
+                              {medicationOptions.medicines.map((name) => {
+                                const riskFlag = medicationOptions.medicineReferences[name].riskFlag;
+                                const riskLabel = medicineRiskLabels[riskFlag];
+                                return (
+                                  <option key={name} value={name}>
+                                    {riskLabel ? `${name} — ${riskLabel}` : name}
+                                  </option>
+                                );
+                              })}
+                            </optgroup>
+                          )}
+                          {crossCatalogOptions.length > 0 && (
+                            <optgroup label="Full catalog · search matches only">
+                              {crossCatalogOptions
+                                .filter((medicine) => !medicationOptions.medicines.includes(medicine.name))
+                                .map((medicine) => {
+                                  const riskLabel = medicineRiskLabels[medicine.riskFlag];
+                                  return (
+                                    <option key={medicine.id} value={medicine.name}>
+                                      {riskLabel
+                                        ? `${medicine.name} — ${riskLabel}`
+                                        : medicine.name}
+                                    </option>
+                                  );
+                                })}
+                            </optgroup>
+                          )}
+                          <option value="custom">Other - enter manually</option>
                         </select>
                         {row.isCustom ? (
                           <input
                             type="text"
-                            placeholder="Enter medication name"
+                            placeholder="Enter medicine name, formulation and strength"
+                            aria-label={`Custom medicine for prescription row ${idx + 1}`}
                             value={row.medicineName}
                             onChange={(event) => handleUpdatePrescriptionRow(idx, 'medicineName', event.target.value)}
                             className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded"
                           />
                         ) : (
-                          MEDICATION_CATALOG
-                            .filter((medication) => medication.name === row.medicineName)
-                            .map((medication) => (
-                              <div key={medication.name} className="space-y-0.5 text-[10px] text-slate-500">
-                                <p><span className="font-semibold">Active ingredient:</span> {medication.ingredient}</p>
-                                <p><span className="font-semibold">Common use:</span> {medication.use}</p>
-                                <p className="text-amber-700 dark:text-amber-400"><span className="font-semibold">Check:</span> {medication.caution}</p>
+                          <>
+                            {(medicationOptions.medicineReferences[row.medicineName] ||
+                              crossCatalogOptions.find((medicine) => medicine.name === row.medicineName)) && (
+                              <div className="space-y-0.5 text-[10px] text-slate-500">
+                                <p><span className="font-semibold">Reference class:</span> {(medicationOptions.medicineReferences[row.medicineName] || crossCatalogOptions.find((medicine) => medicine.name === row.medicineName))?.therapeuticClass}</p>
+                                <p><span className="font-semibold">Search forms only:</span> {(medicationOptions.medicineReferences[row.medicineName] || crossCatalogOptions.find((medicine) => medicine.name === row.medicineName))?.dosageForms.join(', ') || 'Not listed'}</p>
+                                {(medicationOptions.medicineReferences[row.medicineName] || crossCatalogOptions.find((medicine) => medicine.name === row.medicineName))?.clinicalReviewFlags.map((flag) => (
+                                  <p key={flag} className="font-semibold text-amber-700 dark:text-amber-400">
+                                    Review: {flag.toLowerCase().replace(/_/g, ' ')}
+                                  </p>
+                                ))}
+                                {medicineRiskLabels[(medicationOptions.medicineReferences[row.medicineName] || crossCatalogOptions.find((medicine) => medicine.name === row.medicineName))?.riskFlag || 'standard'] && (
+                                  <p className="font-semibold text-amber-700 dark:text-amber-400">
+                                    {medicineRiskLabels[(medicationOptions.medicineReferences[row.medicineName] || crossCatalogOptions.find((medicine) => medicine.name === row.medicineName))?.riskFlag || 'standard']}. Follow applicable specialist controls and local policy.
+                                  </p>
+                                )}
                               </div>
-                            ))
+                            )}
+                            {MEDICATION_CATALOG
+                              .filter((medication) => medication.name === row.medicineName)
+                              .map((medication) => (
+                                <div key={medication.name} className="space-y-0.5 text-[10px] text-slate-500">
+                                  <p><span className="font-semibold">Active ingredient:</span> {medication.ingredient}</p>
+                                  <p><span className="font-semibold">Common use:</span> {medication.use}</p>
+                                  <p className="text-amber-700 dark:text-amber-400"><span className="font-semibold">Check:</span> {medication.caution}</p>
+                                </div>
+                              ))}
+                          </>
                         )}
                       </div>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -1329,7 +1735,7 @@ export const MedicalStaffPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={submittingNote}
-                  className="px-4 py-2 text-sm font-semibold bg-blue-600 text-white hover:bg-blue-500 rounded-lg shadow-sm disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-2 text-sm font-semibold button-primary rounded-lg shadow-sm disabled:opacity-50 flex items-center gap-2"
                 >
                   {submittingNote && <Loader2 className="w-4 h-4 animate-spin" />}
                   {editingNote ? 'Save changes' : 'Sign & Issue Prescription'}
@@ -1347,6 +1753,11 @@ export const MedicalStaffPage: React.FC = () => {
           onClose={() => setSelectedRecord(null)}
         />
       )}
+      <RecordSummaryModal
+        record={summaryRecord}
+        audience="clinician"
+        onClose={() => setSummaryRecord(null)}
+      />
     </div>
   );
 };

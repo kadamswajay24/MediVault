@@ -214,15 +214,15 @@ export const AuditLogsPage: React.FC = () => {
                         <p className="font-medium text-xs sm:text-sm">{log.details}</p>
                       </td>
                       <td className="py-3.5 px-4 hidden md:table-cell text-xs text-slate-500 dark:text-slate-400">
-                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-[11px]">
+                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-sans text-[11px]">
                           {log.resourceType || 'General'}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 hidden sm:table-cell text-xs font-mono text-slate-500 dark:text-slate-400">
+                      <td className="py-3.5 px-4 hidden sm:table-cell text-xs font-sans text-slate-500 dark:text-slate-400">
                         {log.ipAddress || '127.0.0.1'}
                       </td>
-                      <td className="py-3.5 px-4 sm:px-6 text-right text-xs font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                        {new Date(log.timestamp).toLocaleString(undefined, {
+                      <td className="py-3.5 px-4 sm:px-6 text-right text-xs font-sans text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        {new Date(log.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', timeZoneName: 'short', hour12: true,
                           month: 'short',
                           day: 'numeric',
                           hour: '2-digit',

@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { getJwtSecret } from '../config/auth.js';
 import User from '../models/User.js';
 import ProxyDelegation from '../models/ProxyDelegation.js';
 import ClinicalAccessRequest from '../models/ClinicalAccessRequest.js';
@@ -14,7 +15,7 @@ export const protect = async (req, res, next) => {
       token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(
         token,
-        process.env.JWT_SECRET || 'medivault_super_secret_jwt_key_2026_dev_env'
+        getJwtSecret()
       );
 
       const user = await User.findById(decoded.id).select('-password');

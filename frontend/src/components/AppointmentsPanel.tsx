@@ -1,3 +1,4 @@
+import { indiaDateInput, indiaTimeInput } from '../utils/indiaFormat';
 import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { CalendarDays, Check, Clock3, Loader2, MapPin, X } from 'lucide-react';
@@ -10,33 +11,16 @@ import {
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-const getLocalDate = () => {
-  const date = new Date();
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-};
-
-const getLocalTime = () => {
-  const date = new Date();
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-};
+const getLocalDate = indiaDateInput;
+const getLocalTime = indiaTimeInput;
 
 const getError = (error: unknown, fallback: string) =>
   axios.isAxiosError<{ message?: string }>(error)
     ? error.response?.data?.message || fallback
     : fallback;
 
-const formatDate = (date: string) => {
-  const [year, month, day] = date.split('-').map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString();
-};
-
-const formatTime = (time: string) => {
-  const [hours, minutes] = time.split(':').map(Number);
-  return new Date(2000, 0, 1, hours, minutes).toLocaleTimeString([], {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-};
+const formatDate = (date: string) => new Date(`${date}T00:00:00+05:30`).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' });
+const formatTime = (time: string) => new Date(`2000-01-01T${time}:00+05:30`).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true }) + ' IST';
 
 type ScheduleFormDay = AppointmentScheduleDay & { enabled: boolean };
 type StaffAppointmentsTab = 'upcoming' | 'approvals' | 'schedule' | 'recent';
@@ -91,6 +75,20 @@ export const AppointmentsPanel: React.FC = () => {
   const [recentAppointments, setRecentAppointments] = useState<AppointmentEntry[]>([]);
   const [staffTab, setStaffTab] = useState<StaffAppointmentsTab>('upcoming');
   const [busyRequest, setBusyRequest] = useState('');
+
+  const [cancelId, setCancelId] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+  const cancelBooking = async () => {
+    if (!cancelId || cancelling) return;
+    setCancelling(true); setError(null); setMessage(null);
+    try {
+      const response = await appointmentsAPI.cancel(cancelId);
+      setMessage(response.message); setCancelId('');
+      await refreshAppointments();
+      if (doctorId && appointmentDate) setAvailability(await appointmentsAPI.getAvailability(doctorId, appointmentDate));
+    } catch (failure) { setError(getError(failure, 'Unable to cancel or refresh the appointment.')); }
+    finally { setCancelling(false); }
+  };
 
   const refreshAppointments = useCallback(async () => {
     const response = await appointmentsAPI.getMine();
@@ -209,7 +207,7 @@ export const AppointmentsPanel: React.FC = () => {
         doctorId,
         appointmentDate,
         time,
-        timeZoneOffsetMinutes: -new Date(`${appointmentDate}T${time}:00`).getTimezoneOffset(),
+        timeZoneOffsetMinutes: 330,
       });
       setMessage(response.message);
       setCustomTime('');
@@ -734,6 +732,16 @@ export const AppointmentsPanel: React.FC = () => {
                     }`}>
                       {getAppointmentStatus(appointment.status)}
                     </span>
+                    {canBook && ['confirmed', 'pending'].includes(appointment.status) && new Date(`${appointment.appointmentDate}T${appointment.time}:00+05:30`).getTime() > Date.now() && (
+                      <div className="text-sm">
+                        {cancelId === appointment._id ? <div className="space-y-2">
+                          <p>Cancel this appointment and release the slot?</p>
+                          <button type="button" disabled={cancelling} onClick={() => void cancelBooking()} className="rounded border border-rose-300 px-3 py-2 text-rose-700 dark:text-rose-300">{cancelling ? 'Cancelling...' : 'Confirm cancellation'}</button>
+                          <button type="button" disabled={cancelling} onClick={() => setCancelId('')} className="ml-2 px-3 py-2">Keep appointment</button>
+                        </div> : <button type="button" disabled={cancelling} onClick={() => setCancelId(appointment._id)} className="rounded border border-slate-300 px-3 py-2 dark:border-slate-700">Cancel appointment</button>}
+                      </div>
+                    )}
+
                   </div>
                 ))}
               </div>

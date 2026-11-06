@@ -101,6 +101,12 @@ const insuranceClaimSchema = new mongoose.Schema(
     reviewedAt: {
       type: Date,
     },
+    history: [{
+      status: { type: String, enum: CLAIM_STATUSES, required: true },
+      note: { type: String, default: '', maxlength: 1000 },
+      at: { type: Date, default: Date.now },
+      actor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    }],
     // Supplemental top-up deposits after initial adjudication
     supplementalPayments: [
       {

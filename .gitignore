@@ -27,9 +27,32 @@ build/
 # IDE & Editor
 .vscode/
 .idea/
+# Local coding-agent settings, worktrees, and skills
+/.kilo/
+/.agents/
 *.swp
 *.swo
 .DS_Store
 
 # Test artifacts
 backend/test_sample.pdf
+
+# Local environment variants (retain configuration examples)
+.env.*
+!.env.example
+!.env.*.example
+
+# Runtime logs and generated verification output
+*.log
+coverage/
+.nyc_output/
+*.tsbuildinfo
+
+# Local deployment state
+.vercel/
+
+# Generated OCR cache; packaged language data comes from dependencies
+/backend/*.traineddata
+/backend/*.traineddata.gz
+/*.traineddata
+/*.traineddata.gz
