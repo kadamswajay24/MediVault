@@ -315,6 +315,9 @@ export const reviewUserCredential = async (req, res, next) => {
     const user = await User.findById(req.params.id);
     if (!user || !['medical_staff', 'insurance_agent'].includes(user.role)) return res.status(404).json({ success: false, message: 'Staff account not found.' });
     if (!user.credentialVerification?.documentStorageFileId) return res.status(404).json({ success: false, message: 'No credential document is available for review.' });
+    if (decision === 'verified' && user.credentialVerification.status !== 'pending') {
+      return res.status(409).json({ success: false, message: 'The applicant must resubmit the requested changes before these credentials can be verified.' });
+    }
     if (decision === 'verified' && (!user.credentialVerification.expiresAt || user.credentialVerification.expiresAt <= new Date())) {
       return res.status(400).json({ success: false, message: 'This credential is expired. It cannot be verified.' });
     }
