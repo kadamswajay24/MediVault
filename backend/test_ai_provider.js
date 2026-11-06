@@ -105,6 +105,31 @@ test('blocked, truncated, malformed, or invalid summaries are rejected', async (
   }
 });
 
+test('Gemini errors identify the failure without disclosing upstream secrets or patient content', async (t) => {
+  setup(t);
+  const cases = [
+    [400, 'API_KEY_INVALID', 'INVALID_ARGUMENT', 'gemini_key_invalid'],
+    [403, 'API_KEY_HTTP_REFERRER_BLOCKED', 'PERMISSION_DENIED', 'gemini_key_restricted'],
+    [403, 'SERVICE_DISABLED', 'PERMISSION_DENIED', 'gemini_api_disabled'],
+    [404, '', 'NOT_FOUND', 'gemini_model_unavailable'],
+    [400, '', 'FAILED_PRECONDITION', 'gemini_project_prerequisite'],
+    [403, '', 'PERMISSION_DENIED', 'gemini_access_denied'],
+    [400, '', 'INVALID_ARGUMENT', 'gemini_request_invalid'],
+  ];
+  for (const [httpStatus, reason, status, code] of cases) {
+    const mock = t.mock.method(globalThis, 'fetch', async () => Response.json({
+      error: { status, message: 'PRIVATE patient text and secret key', details: [{ reason, metadata: { key: 'PRIVATE' } }] },
+    }, { status: httpStatus }));
+    await assert.rejects(requestStructuredAi(request), (error) => {
+      assert.equal(error.code, code);
+      assert.ok(error.message.includes(`HTTP ${httpStatus}`));
+      assert.ok(!error.message.includes('PRIVATE'));
+      return true;
+    });
+    mock.mock.restore();
+  }
+});
+
 test('missing key, invalid model and oversized input fail before making a request', async (t) => {
   setup(t);
   t.mock.method(globalThis, 'fetch', async () => assert.fail('Unexpected outbound request'));

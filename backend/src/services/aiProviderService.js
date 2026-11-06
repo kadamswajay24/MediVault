@@ -30,6 +30,37 @@ const getOllamaUrl = () => {
   return url.toString().replace(/\/+$/, '');
 };
 
+// Inspect upstream errors only to select fixed, safe messages. Never expose the
+// raw body: Google errors can echo credentials, project IDs, or request content.
+const geminiRequestError = (httpStatus, body, model) => {
+  const details = Array.isArray(body?.error?.details) ? body.error.details : [];
+  const reasons = new Set(details.map((detail) => detail?.reason));
+  const message = typeof body?.error?.message === 'string' ? body.error.message : '';
+  const fail = (text, code) => new AiServiceError(`${text} (Gemini HTTP ${httpStatus}.)`, 503, code);
+  if (reasons.has('API_KEY_INVALID') || /API key not valid|API_KEY_INVALID|API key expired/i.test(message) || httpStatus === 401) {
+    return fail('Google rejected the API key. Replace GEMINI_API_KEY in Vercel with the full key copied from AI Studio, then redeploy', 'gemini_key_invalid');
+  }
+  if (/reported as leaked|key.*(?:blocked|suspended)/i.test(message)) {
+    return fail('Google has blocked this API key. Create a replacement in AI Studio, update the Vercel secret, and redeploy', 'gemini_key_blocked');
+  }
+  if (reasons.has('SERVICE_DISABLED')) {
+    return fail('The Gemini API is disabled for the key’s Google project. Check the project’s API access in Google Cloud', 'gemini_api_disabled');
+  }
+  if (['API_KEY_SERVICE_BLOCKED', 'API_KEY_HTTP_REFERRER_BLOCKED', 'API_KEY_IP_ADDRESS_BLOCKED'].some((reason) => reasons.has(reason))) {
+    return fail('The API key restrictions reject requests from this backend. Check its API and application restrictions for server-side Gemini use', 'gemini_key_restricted');
+  }
+  if (httpStatus === 404) {
+    return fail(`Google could not find or serve model ${model} for this request. Set GEMINI_MODEL to an available model with free quota in AI Studio, then redeploy`, 'gemini_model_unavailable');
+  }
+  if (body?.error?.status === 'FAILED_PRECONDITION') {
+    return fail('Google reports that a project prerequisite is unmet. Check free-tier and location eligibility in AI Studio; changing the PDF will not resolve this', 'gemini_project_prerequisite');
+  }
+  if (httpStatus === 403) {
+    return fail('Google denied this project or key access to Gemini. Check API enablement, key restrictions, and project permissions in AI Studio and Google Cloud', 'gemini_access_denied');
+  }
+  return fail('Google rejected the request format or model configuration. The administrator needs to inspect the Gemini integration; this is not a PDF-reading error', 'gemini_request_invalid');
+};
+
 // Never log prompts, responses, credentials, or provider error bodies.
 export const requestStructuredAi = async ({ system, prompt, format, options, timeoutMs = 45000 }) => {
   if (typeof prompt !== 'string' || prompt.length > 60000) throw new AiServiceError('AI input is too large. Use a shorter document or search.', 400);
@@ -58,12 +89,13 @@ export const requestStructuredAi = async ({ system, prompt, format, options, tim
       } : { model, stream: false, system, prompt, format, options }),
     });
     if (!response.ok) {
+      if (isGemini && [400, 401, 403, 404].includes(response.status)) {
+        const body = await response.json().catch(() => null);
+        throw geminiRequestError(response.status, body, model);
+      }
       await response.body?.cancel();
       if (response.status === 429) {
         throw Object.assign(new AiServiceError('AI quota is temporarily exhausted. Try again later; your records remain available.', 429, 'ai_quota'), { retryAfter: 60 });
-      }
-      if (isGemini && [400, 401, 403, 404].includes(response.status)) {
-        throw new AiServiceError('Gemini could not accept the request. Ask the administrator to check the API key, model, and project access.', 503, 'ai_configuration');
       }
       throw new AiServiceError('The AI service is temporarily unavailable. Please try again later.', 503);
     }
