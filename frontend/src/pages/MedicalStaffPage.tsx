@@ -105,6 +105,12 @@ export const MedicalStaffPage: React.FC = () => {
   const [doctorSummaryModel, setDoctorSummaryModel] = useState<string | null>(null);
   const [doctorSummaryLoading, setDoctorSummaryLoading] = useState(false);
   const [doctorSummaryError, setDoctorSummaryError] = useState<string | null>(null);
+  const [summaryFeedbackOpen, setSummaryFeedbackOpen] = useState(false);
+  const [summaryFeedbackCategory, setSummaryFeedbackCategory] = useState<
+    'incorrect_information' | 'missing_information' | 'duplicate_information' | 'other_issue'
+  >('incorrect_information');
+  const [summaryFeedbackSubmitting, setSummaryFeedbackSubmitting] = useState(false);
+  const [summaryFeedbackMessage, setSummaryFeedbackMessage] = useState<string | null>(null);
   const [requestReason, setRequestReason] = useState('');
   const [requestReasonDetails, setRequestReasonDetails] = useState('');
   const [requestedUntil, setRequestedUntil] = useState(() => {
@@ -317,11 +323,32 @@ export const MedicalStaffPage: React.FC = () => {
     setPatientOverview(null);
     setDoctorSummary(null);
     setDoctorSummaryModel(null);
+    setSummaryFeedbackOpen(false);
+    setSummaryFeedbackMessage(null);
     setDoctorSummaryError(null);
     doctorSummaryRequestId.current += 1;
     setOverviewLoading(true);
     setAccessRequestMessage(null);
     await loadPatientOverview(p, true);
+  };
+
+  const handleSubmitSummaryFeedback = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedPatient || summaryFeedbackSubmitting) return;
+    setSummaryFeedbackSubmitting(true);
+    setSummaryFeedbackMessage(null);
+    try {
+      const response = await medicalStaffAPI.submitPatientAiSummaryFeedback(
+        selectedPatient.mediVaultId,
+        summaryFeedbackCategory
+      );
+      setSummaryFeedbackMessage(response.message);
+      setSummaryFeedbackOpen(false);
+    } catch (err: any) {
+      setSummaryFeedbackMessage(err.response?.data?.message || 'Could not submit this report. Please try again.');
+    } finally {
+      setSummaryFeedbackSubmitting(false);
+    }
   };
 
   const handleGenerateDoctorSummary = async () => {
@@ -333,6 +360,8 @@ export const MedicalStaffPage: React.FC = () => {
     setDoctorSummaryError(null);
     setDoctorSummary(null);
     setDoctorSummaryModel(null);
+    setSummaryFeedbackOpen(false);
+    setSummaryFeedbackMessage(null);
     try {
       const response = await medicalStaffAPI.getPatientAiSummary(
         patientMediVaultId
@@ -926,6 +955,9 @@ export const MedicalStaffPage: React.FC = () => {
                 )}
                 {doctorSummary && (
                   <section className="mb-4 rounded-xl border border-violet-200 bg-violet-50/70 p-4 dark:border-violet-500/20 dark:bg-violet-500/5">
+                    <p role="note" className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                      Review aid only. This AI summary is not a diagnosis or a treatment recommendation; make clinical decisions from verified source records and your professional judgment.
+                    </p>
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-violet-600 dark:text-violet-300" />
                       <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -957,6 +989,41 @@ export const MedicalStaffPage: React.FC = () => {
                     <p className="mt-3 text-[10px] leading-4 text-slate-500 dark:text-slate-400">
                       AI-generated from records covered by your active patient-approved grant. Verify findings in the original records; this is not a diagnosis or treatment recommendation.
                     </p>
+                    <div className="mt-3 border-t border-violet-200 pt-3 dark:border-violet-500/20">
+                      {!summaryFeedbackOpen ? (
+                        <button
+                          type="button"
+                          onClick={() => setSummaryFeedbackOpen(true)}
+                          className="text-xs font-medium text-violet-700 underline underline-offset-2 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100"
+                        >
+                          Report an issue with this summary
+                        </button>
+                      ) : (
+                        <form onSubmit={handleSubmitSummaryFeedback} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                          <label className="flex-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                            Issue category
+                            <select
+                              value={summaryFeedbackCategory}
+                              onChange={(event) => setSummaryFeedbackCategory(event.target.value as typeof summaryFeedbackCategory)}
+                              className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
+                            >
+                              <option value="incorrect_information">Incorrect information</option>
+                              <option value="missing_information">Missing information</option>
+                              <option value="duplicate_information">Duplicate information</option>
+                              <option value="other_issue">Other issue</option>
+                            </select>
+                          </label>
+                          <button type="submit" disabled={summaryFeedbackSubmitting} className="rounded-md bg-violet-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60">
+                            {summaryFeedbackSubmitting ? 'Sending…' : 'Send report'}
+                          </button>
+                          <button type="button" onClick={() => setSummaryFeedbackOpen(false)} className="rounded-md border border-slate-300 px-3 py-2 text-xs dark:border-slate-700">
+                            Cancel
+                          </button>
+                        </form>
+                      )}
+                      {summaryFeedbackMessage && <p role="status" className="mt-2 text-xs text-slate-600 dark:text-slate-300">{summaryFeedbackMessage}</p>}
+                      <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-400">Only the selected category is recorded. Do not include patient details in feedback.</p>
+                    </div>
                   </section>
                 )}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">

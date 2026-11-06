@@ -7,6 +7,7 @@ import {
   getPatientNotes,
   getPatientClinicalOverview,
   getPatientAiSummary,
+  submitPatientAiSummaryFeedback,
   getDoctorConsultations,
   searchMedicineCatalog,
 } from '../controllers/medicalStaffController.js';
@@ -29,6 +30,11 @@ router.get(
   '/patients/:patientId/ai-summary',
   authorize('medical_staff'),
   getPatientAiSummary
+);
+router.post(
+  '/patients/:patientId/ai-summary/feedback',
+  authorize('medical_staff'),
+  submitPatientAiSummaryFeedback
 );
 router.get(
   '/patients/:patientId/overview',

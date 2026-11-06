@@ -557,6 +557,53 @@ export const getPatientAiSummary = async (req, res, next) => {
   }
 };
 
+export const submitPatientAiSummaryFeedback = async (req, res, next) => {
+  try {
+    const patientMediVaultId = String(req.params.patientId || '').trim().toUpperCase();
+    const allowedCategories = new Set([
+      'incorrect_information',
+      'missing_information',
+      'duplicate_information',
+      'other_issue',
+    ]);
+    const category = req.body?.category;
+    if (!/^MV-[A-F0-9]{16}$/.test(patientMediVaultId)) {
+      return res.status(400).json({ success: false, message: 'A valid patient MediVault ID is required.' });
+    }
+    if (!allowedCategories.has(category)) {
+      return res.status(400).json({ success: false, message: 'Choose a valid summary issue category.' });
+    }
+
+    const patient = await User.findOne({
+      mediVaultId: patientMediVaultId,
+      role: 'patient',
+      isActive: true,
+    }).select('_id');
+    if (!patient) {
+      return res.status(404).json({ success: false, message: 'Patient account not found.' });
+    }
+    if (!(await requireActiveClinicalAccess(req.user._id, patient._id))) {
+      return res.status(403).json({
+        success: false,
+        message: 'An active patient-specific clinical access grant is required.',
+      });
+    }
+
+    await createAuditLog({
+      userId: patient._id,
+      performedBy: req.user._id,
+      action: 'AI_SUMMARY_FEEDBACK',
+      details: `Clinician reported AI summary issue category: ${category}. No summary text or clinical details were included.`,
+      resourceId: patient._id,
+      resourceType: 'PatientClinicalOverviewFeedback',
+      req,
+    });
+    return res.status(202).json({ success: true, message: 'Feedback recorded without summary content.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Get all consultations authored by this medical staff member
 // @route   GET /api/medical-staff/my-consultations
 // @access  Private (Medical Staff)

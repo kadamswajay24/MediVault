@@ -569,6 +569,17 @@ export const medicalStaffAPI = {
     return res.data;
   },
 
+  submitPatientAiSummaryFeedback: async (
+    patientId: string,
+    category: 'incorrect_information' | 'missing_information' | 'duplicate_information' | 'other_issue'
+  ): Promise<{ success: boolean; message: string }> => {
+    const res = await api.post(
+      `/medical-staff/patients/${encodeURIComponent(patientId)}/ai-summary/feedback`,
+      { category }
+    );
+    return res.data;
+  },
+
   getDoctorConsultations: async (): Promise<{
     success: boolean;
     count: number;
