@@ -113,8 +113,8 @@ export const LoginPage: React.FC<{ portal: AuthPortal }> = ({ portal }) => {
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Back to portals
         </Link>
-        <div className="surface-card p-6 sm:p-8">
-          <div className="mb-6">
+        <div className="surface-card p-6 text-center sm:p-8">
+          <div className="mb-6 text-center">
             <p className="text-xs font-semibold uppercase tracking-wide text-[#914B54] dark:text-[#DDA6A3]">{details.title}</p>
             <h1 id="login-page-title" className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
               {details.heading}
@@ -133,7 +133,7 @@ export const LoginPage: React.FC<{ portal: AuthPortal }> = ({ portal }) => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5 text-center">
             <div>
               <label htmlFor="login-email-input" className="mb-2 block text-sm font-medium text-slate-800 dark:text-slate-200">
                 Email address
