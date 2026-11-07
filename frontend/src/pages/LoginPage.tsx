@@ -135,7 +135,7 @@ export const LoginPage: React.FC<{ portal: AuthPortal }> = ({ portal }) => {
 
           <form onSubmit={handleSubmit} className="space-y-5 text-center">
             <div>
-              <label htmlFor="login-email-input" className="mb-2 block text-sm font-medium text-slate-800 dark:text-slate-200">
+              <label htmlFor="login-email-input" className="mb-2 block text-left text-sm font-medium text-slate-800 dark:text-slate-200">
                 Email address
               </label>
               <div className="relative">
@@ -157,7 +157,7 @@ export const LoginPage: React.FC<{ portal: AuthPortal }> = ({ portal }) => {
             </div>
 
             <div>
-              <label htmlFor="login-password-input" className="mb-2 block text-sm font-medium text-slate-800 dark:text-slate-200">
+              <label htmlFor="login-password-input" className="mb-2 block text-left text-sm font-medium text-slate-800 dark:text-slate-200">
                 Password
               </label>
               <div className="relative">
