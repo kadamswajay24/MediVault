@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, Plus, Save, X } from 'lucide-react';
-import { adminAPI, insuranceAPI } from '../services/api';
+import { insuranceAPI } from '../services/api';
 import { InsurancePlanAssistant } from './InsurancePlanAssistant';
 import type { InsurancePlanAssistantDraft, ManagedInsurancePolicyPlan } from '../types';
 
@@ -41,15 +41,12 @@ const formatINR = (amount: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
 
 interface PolicyPlanManagerProps {
-  audience: 'admin' | 'insurance_agent';
   companyName?: string;
 }
 
 export const PolicyPlanManager: React.FC<PolicyPlanManagerProps> = ({
-  audience,
   companyName = '',
 }) => {
-  const isAdmin = audience === 'admin';
   const [plans, setPlans] = useState<ManagedInsurancePolicyPlan[] | null>(null);
   const [form, setForm] = useState<PlanForm>(emptyForm);
   const [editingPlan, setEditingPlan] = useState<ManagedInsurancePolicyPlan | null>(null);
@@ -61,15 +58,13 @@ export const PolicyPlanManager: React.FC<PolicyPlanManagerProps> = ({
   const loadPlans = useCallback(async () => {
     try {
       setError(null);
-      const response = isAdmin
-        ? await adminAPI.getPolicyPlans()
-        : await insuranceAPI.getPolicyPlans();
+      const response = await insuranceAPI.getPolicyPlans();
       setPlans(response.plans);
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Unable to load marketplace plans.'));
       setPlans([]);
     }
-  }, [isAdmin]);
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -80,7 +75,7 @@ export const PolicyPlanManager: React.FC<PolicyPlanManagerProps> = ({
 
   const startNewPlan = () => {
     setEditingPlan(null);
-    setForm({ ...emptyForm, provider: isAdmin ? '' : companyName });
+    setForm({ ...emptyForm, provider: companyName });
     setError(null);
     setNotice(null);
   };
@@ -112,7 +107,6 @@ export const PolicyPlanManager: React.FC<PolicyPlanManagerProps> = ({
     setNotice(null);
     const data = {
       name: form.name,
-      provider: form.provider,
       description: form.description,
       coverageAmount: Number(form.coverageAmount),
       monthlyPremium: Number(form.monthlyPremium),
@@ -120,30 +114,13 @@ export const PolicyPlanManager: React.FC<PolicyPlanManagerProps> = ({
     };
 
     try {
-      if (isAdmin) {
-        if (editingPlan) {
-          await adminAPI.updatePolicyPlan(editingPlan.planId, { ...data, status: form.status });
-          setNotice('Marketplace plan updated.');
-        } else {
-          await adminAPI.createPolicyPlan(data);
-          setNotice('Plan created as a draft. Publish it when it is ready to appear in the marketplace.');
-          setForm(emptyForm);
-        }
+      if (editingPlan) {
+        await insuranceAPI.updatePolicyPlan(editingPlan.planId, { ...data, status: form.status });
+        setNotice('Marketplace plan updated.');
       } else {
-        if (editingPlan) {
-          await insuranceAPI.updatePolicyPlan(editingPlan.planId, {
-            name: data.name,
-            description: data.description,
-            coverageAmount: data.coverageAmount,
-            monthlyPremium: data.monthlyPremium,
-            highlights: data.highlights,
-          });
-          setNotice('Marketplace plan updated.');
-        } else {
-          await insuranceAPI.createPolicyPlan(data);
-          setNotice('Plan created as a draft and submitted for admin review.');
-          setForm({ ...emptyForm, provider: companyName });
-        }
+        await insuranceAPI.createPolicyPlan(data);
+        setNotice('Plan created as a draft. Publish it when it is ready to appear in the marketplace.');
+        setForm({ ...emptyForm, provider: companyName });
       }
       await loadPlans();
     } catch (err: unknown) {
@@ -157,12 +134,11 @@ export const PolicyPlanManager: React.FC<PolicyPlanManagerProps> = ({
     plan: ManagedInsurancePolicyPlan,
     status: ManagedInsurancePolicyPlan['status']
   ) => {
-    if (!isAdmin) return;
     setBusyPlanId(plan._id);
     setError(null);
     setNotice(null);
     try {
-      await adminAPI.updatePolicyPlan(plan.planId, { status });
+      await insuranceAPI.updatePolicyPlan(plan.planId, { status });
       setNotice(`Plan ${status}.`);
       await loadPlans();
       if (editingPlan?._id === plan._id) {
@@ -182,9 +158,7 @@ export const PolicyPlanManager: React.FC<PolicyPlanManagerProps> = ({
         <div>
           <h2 className="text-lg font-bold text-slate-900 dark:text-white">Marketplace plans</h2>
           <p className="text-sm text-slate-500 mt-1">
-            {isAdmin
-              ? 'Create illustrative listings. New plans stay hidden until published.'
-              : 'Create and manage listings for your insurance company. New plans stay hidden until an admin publishes them.'}
+            Create and manage listings for your insurance company. New plans stay hidden until you publish them.
           </p>
         </div>
         <button
@@ -200,12 +174,6 @@ export const PolicyPlanManager: React.FC<PolicyPlanManagerProps> = ({
         All marketplace listings are demonstrations only. Publishing a listing does not confirm
         insurance coverage or enable real payments.
       </div>
-      {!isAdmin && !companyName && (
-        <div role="alert" className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
-          Your account does not have an insurance company assigned. Ask an administrator to update your account before creating a listing.
-        </div>
-      )}
-
       {(error || notice) && (
         <div
           role={error ? 'alert' : 'status'}
@@ -258,7 +226,7 @@ export const PolicyPlanManager: React.FC<PolicyPlanManagerProps> = ({
                   >
                     Edit
                   </button>
-                  {isAdmin && (plan.status !== 'published' ? (
+                  {plan.status !== 'published' ? (
                     <button
                       type="button"
                       onClick={() => void updateStatus(plan, 'published')}
@@ -276,8 +244,8 @@ export const PolicyPlanManager: React.FC<PolicyPlanManagerProps> = ({
                     >
                       Unpublish
                     </button>
-                  ))}
-                  {isAdmin && plan.status !== 'archived' && (
+                  )}
+                  {plan.status !== 'archived' && (
                     <button
                       type="button"
                       onClick={() => void updateStatus(plan, 'archived')}
@@ -312,25 +280,18 @@ export const PolicyPlanManager: React.FC<PolicyPlanManagerProps> = ({
               )}
             </div>
 
-            {!isAdmin && <InsurancePlanAssistant onUseDraft={useAssistantDraft} />}
+            <InsurancePlanAssistant onUseDraft={useAssistantDraft} />
 
             <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">
               Plan name
               <input required maxLength={120} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 text-sm dark:border-slate-700" />
             </label>
-            {isAdmin ? (
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">
-                Provider
-                <input required maxLength={120} value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 text-sm dark:border-slate-700" />
-              </label>
-            ) : (
-              <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                Provider
-                <span className="mt-1 block rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700">
-                  {companyName || 'Not assigned'}
-                </span>
-              </p>
-            )}
+            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+              Provider
+              <span className="mt-1 block rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700">
+                {companyName || 'Not assigned'}
+              </span>
+            </p>
             <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">
               Description
               <textarea required maxLength={1000} rows={3} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 text-sm dark:border-slate-700" />
@@ -349,7 +310,7 @@ export const PolicyPlanManager: React.FC<PolicyPlanManagerProps> = ({
               Highlights (one per line, up to 12)
               <textarea rows={4} value={form.highlights} onChange={(event) => setForm({ ...form, highlights: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 text-sm dark:border-slate-700" />
             </label>
-            {isAdmin && editingPlan && (
+            {editingPlan && (
               <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">
                 Listing status
                 <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as PlanForm['status'] })} className="mt-1 w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 text-sm dark:border-slate-700">

@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import PolicyEnrollment from '../models/PolicyEnrollment.js';
 import PolicyPlan from '../models/PolicyPlan.js';
+import InsuranceCompany from '../models/InsuranceCompany.js';
 
 const addOneMonth = (date) => {
   const nextDate = new Date(date);
@@ -14,7 +15,12 @@ const addOneMonth = (date) => {
 
 export const getPolicyPlans = async (_req, res, next) => {
   try {
-    const customPlans = await PolicyPlan.find({ status: 'published' })
+    const activeCompanies = await InsuranceCompany.find({
+      isActive: true,
+      'verification.status': 'verified',
+      'verification.expiresAt': { $gt: new Date() },
+    }).distinct('_id');
+    const customPlans = await PolicyPlan.find({ status: 'published', insuranceCompany: { $in: activeCompanies } })
       .select('planId name provider description coverageAmount monthlyPremium highlights')
       .sort({ createdAt: -1 })
       .lean();
@@ -43,12 +49,19 @@ export const enrollInPolicy = async (req, res, next) => {
       planId: req.params.planId,
       status: 'published',
     })
-      .select('planId name provider coverageAmount monthlyPremium')
+      .select('planId name provider insuranceCompany coverageAmount monthlyPremium')
       .lean();
     const plan = customPlan ? { ...customPlan, id: customPlan.planId } : null;
     if (!plan) {
       return res.status(404).json({ success: false, message: 'Policy plan not found.' });
     }
+    const activeCompany = await InsuranceCompany.exists({
+      _id: plan.insuranceCompany,
+      isActive: true,
+      'verification.status': 'verified',
+      'verification.expiresAt': { $gt: new Date() },
+    });
+    if (!activeCompany) return res.status(404).json({ success: false, message: 'Policy plan not found.' });
 
     const existingEnrollment = await PolicyEnrollment.exists({
       patient: req.user._id,
@@ -68,6 +81,7 @@ export const enrollInPolicy = async (req, res, next) => {
       planId: plan.id,
       planName: plan.name,
       provider: plan.provider,
+      insuranceCompany: plan.insuranceCompany,
       coverageAmount: plan.coverageAmount,
       monthlyPremium: plan.monthlyPremium,
       policyNumber,

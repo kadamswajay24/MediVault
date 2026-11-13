@@ -20,6 +20,12 @@ const policyEnrollmentSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    insuranceCompany: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'InsuranceCompany',
+      required: true,
+      index: true,
+    },
     coverageAmount: {
       type: Number,
       required: true,

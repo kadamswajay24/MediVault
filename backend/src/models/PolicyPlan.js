@@ -20,6 +20,12 @@ const policyPlanSchema = new mongoose.Schema(
       trim: true,
       maxlength: 120,
     },
+    insuranceCompany: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'InsuranceCompany',
+      required: true,
+      index: true,
+    },
     description: {
       type: String,
       required: true,
@@ -67,5 +73,6 @@ const policyPlanSchema = new mongoose.Schema(
 );
 
 policyPlanSchema.index({ status: 1, createdAt: -1 });
+policyPlanSchema.index({ insuranceCompany: 1, status: 1, updatedAt: -1 });
 
 export default mongoose.model('PolicyPlan', policyPlanSchema);

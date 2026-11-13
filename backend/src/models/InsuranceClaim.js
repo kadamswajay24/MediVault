@@ -45,6 +45,12 @@ const insuranceClaimSchema = new mongoose.Schema(
       required: [true, 'Insurance company name is required'],
       trim: true,
     },
+    insuranceCompanyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'InsuranceCompany',
+      required: true,
+      index: true,
+    },
     claimType: {
       type: String,
       enum: CLAIM_TYPES,
@@ -81,6 +87,12 @@ const insuranceClaimSchema = new mongoose.Schema(
       type: String,
       default: '',
       trim: true,
+    },
+    hospital: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Hospital',
+      default: null,
+      index: true,
     },
     admissionDate: {
       type: Date,
@@ -123,6 +135,7 @@ const insuranceClaimSchema = new mongoose.Schema(
 );
 
 insuranceClaimSchema.index({ insuranceCompany: 1, status: 1 });
+insuranceClaimSchema.index({ insuranceCompanyId: 1, hospital: 1, status: 1 });
 insuranceClaimSchema.index({ patient: 1, createdAt: -1 });
 
 export default mongoose.model('InsuranceClaim', insuranceClaimSchema);

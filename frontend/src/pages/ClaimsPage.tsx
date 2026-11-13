@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/useAuth';
-import { claimAPI, policyAPI } from '../services/api';
+import { claimAPI, hospitalAPI, policyAPI } from '../services/api';
 import type { InsuranceClaim, MedicalRecord, ClaimStatus, ClaimType, PolicyEnrollment } from '../types';
 import { RecordViewerModal } from '../components/RecordViewerModal';
 
@@ -39,6 +39,8 @@ const formatINR = (amount: number) =>
 export const ClaimsPage: React.FC = () => {
   const { user, activeDependent } = useAuth();
   const isAgent = user?.role === 'insurance_agent';
+  const isInsurerAdmin = user?.role === 'insurer_admin';
+  const isClaimsReviewer = isAgent || isInsurerAdmin;
   const isAdmin = user?.role === 'admin';
 
   const [claims, setClaims] = useState<InsuranceClaim[]>([]);
@@ -62,6 +64,8 @@ export const ClaimsPage: React.FC = () => {
   const [claimType, setClaimType] = useState<ClaimType>('Hospitalization');
   const [claimAmount, setClaimAmount] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [availableHospitals, setAvailableHospitals] = useState<{ id: string; name: string; city: string; state: string }[]>([]);
+  const [selectedHospitalId, setSelectedHospitalId] = useState('');
 
   // Review Form State (Agent)
   const [reviewing, setReviewing] = useState(false);
@@ -109,14 +113,13 @@ export const ClaimsPage: React.FC = () => {
     setSelectedPolicyId('');
     setClaimAmount('');
     setClaimType('Hospitalization');
+    setSelectedHospitalId('');
     setLoadingPolicies(true);
     try {
-      const res = await policyAPI.getMyPolicies();
-      if (res.success) {
-        setAvailablePolicies(res.policies);
-      } else {
-        setFormError('Unable to load your policies. Please try again.');
-      }
+      const [res, hospitalRes] = await Promise.all([policyAPI.getMyPolicies(), hospitalAPI.directory()]);
+      if (res.success) setAvailablePolicies(res.policies);
+      else setFormError('Unable to load your policies. Please try again.');
+      setAvailableHospitals(hospitalRes.hospitals);
     } catch (err: any) {
       setFormError(err.response?.data?.message || 'Unable to load your policies. Please try again.');
     } finally {
@@ -131,8 +134,12 @@ export const ClaimsPage: React.FC = () => {
       return;
     }
 
-    const numericAmount = parseFloat(claimAmount);
-    if (isNaN(numericAmount) || numericAmount <= 0) {
+    if (!/^\d+(?:\.\d{1,2})?$/.test(claimAmount.trim())) {
+      setFormError('Please enter a valid positive claim amount.');
+      return;
+    }
+    const numericAmount = Number(claimAmount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       setFormError('Please enter a valid positive claim amount.');
       return;
     }
@@ -144,6 +151,7 @@ export const ClaimsPage: React.FC = () => {
       const res = await claimAPI.submitClaim({
         policyNumber: selectedPolicy.policyNumber,
         insuranceCompany: selectedPolicy.provider,
+        hospitalId: selectedHospitalId || undefined,
         claimType,
         claimAmount: numericAmount,
       });
@@ -173,12 +181,16 @@ export const ClaimsPage: React.FC = () => {
   const handleSaveReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reviewingClaim) return;
+    if (!/^\d+(?:\.\d{1,2})?$/.test(approvedAmount.trim()) || !Number.isFinite(Number(approvedAmount)) || Number(approvedAmount) < 0 || Number(approvedAmount) > reviewingClaim.claimAmount) {
+      alert('Enter a valid payout amount up to the original claim amount, with no more than two decimal places.');
+      return;
+    }
 
     setReviewing(true);
     try {
       const res = await claimAPI.reviewClaim(reviewingClaim._id, {
         status: newStatus,
-        approvedAmount: parseFloat(approvedAmount) || 0,
+        approvedAmount: Number(approvedAmount),
         agentRemarks: agentRemarks.trim(),
       });
 
@@ -207,8 +219,12 @@ export const ClaimsPage: React.FC = () => {
     e.preventDefault();
     if (!supplementingClaim) return;
 
-    const numericAmount = parseFloat(supplementAmount);
-    if (isNaN(numericAmount) || numericAmount <= 0) {
+    if (!/^\d+(?:\.\d{1,2})?$/.test(supplementAmount.trim())) {
+      setSupplementError('Please enter a valid positive additional amount.');
+      return;
+    }
+    const numericAmount = Number(supplementAmount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       setSupplementError('Please enter a valid positive additional amount.');
       return;
     }
@@ -241,7 +257,7 @@ export const ClaimsPage: React.FC = () => {
   };
 
   const renderClaimActions = (claim: InsuranceClaim) => {
-    if (isAgent || isAdmin) {
+    if (isClaimsReviewer || isAdmin) {
       if (isAdjudicated(claim)) {
         return (
           <div className="flex items-center justify-end gap-2">
@@ -326,20 +342,20 @@ export const ClaimsPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-              {isAgent ? 'Insurance Claims Review Portal' : 'Health Insurance Claims'}
+              {isClaimsReviewer ? 'Insurance Claims Review Portal' : 'Health Insurance Claims'}
             </h1>
             <span className="text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 font-sans font-medium">
-              {isAgent ? user?.insuranceDetails?.companyName || 'Claims Adjuster' : 'Reimbursement & Cashless'}
+              {isClaimsReviewer ? user?.insuranceDetails?.companyName || 'Insurer' : 'Reimbursement & Cashless'}
             </span>
           </div>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            {isAgent
-              ? 'Verify hospital records, diagnostic bills, and policy coverages to adjudicate submitted claims.'
+            {isClaimsReviewer
+              ? isInsurerAdmin ? 'Review all claims for your insurer, including claims without a hospital assignment.' : 'Review claims for hospitals assigned to your insurer account.'
               : 'Submit claims to your insurer with attached diagnostic reports, discharge summaries, and bills.'}
           </p>
         </div>
 
-        {!isAgent && (
+        {!isClaimsReviewer && (
           <button
             onClick={handleOpenSubmitModal}
             className="button-primary inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm"
@@ -400,11 +416,11 @@ export const ClaimsPage: React.FC = () => {
           <FileCheck2 className="w-10 h-10 mx-auto text-slate-400 mb-3" />
           <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200">No insurance claims found</h3>
           <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-            {isAgent
+            {isClaimsReviewer
               ? 'No incoming claims currently require review under the selected filter.'
               : 'You have not submitted any insurance claims yet. Attach medical records from your vault to file a new reimbursement.'}
           </p>
-          {!isAgent && (
+          {!isClaimsReviewer && (
             <button
               onClick={handleOpenSubmitModal}
               className="button-primary mt-4 px-3.5 py-2 rounded-lg text-xs font-semibold"
@@ -675,6 +691,15 @@ export const ClaimsPage: React.FC = () => {
                     </div>
                   )}
 
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300">Hospital (optional)</label>
+                    <select value={selectedHospitalId} onChange={(event) => setSelectedHospitalId(event.target.value)} className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">
+                      <option value="">No hospital / other facility</option>
+                      {availableHospitals.map((hospital) => <option key={hospital.id} value={hospital.id}>{hospital.name} · {hospital.city}, {hospital.state}</option>)}
+                    </select>
+                    <p className="mt-1 text-xs text-slate-500">Claims without a selected hospital go to your insurer's admin queue.</p>
+                  </div>
+
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300">
@@ -919,6 +944,7 @@ export const ClaimsPage: React.FC = () => {
                 <textarea
                   rows={2}
                   value={supplementReason}
+                  maxLength={1000}
                   onChange={(e) => setSupplementReason(e.target.value)}
                   placeholder="e.g. Post-discharge physiotherapy approved. Additional ₹5,000 authorized."
                   className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-500"

@@ -1,6 +1,7 @@
 import { withAiUsage } from '../services/aiUsageService.js';
 import { randomBytes } from 'crypto';
 import PolicyPlan from '../models/PolicyPlan.js';
+import InsuranceCompany from '../models/InsuranceCompany.js';
 import { createAuditLog } from '../services/auditService.js';
 import {
   generateInsurancePlanAssistantResponse,
@@ -9,6 +10,7 @@ import {
 
 const planFields = ['name', 'provider', 'description', 'coverageAmount', 'monthlyPremium', 'highlights'];
 const planStatuses = ['draft', 'published', 'archived'];
+const companyForAdmin = (req) => InsuranceCompany.findOne({ _id: req.user.insuranceCompany, admins: req.user._id, isActive: true, 'verification.status': 'verified', 'verification.expiresAt': { $gt: new Date() } });
 
 const validatePlanData = (data, { partial = false } = {}) => {
   const errors = [];
@@ -80,24 +82,30 @@ const normalizePlanFields = (data, fields = planFields) =>
       ])
   );
 
-export const getAdminPolicyPlans = async (_req, res, next) => {
+export const getCompanyPolicyPlans = async (req, res, next) => {
   try {
-    const plans = await PolicyPlan.find().sort({ updatedAt: -1 });
+    const company = await companyForAdmin(req);
+    if (!company) return res.status(404).json({ success: false, message: 'Your approved insurer is unavailable.' });
+    const plans = await PolicyPlan.find({ insuranceCompany: company._id }).sort({ updatedAt: -1 });
     return res.status(200).json({ success: true, plans });
   } catch (error) {
     next(error);
   }
 };
 
-export const createAdminPolicyPlan = async (req, res, next) => {
+export const createCompanyPolicyPlan = async (req, res, next) => {
   try {
-    const errors = validatePlanData(req.body);
+    const company = await companyForAdmin(req);
+    if (!company) return res.status(404).json({ success: false, message: 'Your approved insurer is unavailable.' });
+    if (req.body.provider !== undefined || req.body.insuranceCompany !== undefined || req.body.status !== undefined) return res.status(400).json({ success: false, message: 'Provider and insurer are assigned by your company account; new plans start as drafts.' });
+    const errors = validatePlanData({ ...req.body, provider: company.name });
     if (errors.length) {
       return res.status(400).json({ success: false, message: errors.join(' ') });
     }
 
     const plan = await PolicyPlan.create({
-      ...normalizePlanFields(req.body),
+      ...normalizePlanFields({ ...req.body, provider: company.name }),
+      insuranceCompany: company._id,
       planId: `custom-${randomBytes(8).toString('hex')}`,
       status: 'draft',
       createdBy: req.user._id,
@@ -115,109 +123,24 @@ export const createAdminPolicyPlan = async (req, res, next) => {
   }
 };
 
-export const getInsuranceAgentPolicyPlans = async (req, res, next) => {
+export const updateCompanyPolicyPlan = async (req, res, next) => {
   try {
-    const plans = await PolicyPlan.find({ createdBy: req.user._id }).sort({ updatedAt: -1 });
-    return res.status(200).json({ success: true, plans });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const createInsuranceAgentPolicyPlan = async (req, res, next) => {
-  try {
-    if (req.body.status !== undefined) {
-      return res.status(400).json({
-        success: false,
-        message: 'New insurance-agent listings must be submitted as drafts for admin review.',
-      });
-    }
-
-    const provider = req.user.insuranceDetails?.companyName?.trim();
-    if (!provider) {
-      return res.status(400).json({
-        success: false,
-        message: 'An insurance company must be assigned to your account before creating a plan.',
-      });
-    }
-
-    const errors = validatePlanData({ ...req.body, provider });
-    if (errors.length) {
-      return res.status(400).json({ success: false, message: errors.join(' ') });
-    }
-
-    const plan = await PolicyPlan.create({
-      ...normalizePlanFields({ ...req.body, provider }),
-      planId: `custom-${randomBytes(8).toString('hex')}`,
-      status: 'draft',
-      createdBy: req.user._id,
-      updatedBy: req.user._id,
-    });
-    await auditPlanChange(req, plan, 'POLICY_PLAN_CREATED');
-
-    return res.status(201).json({
-      success: true,
-      message: 'Custom plan created as a draft.',
-      plan,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const updateInsuranceAgentPolicyPlan = async (req, res, next) => {
-  try {
-    if (req.body.provider !== undefined || req.body.status !== undefined) {
-      return res.status(400).json({
-        success: false,
-        message: 'Insurance agents cannot change a plan provider or listing status.',
-      });
-    }
-
-    const editableFields = planFields.filter((field) => field !== 'provider');
+    const company = await companyForAdmin(req);
+    if (!company) return res.status(404).json({ success: false, message: 'Your approved insurer is unavailable.' });
+    if (req.body.provider !== undefined || req.body.insuranceCompany !== undefined) return res.status(400).json({ success: false, message: 'A marketplace plan cannot be transferred to another insurer.' });
     const errors = validatePlanData(req.body, { partial: true });
     if (errors.length) {
       return res.status(400).json({ success: false, message: errors.join(' ') });
     }
-    if (!editableFields.some((field) => req.body[field] !== undefined)) {
+    if (![...planFields.filter((field) => field !== 'provider'), 'status'].some((field) => req.body[field] !== undefined)) {
       return res.status(400).json({ success: false, message: 'Provide at least one plan field to update.' });
     }
 
-    const plan = await PolicyPlan.findOne({
-      planId: req.params.planId,
-      createdBy: req.user._id,
-    });
+    const plan = await PolicyPlan.findOne({ planId: req.params.planId, insuranceCompany: company._id });
     if (!plan) {
       return res.status(404).json({ success: false, message: 'Marketplace plan not found.' });
     }
-
-    plan.set(normalizePlanFields(req.body, editableFields));
-    plan.updatedBy = req.user._id;
-    await plan.save();
-    await auditPlanChange(req, plan, 'POLICY_PLAN_UPDATED');
-
-    return res.status(200).json({ success: true, message: 'Marketplace plan updated.', plan });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const updateAdminPolicyPlan = async (req, res, next) => {
-  try {
-    const errors = validatePlanData(req.body, { partial: true });
-    if (errors.length) {
-      return res.status(400).json({ success: false, message: errors.join(' ') });
-    }
-    if (!planFields.some((field) => req.body[field] !== undefined) && req.body.status === undefined) {
-      return res.status(400).json({ success: false, message: 'Provide at least one plan field to update.' });
-    }
-
-    const plan = await PolicyPlan.findOne({ planId: req.params.planId });
-    if (!plan) {
-      return res.status(404).json({ success: false, message: 'Custom marketplace plan not found.' });
-    }
-
-    plan.set(normalizePlanFields(req.body));
+    plan.set(normalizePlanFields(req.body, planFields.filter((field) => field !== 'provider')));
     if (req.body.status !== undefined) plan.status = req.body.status;
     plan.updatedBy = req.user._id;
     await plan.save();
