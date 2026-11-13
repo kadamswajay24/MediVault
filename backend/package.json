@@ -10,10 +10,11 @@
     "test": "node test_mvp.js",
     "test:rbac": "node test_rbac.js",
     "test:ai": "node --test test_ai_summary.js",
-    "test:unit": "node --test test_security.js test_ai_summary.js test_insurance_plan_assistant.js test_medicine_catalog_search.js test_storage_security.js test_ai_provider.js",
+    "test:unit": "node --test test_security.js test_ai_summary.js test_insurance_plan_assistant.js test_medicine_catalog_search.js test_storage_security.js test_ai_provider.js test_appointment_cancellation.js test_insurance_agent_company_scope.js test_pharmacy_workflow.js",
     "test:all": "npm run test:unit && node test_mvp.js && node test_rbac.js",
     "admin:promote": "node src/scripts/promoteAdmin.js",
     "policies:clear-legacy-demo": "node src/scripts/clearLegacyDemoPolicyEnrollments.js",
+    "insurance:backfill-links": "node src/scripts/backfillInsuranceCompanyLinks.js",
     "test:storage": "node --test test_storage_integration.js"
   },
   "dependencies": {

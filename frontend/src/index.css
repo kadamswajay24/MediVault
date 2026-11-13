@@ -448,6 +448,14 @@ main th {
   padding-top: 0.9rem;
 }
 
+.medication-reminder-chevron {
+  transition: transform 160ms ease;
+}
+
+details[open] .medication-reminder-chevron {
+  transform: rotate(180deg);
+}
+
 .patient-sidebar__section {
   display: grid;
   gap: 0.15rem;

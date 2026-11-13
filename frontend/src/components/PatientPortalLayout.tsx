@@ -27,6 +27,7 @@ const navigationSections = [
     links: [
       { label: 'Medical records', to: '/records', icon: FileText },
       { label: 'Prescriptions', to: '/prescriptions', icon: Pill },
+      { label: 'Pharmacy sharing', to: '/pharmacy', icon: ShieldCheck },
       { label: 'Health profile', to: '/profile', icon: Heart },
     ],
   },
@@ -36,7 +37,7 @@ const navigationSections = [
       { label: 'Appointments', to: '/appointments', icon: CalendarDays },
       { label: 'Caregivers & sharing', to: '/caregivers', icon: Users },
       { label: 'Access requests', to: '/access-requests', icon: KeyRound },
-      { label: 'Activity log', to: '/audit-logs', icon: History },
+      { label: 'Vault activity', to: '/audit-logs', icon: History },
     ],
   },
   {

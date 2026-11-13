@@ -8,16 +8,17 @@ import User from './src/models/User.js';
 import HealthProfile from './src/models/HealthProfile.js';
 import MedicalRecord from './src/models/MedicalRecord.js';
 import ProxyDelegation from './src/models/ProxyDelegation.js';
-import InsuranceClaim from './src/models/InsuranceClaim.js';
 import MedicalNote from './src/models/MedicalNote.js';
 import AuditLog from './src/models/AuditLog.js';
 import ClinicalAccessRequest from './src/models/ClinicalAccessRequest.js';
+import Hospital from './src/models/Hospital.js';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PASSWORD = process.env.DEMO_SEED_PASSWORD;
+const DEMO_HOSPITAL_ID = process.env.DEMO_HOSPITAL_ID;
 
 const createDemoPdf = () => {
   const lines = [
@@ -76,6 +77,13 @@ async function seedDemoData() {
   console.log('[MediVault Seed] Connecting to MongoDB...');
   await mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/medivault');
   console.log('[MediVault Seed] Connected successfully.');
+  const demoHospital = DEMO_HOSPITAL_ID && mongoose.Types.ObjectId.isValid(DEMO_HOSPITAL_ID)
+    ? await Hospital.findOne({ _id: DEMO_HOSPITAL_ID, isActive: true })
+    : null;
+  if (!demoHospital) {
+    await mongoose.disconnect();
+    throw new Error('Set DEMO_HOSPITAL_ID to an active hospital created by a platform administrator.');
+  }
 
   // 1. Create or update Demo Patient
   let patient = await User.findOne({ email: 'patient@medivault.io' });
@@ -154,49 +162,27 @@ async function seedDemoData() {
       role: 'medical_staff',
       phone: '+91 9876543212',
       medicalStaffDetails: {
+        professionalType: 'physician',
         licenseNumber: 'MCI-MH-49201',
         specialization: 'Senior Cardiologist',
-        hospitalAffiliation: 'Apollo Multispeciality Hospital',
+        hospitalAffiliation: demoHospital.name,
+        hospital: demoHospital._id,
       },
     });
   } else {
     doctor.password = PASSWORD;
     doctor.role = 'medical_staff';
     doctor.medicalStaffDetails = {
+      professionalType: 'physician',
       licenseNumber: 'MCI-MH-49201',
       specialization: 'Senior Cardiologist',
-      hospitalAffiliation: 'Apollo Multispeciality Hospital',
+      hospitalAffiliation: demoHospital.name,
+      hospital: demoHospital._id,
     };
     await doctor.save();
   }
 
-  // 4. Create or update Demo Insurance Agent
-  let agent = await User.findOne({ email: 'agent@medivault.io' });
-  if (!agent) {
-    agent = await User.create({
-      name: 'Vikram Mehta',
-      email: 'agent@medivault.io',
-      password: PASSWORD,
-      role: 'insurance_agent',
-      phone: '+91 9876543213',
-      insuranceDetails: {
-        companyName: 'Star Health & Allied Insurance',
-        agentId: 'AGT-STAR-8841',
-        licenseNumber: 'IRDAI-AG-99321',
-      },
-    });
-  } else {
-    agent.password = PASSWORD;
-    agent.role = 'insurance_agent';
-    agent.insuranceDetails = {
-      companyName: 'Star Health & Allied Insurance',
-      agentId: 'AGT-STAR-8841',
-      licenseNumber: 'IRDAI-AG-99321',
-    };
-    await agent.save();
-  }
-
-  // 5. Create or update Demo Admin
+  // 4. Create or update Demo Admin
   let admin = await User.findOne({ email: 'admin@medivault.io' });
   if (!admin) {
     admin = await User.create({
@@ -278,36 +264,6 @@ async function seedDemoData() {
     extractionMethod: 'unavailable',
   });
   await sampleRecord.save();
-
-  // Create sample insurance claim
-  let sampleClaim = await InsuranceClaim.findOne({
-    patient: patient._id,
-    claimNumber: 'CLM-2026-781920',
-  });
-  if (!sampleClaim) {
-    sampleClaim = await InsuranceClaim.create({
-      patient: patient._id,
-      claimNumber: 'CLM-2026-781920',
-      policyNumber: 'STAR-HEALTH-POL-772910',
-      insuranceCompany: 'Star Health & Allied Insurance',
-      claimType: 'Hospitalization',
-      claimAmount: 65000,
-      approvedAmount: 62000,
-      status: 'Approved',
-      records: [sampleRecord._id],
-      patientNotes: 'Emergency coronary angiography hospitalization reimbursement',
-      hospitalName: 'Apollo Multispeciality Hospital',
-      admissionDate: new Date('2026-10-02'),
-      dischargeDate: new Date('2026-10-06'),
-      assignedAgent: agent._id,
-      agentRemarks: 'Approved subject to an INR 3,000 copay deductible.',
-      reviewedAt: new Date(),
-    });
-  } else {
-    sampleClaim.records = [sampleRecord._id];
-    sampleClaim.agentRemarks = 'Approved subject to an INR 3,000 copay deductible.';
-    await sampleClaim.save();
-  }
 
   // Create sample medical note from doctor
   let sampleNote = await MedicalNote.findOne({ patient: patient._id });

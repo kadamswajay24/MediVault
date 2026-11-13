@@ -20,6 +20,13 @@ import type {
   InsurancePlanAssistantDraft,
   PolicyEnrollment,
   MedicalRecordSummary,
+  PrescriptionDispenseRecord,
+  PrescriptionShareInfo,
+  SharedPrescription,
+  PharmacyOrganization,
+  LabOrganization,
+  LabOrderSummary,
+  LabStaffOrder,
 } from '../types';
 import type { CatalogSearchMedicine } from '../constants/specialtyMedicineCatalog';
 import {
@@ -37,6 +44,14 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+export type PostalOffice = { name: string; city: string; district: string; state: string; pincode: string };
+export const locationsAPI = {
+  lookupPincode: async (pincode: string): Promise<{ success: boolean; pincode: string; offices: PostalOffice[]; cached: boolean }> => {
+    const res = await api.get(`/locations/pincode/${encodeURIComponent(pincode)}`);
+    return res.data;
+  },
+};
 
 // Request interceptor to attach JWT token and active dependent context
 api.interceptors.request.use(
@@ -102,6 +117,33 @@ export const authAPI = {
     insuranceDetails?: InsuranceDetails;
     credentialDocument?: File;
     credentialExpiresAt?: string;
+    patientAddress?: { address: string; city: string; district: string; state: string; postalCode: string; postOffice: string };
+    pharmacyOrganizationDetails?: {
+      name: string;
+      organizationType: 'hospital' | 'independent_pharmacy' | 'franchise';
+      hospitalId?: string;
+      registrationNumber: string;
+      address: string;
+      city: string;
+      district?: string;
+      state: string;
+      postalCode: string;
+      postOffice?: string;
+      openingHours: string;
+    };
+    labOrganizationDetails?: {
+      name: string;
+      organizationType: 'independent_lab' | 'hospital_lab' | 'franchise';
+      hospitalId?: string;
+      hospitalName?: string;
+      registrationNumber: string;
+      address: string;
+      city: string;
+      district?: string;
+      state: string;
+      postalCode: string;
+      postOffice?: string;
+    };
   }): Promise<AuthResponse> => {
     let payload: FormData | typeof userData = userData;
     if (userData.credentialDocument) {
@@ -113,6 +155,9 @@ export const authAPI = {
       formData.append('phone', userData.phone || '');
       if (userData.medicalStaffDetails) formData.append('medicalStaffDetails', JSON.stringify(userData.medicalStaffDetails));
       if (userData.insuranceDetails) formData.append('insuranceDetails', JSON.stringify(userData.insuranceDetails));
+      if (userData.pharmacyOrganizationDetails) formData.append('pharmacyOrganizationDetails', JSON.stringify(userData.pharmacyOrganizationDetails));
+      if (userData.labOrganizationDetails) formData.append('labOrganizationDetails', JSON.stringify(userData.labOrganizationDetails));
+      if (userData.patientAddress) formData.append('patientAddress', JSON.stringify(userData.patientAddress));
       formData.append('credentialExpiresAt', userData.credentialExpiresAt || '');
       formData.append('credentialDocument', userData.credentialDocument);
       payload = formData;
@@ -136,6 +181,7 @@ export const authAPI = {
     const res = await api.get('/auth/me');
     return res.data;
   },
+  changePassword: async (data: { currentPassword: string; newPassword: string }) => (await api.post('/auth/password/change', data)).data as { success: boolean; message: string; user: User },
 };
 
 export const profileAPI = {
@@ -165,6 +211,10 @@ export const recordAPI = {
   getRecordById: async (id: string): Promise<{ success: boolean; record: MedicalRecord }> => {
     const res = await api.get(`/records/${id}`);
     return res.data;
+  },
+
+  checkRecordAccess: async (id: string): Promise<void> => {
+    await api.get(`/records/${id}/access`);
   },
 
   getRecordSummary: async (
@@ -230,6 +280,29 @@ export const medicationReminderAPI = {
     const res = await api.delete(`/medication-reminders/${id}`);
     return res.data;
   },
+  getTodayAdherence: async (): Promise<{
+    success: boolean;
+    date: string;
+    adherenceRate: number;
+    totalScheduled: number;
+    takenCount: number;
+    items: MedicationAdherenceItem[];
+  }> => {
+    const res = await api.get('/medication-reminders/adherence/today');
+    return res.data;
+  },
+  logAdherence: async (data: {
+    reminderId: string;
+    status: 'taken' | 'skipped';
+    date?: string;
+  }): Promise<{ success: boolean; log: any }> => {
+    const res = await api.post('/medication-reminders/adherence/log', data);
+    return res.data;
+  },
+  resetAdherence: async (reminderId: string): Promise<{ success: boolean; message: string }> => {
+    const res = await api.delete(`/medication-reminders/adherence/log/${reminderId}`);
+    return res.data;
+  },
 };
 
 export interface MedicationReminder {
@@ -240,11 +313,23 @@ export interface MedicationReminder {
   createdAt: string;
 }
 
+export interface MedicationAdherenceItem {
+  reminderId: string;
+  medicationName: string;
+  time: string;
+  status: 'pending' | 'taken' | 'skipped';
+  takenAt: string | null;
+  logId: string | null;
+}
+
 export const auditAPI = {
   getLogs: async (params?: {
     action?: string;
     limit?: number;
-  }): Promise<{ success: boolean; count: number; logs: AuditLog[] }> => {
+    page?: number;
+    dateFrom?: string;
+    dateTo?: string;
+  }): Promise<{ success: boolean; count: number; total: number; page: number; pages: number; logs: AuditLog[] }> => {
     const res = await api.get('/audit-logs', { params });
     return res.data;
   },
@@ -312,13 +397,20 @@ export interface AppointmentScheduleDay {
 
 export interface AppointmentEntry {
   _id: string;
-  patient: User | string;
+  patient?: User | string;
   doctor: User | string;
   hospitalName: string;
   appointmentDate: string;
   time: string;
   durationMinutes: number;
+  startsAt?: string;
+  endsAt?: string;
   status: 'confirmed' | 'pending' | 'declined' | 'cancelled';
+  assignedNurse?: User | string | null;
+  nursingAccessConsent?: boolean;
+  nursingAccessOpensAt?: string;
+  nursingAccessClosesAt?: string;
+  nursingAccessRevokedAt?: string | null;
   createdAt: string;
 }
 
@@ -331,9 +423,12 @@ export const appointmentsAPI = {
       doctors: {
         id: string;
         name: string;
+        professionalType: 'physician';
         specialization: string;
+        hospitalName: string;
         schedule: AppointmentScheduleDay[];
       }[];
+      nurses: { id: string; name: string; professionalType: 'nurse'; specialization: string; hospitalName: string }[];
     }[];
   }> => {
     const res = await api.get('/appointments/hospitals');
@@ -360,8 +455,41 @@ export const appointmentsAPI = {
     appointmentDate: string;
     time: string;
     timeZoneOffsetMinutes: number;
+    nurseId?: string;
+    nursingAccessConsent?: boolean;
   }): Promise<{ success: boolean; message: string; appointment: AppointmentEntry }> => {
     const res = await api.post('/appointments', data);
+    return res.data;
+  },
+
+  lookupPatientByMediVaultId: async (
+    mediVaultId: string
+  ): Promise<{
+    success: boolean;
+    patient: {
+      id: string;
+      name: string;
+      mediVaultId: string;
+      dateOfBirth?: string;
+      gender?: string;
+    };
+  }> => {
+    const res = await api.get('/appointments/lookup-patient', { params: { mediVaultId } });
+    return res.data;
+  },
+
+  staffBook: async (data: {
+    patientMediVaultId: string;
+    doctorId: string;
+    appointmentDate: string;
+    time: string;
+    chiefComplaint?: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    appointment: AppointmentEntry;
+  }> => {
+    const res = await api.post('/appointments/staff-book', data);
     return res.data;
   },
 
@@ -412,6 +540,66 @@ export const appointmentsAPI = {
     const res = await api.put(`/appointments/${id}/decision`, { decision });
     return res.data;
   },
+  getMyNursingAppointments: async (): Promise<{ success: boolean; appointments: AppointmentEntry[] }> => {
+    const res = await api.get('/appointments/mine/nursing');
+    return res.data;
+  },
+  getNursingEntries: async (appointmentId: string): Promise<{ success: boolean; appointment: AppointmentEntry; profile: { allergies: string[]; medicalConditions: string[]; medications: string[]; emergencyContact: { name: string; relationship: string; phone: string } } | null; entries: any[] }> => {
+    const res = await api.get(`/appointments/${encodeURIComponent(appointmentId)}/nursing-entries`);
+    return res.data;
+  },
+  addNursingEntry: async (appointmentId: string, data: { entryType: 'observation' | 'nursing_note'; note: string; vitals?: Record<string, number | ''> }): Promise<{ success: boolean; entry: any }> => {
+    const res = await api.post(`/appointments/${encodeURIComponent(appointmentId)}/nursing-entries`, data);
+    return res.data;
+  },
+  revokeNursingAccess: async (id: string): Promise<{ success: boolean; message: string }> => {
+    const res = await api.put(`/appointments/${encodeURIComponent(id)}/nursing-access/revoke`);
+    return res.data;
+  },
+  assignNurse: async (id: string, nurseId: string): Promise<{ success: boolean; message: string; appointment: AppointmentEntry }> => {
+    const res = await api.put(`/appointments/${encodeURIComponent(id)}/nursing-access`, { nurseId, nursingAccessConsent: true });
+    return res.data;
+  },
+};
+
+export interface NurseShiftEntry {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+}
+
+export interface NurseTrainingEntry {
+  _id?: string;
+  title: string;
+  provider: string;
+  completedOn: string;
+  expiresOn: string;
+}
+
+export interface NurseTeamResourceEntry {
+  _id: string;
+  kind: 'checklist_template' | 'shift_handover';
+  title: string;
+  category: 'staffing' | 'equipment' | 'supplies' | 'unit_operations';
+  notes: string;
+  checklistItems: string[];
+  author: User | string;
+  createdAt: string;
+}
+
+export const nursingOperationsAPI = {
+  getMine: async (): Promise<{ success: boolean; hospitalName: string; profile: { shifts: NurseShiftEntry[]; trainingRecords: NurseTrainingEntry[] } }> =>
+    (await api.get('/nursing-operations/mine')).data,
+  updateMine: async (data: { shifts: NurseShiftEntry[]; trainingRecords: NurseTrainingEntry[] }): Promise<{ success: boolean; message: string; profile: { shifts: NurseShiftEntry[]; trainingRecords: NurseTrainingEntry[] } }> =>
+    (await api.put('/nursing-operations/mine', data)).data,
+  getTeam: async (): Promise<{ success: boolean; hospitalName: string; nurses: { id: string; name: string; specialization: string; shiftToday: string; upcomingAppointmentCount: number }[] }> =>
+    (await api.get('/nursing-operations/team')).data,
+  getResources: async (): Promise<{ success: boolean; resources: NurseTeamResourceEntry[] }> =>
+    (await api.get('/nursing-operations/resources')).data,
+  createResource: async (data: { kind: NurseTeamResourceEntry['kind']; title: string; category?: NurseTeamResourceEntry['category']; notes?: string; checklistItems?: string[] }): Promise<{ success: boolean; resource: NurseTeamResourceEntry }> =>
+    (await api.post('/nursing-operations/resources', data)).data,
+  deleteResource: async (id: string): Promise<{ success: boolean; message: string }> =>
+    (await api.delete(`/nursing-operations/resources/${encodeURIComponent(id)}`)).data,
 };
 
 export const clinicalAccessAPI = {
@@ -452,7 +640,7 @@ export const claimAPI = {
     claimAmount: number;
     records?: string[];
     patientNotes?: string;
-    hospitalName?: string;
+    hospitalId?: string;
     admissionDate?: string;
     dischargeDate?: string;
   }): Promise<{ success: boolean; message: string; claim: InsuranceClaim }> => {
@@ -543,6 +731,7 @@ export const policyAPI = {
 };
 
 export const medicalStaffAPI = {
+  createLabOrder: async(data:{patientMediVaultId:string;organizationId:string;tests:string[];clinicalNote:string;accessExpiresAt:string}):Promise<{success:boolean;message?:string}> => (await api.post('/medical-staff/lab-orders',data)).data,
   searchMedicineCatalog: async (
     query: string,
     candidates: CatalogSearchMedicine[]
@@ -653,38 +842,232 @@ export const medicalStaffAPI = {
   },
 };
 
+export const pharmacyAPI = {
+  getDirectory: async (): Promise<{ success: boolean; organizations: PharmacyOrganization[] }> => {
+    const res = await api.get('/pharmacy/organizations');
+    return res.data;
+  },
+
+  createPrescriptionShare: async (prescriptionId: string): Promise<{
+    success: boolean;
+    message: string;
+    share: { id: string; prescriptionTitle: string; expiresAt: string; pharmacyOrganization?: PharmacyOrganization | null };
+    token?: string;
+  }> => {
+    const res = await api.post('/pharmacy/prescription-shares', { prescriptionId });
+    return res.data;
+  },
+  shareWithOrganization: async (prescriptionId: string, pharmacyOrganizationId: string): Promise<{
+    success: boolean;
+    message: string;
+    share: { id: string; prescriptionTitle: string; expiresAt: string; pharmacyOrganization: PharmacyOrganization };
+  }> => {
+    const res = await api.post('/pharmacy/prescription-shares', { prescriptionId, pharmacyOrganizationId });
+    return res.data;
+  },
+
+  getPrescriptionShares: async (): Promise<{ success: boolean; shares: PrescriptionShareInfo[] }> => {
+    const res = await api.get('/pharmacy/prescription-shares');
+    return res.data;
+  },
+
+  revokePrescriptionShare: async (shareId: string): Promise<{ success: boolean; message: string }> => {
+    const res = await api.put(`/pharmacy/prescription-shares/${shareId}/revoke`);
+    return res.data;
+  },
+
+  getMyDispenseRecords: async (): Promise<{ success: boolean; records: PrescriptionDispenseRecord[] }> => {
+    const res = await api.get('/pharmacy/dispenses/mine');
+    return res.data;
+  },
+
+  lookupSharedPrescription: async (token: string): Promise<SharedPrescription> => {
+    const res = await api.post('/pharmacy/pharmacist/prescriptions/lookup', { token });
+    return res.data;
+  },
+
+  createDispenseRecord: async (shareId: string, data: {
+    items: { status: 'dispensed' | 'partially_dispensed' | 'unavailable'; quantityDispensed: string }[];
+    notes: string;
+  }): Promise<{ success: boolean; message: string }> => {
+    const res = await api.post(`/pharmacy/pharmacist/shares/${shareId}/dispenses`, data);
+    return res.data;
+  },
+
+  getOrganizationShares: async (): Promise<{
+    success: boolean;
+    shares: { id: string; patientName: string; prescriptionTitle: string; sharedAt: string; expiresAt: string; openedByCurrentUser: boolean }[];
+  }> => {
+    const res = await api.get('/pharmacy/pharmacist/organization-shares');
+    return res.data;
+  },
+
+  openOrganizationShare: async (shareId: string): Promise<SharedPrescription> => {
+    const res = await api.post(`/pharmacy/pharmacist/organization-shares/${shareId}/open`);
+    return res.data;
+  },
+};
+
+export const pharmacyOrganizationAPI = {
+  getApplication: async (): Promise<{
+    success: boolean;
+    organization: {
+      id: string;
+      name: string;
+      organizationType: 'hospital' | 'independent_pharmacy' | 'franchise';
+      verification: {
+        status: 'pending' | 'needs_changes' | 'verified' | 'rejected';
+        expiresAt: string;
+        reviewNote?: string;
+      };
+    };
+  }> => {
+    const res = await api.get('/pharmacy-organizations/application');
+    return res.data;
+  },
+  getMine: async (): Promise<{
+    success: boolean;
+    organization: PharmacyOrganization & { registrationNumber: string; verification: NonNullable<PharmacyOrganization['verification']> };
+    pharmacists: User[];
+    branches: PharmacyOrganization[];
+  }> => {
+    const res = await api.get('/pharmacy-organizations/mine');
+    return res.data;
+  },
+  updateMine: async (data: { phone: string; openingHours: string }): Promise<{ success: boolean; message: string }> => {
+    const res = await api.put('/pharmacy-organizations/mine', data);
+    return res.data;
+  },
+  decidePharmacist: async (userId: string, decision: 'approved' | 'rejected'): Promise<{ success: boolean; message: string }> => {
+    const res = await api.put(`/pharmacy-organizations/pharmacists/${userId}/decision`, { decision });
+    return res.data;
+  },
+  setPharmacistStatus: async (userId: string, isActive: boolean): Promise<{ success: boolean; message: string }> => {
+    const res = await api.put(`/pharmacy-organizations/pharmacists/${userId}/status`, { isActive });
+    return res.data;
+  },
+  resubmitCredentials: async (credentialExpiresAt: string, credentialDocument: File): Promise<{ success: boolean; message: string }> => {
+    const formData = new FormData();
+    formData.append('credentialExpiresAt', credentialExpiresAt);
+    formData.append('credentialDocument', credentialDocument);
+    const res = await api.post('/pharmacy-organizations/application/credentials', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return res.data;
+  },
+  createBranch: async (data: {
+    name: string;
+    organizationType: 'hospital' | 'independent_pharmacy';
+    registrationNumber: string;
+    address: string;
+    city: string;
+    district?: string;
+    state: string;
+    postalCode: string;
+    postOffice?: string;
+    phone: string;
+    openingHours: string;
+    credentialExpiresAt: string;
+    credentialDocument: File;
+  }): Promise<{ success: boolean; message: string; branch: PharmacyOrganization }> => {
+    const formData = new FormData();
+    Object.entries(data).forEach(([key, value]) => formData.append(key, value));
+    const res = await api.post('/pharmacy-organizations/branches', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return res.data;
+  },
+  resubmitBranchCredentials: async (branchId: string, credentialExpiresAt: string, credentialDocument: File): Promise<{ success: boolean; message: string }> => {
+    const formData = new FormData();
+    formData.append('credentialExpiresAt', credentialExpiresAt);
+    formData.append('credentialDocument', credentialDocument);
+    const res = await api.post(`/pharmacy-organizations/branches/${branchId}/credentials`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return res.data;
+  },
+};
+
+export const labAPI = {
+  getDirectory: async (): Promise<{ success: boolean; organizations: LabOrganization[] }> => {
+    const res = await api.get('/labs/organizations');
+    return res.data;
+  },
+  getApplication: async (): Promise<{ success: boolean; organization: LabOrganization }> => {
+    const res = await api.get('/labs/application');
+    return res.data;
+  },
+  getMine: async (): Promise<{ success: boolean; organization: LabOrganization; branches: LabOrganization[]; staff: User[] }> => {
+    const res = await api.get('/labs/mine');
+    return res.data;
+  },
+  createBranch: async (data: { name: string; registrationNumber: string; address: string; city: string; district?: string; state: string; postalCode: string; postOffice?: string; credentialExpiresAt: string; credentialDocument: File }): Promise<{ success: boolean; message: string; branch: LabOrganization }> => {
+    const formData = new FormData();
+    Object.entries(data).forEach(([key, value]) => formData.append(key, value));
+    return (await api.post('/labs/branches', formData, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
+  },
+  decideStaff: async (userId: string, decision: 'approved' | 'rejected'): Promise<{ success: boolean; message: string }> => {
+    const res = await api.put(`/labs/staff/${userId}/decision`, { decision });
+    return res.data;
+  },
+  resubmitCredentials: async (credentialExpiresAt: string, credentialDocument: File): Promise<{ success: boolean; message: string }> => {
+    const formData = new FormData();
+    formData.append('credentialExpiresAt', credentialExpiresAt);
+    formData.append('credentialDocument', credentialDocument);
+    const res = await api.post('/labs/application/credentials', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return res.data;
+  },
+  getPatientOrders: async (): Promise<{ success: boolean; orders: LabOrderSummary[] }> => (await api.get('/labs/orders/mine')).data,
+  createOrder: async (data: { organizationId: string; tests: string[]; clinicalNote: string }): Promise<{ success: boolean; message: string }> => (await api.post('/labs/orders', data)).data,
+  cancelOrder: async (id: string): Promise<{ success: boolean; message: string }> => (await api.put(`/labs/orders/${id}/cancel`)).data,
+  revokeOrder: async (id:string):Promise<{success:boolean;message:string}> => (await api.put(`/labs/orders/${id}/revoke`)).data,
+  getStaffOrders: async (): Promise<{ success: boolean; orders: LabStaffOrder[] }> => (await api.get('/labs/staff/orders')).data,
+  submitResult: async (id: string, title: string, file: File): Promise<{ success: boolean; message: string }> => {
+    const form = new FormData(); form.append('title', title); form.append('file', file);
+    return (await api.post(`/labs/staff/orders/${id}/result`, form, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
+  },
+};
+
 export const adminAPI = {
-  getPolicyPlans: async (): Promise<{
-    success: boolean;
-    plans: ManagedInsurancePolicyPlan[];
-  }> => {
-    const res = await api.get('/admin/policy-plans');
+  getHospitals: async (): Promise<{success:boolean;hospitals:any[]}> => (await api.get('/admin/hospitals')).data,
+  createHospitalAdmin: async (hospitalId:string, data:{name:string;email:string;phone:string;temporaryPassword:string}):Promise<any> => (await api.post(`/admin/hospitals/${hospitalId}/admins`, data)).data,
+  createHospital: async (data:{name:string;registrationNumber:string;address:string;city:string;state:string}):Promise<any> => (await api.post('/admin/hospitals',data)).data,
+  getInsuranceCompanies: async ():Promise<{success:boolean;companies:any[]}> => (await api.get('/admin/insurance-companies')).data,
+  reviewInsuranceCompany: async(companyId:string,decision:'verified'|'rejected',reviewNote=''):Promise<{success:boolean;message:string}> => (await api.put(`/admin/insurance-companies/${companyId}/review`,{decision,reviewNote})).data,
+  insuranceCompanyDocument: async(companyId:string):Promise<Blob> => (await api.get(`/admin/insurance-companies/${companyId}/document`,{responseType:'blob'})).data,
+  createInsuranceCompanyAdmin: async(companyId:string,data:{name:string;email:string;phone:string;temporaryPassword:string}):Promise<any> => (await api.post(`/admin/insurance-companies/${companyId}/admins`,data)).data,
+  createChainAdmin: async (data: { chainType: 'pharmacy' | 'lab'; chainId: string; name: string; email: string; phone: string; temporaryPassword: string }): Promise<any> => (await api.post('/admin/chain-admins', data)).data,
+  assignHospitalAdmin: async(hospitalId:string,userId:string):Promise<any> => (await api.put(`/admin/hospitals/${hospitalId}/admins/${userId}`)).data,
+  getPharmacyOrganizations: async (): Promise<{ success: boolean; organizations: PharmacyOrganization[] }> => {
+    const res = await api.get('/admin/pharmacy-organizations');
+    return {
+      ...res.data,
+      organizations: res.data.organizations.map((organization: PharmacyOrganization & { _id?: string }) => ({
+        ...organization,
+        id: organization.id || organization._id || '',
+      })),
+    };
+  },
+  reviewPharmacyOrganization: async (organizationId: string, decision: 'verified' | 'needs_changes' | 'rejected', reviewNote: string): Promise<{ success: boolean; message: string }> => {
+    const res = await api.put(`/admin/pharmacy-organizations/${organizationId}/review`, { decision, reviewNote });
     return res.data;
   },
-
-  createPolicyPlan: async (data: Omit<InsurancePolicyPlan, 'id'>): Promise<{
-    success: boolean;
-    message: string;
-    plan: ManagedInsurancePolicyPlan;
-  }> => {
-    const res = await api.post('/admin/policy-plans', data);
+  getPharmacyOrganizationDocument: async (organizationId: string): Promise<Blob> => {
+    const res = await api.get(`/admin/pharmacy-organizations/${organizationId}/document`, { responseType: 'blob' });
+    return res.data as Blob;
+  },
+  getLabOrganizations: async (): Promise<{ success: boolean; organizations: LabOrganization[] }> => {
+    const res = await api.get('/admin/labs');
+    return {
+      ...res.data,
+      organizations: res.data.organizations.map((organization: LabOrganization & { _id?: string }) => ({
+        ...organization,
+        id: organization.id || organization._id || '',
+      })),
+    };
+  },
+  reviewLabOrganization: async (organizationId: string, decision: 'verified' | 'needs_changes' | 'rejected', reviewNote: string): Promise<{ success: boolean; message: string }> => {
+    const res = await api.put(`/admin/labs/${organizationId}/review`, { decision, reviewNote });
     return res.data;
   },
-
-  updatePolicyPlan: async (
-    planId: string,
-    data: Partial<Omit<InsurancePolicyPlan, 'id'>> & {
-      status?: ManagedInsurancePolicyPlan['status'];
-    }
-  ): Promise<{
-    success: boolean;
-    message: string;
-    plan: ManagedInsurancePolicyPlan;
-  }> => {
-    const res = await api.put(`/admin/policy-plans/${planId}`, data);
-    return res.data;
+  getLabOrganizationDocument: async (organizationId: string): Promise<Blob> => {
+    const res = await api.get(`/admin/labs/${organizationId}/document`, { responseType: 'blob' });
+    return res.data as Blob;
   },
-
   getUsers: async (params?: {
     role?: string;
     status?: string;
@@ -756,6 +1139,29 @@ export const adminAPI = {
   },
 };
 
+export const hospitalAPI = {
+  directory: async ():Promise<{success:boolean;hospitals:{id:string;name:string;city:string;state:string}[]}> => (await api.get('/hospitals')).data,
+  mine: async():Promise<{success:boolean;hospitals:any[]}> => (await api.get('/hospitals/mine')).data,
+  workspace: async(id:string):Promise<any> => (await api.get(`/hospitals/${id}/workspace`)).data,
+  applications: async():Promise<{success:boolean;applications:any[]}> => (await api.get('/hospitals/applications')).data,
+  reviewStaffCredential: async(userId:string,decision:'verified'|'needs_changes'|'rejected',reviewNote=''):Promise<{success:boolean;message:string}> => (await api.put(`/hospitals/applications/${userId}/credential-review`,{decision,reviewNote})).data,
+  approveStaff: async(userId:string):Promise<{success:boolean;message:string}> => (await api.put(`/hospitals/applications/${userId}/approve`)).data,
+  staffCredentialDocument: async(userId:string):Promise<Blob> => (await api.get(`/hospitals/applications/${userId}/credential-document`,{responseType:'blob'})).data,
+};
+
+export const insuranceCompanyAPI = {
+  directory: async (): Promise<{ success: boolean; companies: { id: string; name: string; city: string; state: string }[] }> => (await api.get('/insurance-companies')).data,
+  apply: async (data: FormData): Promise<{ success: boolean; pendingApproval: boolean; message: string }> => (await api.post('/insurance-companies/applications', data, { headers: { 'Content-Type': 'multipart/form-data' } })).data,
+  mine: async (): Promise<{ success: boolean; company: { id: string; name: string; city: string; state: string } }> => (await api.get('/insurance-companies/mine')).data,
+  hospitals: async (): Promise<{ success: boolean; hospitals: { id: string; name: string; city: string; state: string }[] }> => (await api.get('/insurance-companies/hospitals')).data,
+  agents: async (): Promise<{ success: boolean; agents: any[] }> => (await api.get('/insurance-companies/agents')).data,
+  createAgent: async (data: { name: string; email: string; phone: string; licenseNumber?: string; temporaryPassword: string; hospitalIds: string[] }): Promise<{ success: boolean; message: string; agent: any }> => (await api.post('/insurance-companies/agents', data)).data,
+  agentDocument: async (userId: string): Promise<Blob> => (await api.get(`/insurance-companies/agents/${userId}/credential-document`, { responseType: 'blob' })).data,
+  reviewAgent: async (userId: string, decision: 'verified' | 'needs_changes' | 'rejected', reviewNote = ''): Promise<{ success: boolean; message: string }> => (await api.put(`/insurance-companies/agents/${userId}/credential-review`, { decision, reviewNote })).data,
+  approveAgent: async (userId: string, hospitalIds: string[]): Promise<{ success: boolean; message: string }> => (await api.put(`/insurance-companies/agents/${userId}/approve`, { hospitalIds })).data,
+  updateAgentHospitals: async (userId: string, hospitalIds: string[]): Promise<{ success: boolean; message: string }> => (await api.put(`/insurance-companies/agents/${userId}/hospitals`, { hospitalIds })).data,
+};
+
 export const insuranceAPI = {
   chatWithPlanAssistant: async (
     messages: InsurancePlanAssistantMessage[]
@@ -777,7 +1183,7 @@ export const insuranceAPI = {
     return res.data;
   },
 
-  createPolicyPlan: async (data: Omit<InsurancePolicyPlan, 'id'>): Promise<{
+  createPolicyPlan: async (data: Omit<InsurancePolicyPlan, 'id' | 'provider'>): Promise<{
     success: boolean;
     message: string;
     plan: ManagedInsurancePolicyPlan;
@@ -788,7 +1194,7 @@ export const insuranceAPI = {
 
   updatePolicyPlan: async (
     planId: string,
-    data: Partial<Omit<InsurancePolicyPlan, 'id'>>
+    data: Partial<Omit<InsurancePolicyPlan, 'id' | 'provider'>> & { status?: ManagedInsurancePolicyPlan['status'] }
   ): Promise<{
     success: boolean;
     message: string;

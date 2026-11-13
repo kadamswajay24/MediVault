@@ -15,6 +15,7 @@ import auditRoutes from './routes/auditRoutes.js';
 import proxyRoutes from './routes/proxyRoutes.js';
 import claimRoutes from './routes/claimRoutes.js';
 import medicalStaffRoutes from './routes/medicalStaffRoutes.js';
+import nursingOperationsRoutes from './routes/nursingOperationsRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import clinicalAccessRoutes from './routes/clinicalAccessRoutes.js';
 import policyRoutes from './routes/policyRoutes.js';
@@ -22,6 +23,14 @@ import insurancePolicyPlanRoutes from './routes/insurancePolicyPlanRoutes.js';
 import appointmentRoutes from './routes/appointmentRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import medicationReminderRoutes from './routes/medicationReminderRoutes.js';
+import pharmacyRoutes from './routes/pharmacyRoutes.js';
+import pharmacyOrganizationRoutes from './routes/pharmacyOrganizationRoutes.js';
+import pharmacyAdminRoutes from './routes/pharmacyAdminRoutes.js';
+import labOrganizationRoutes from './routes/labOrganizationRoutes.js';
+import labAdminRoutes from './routes/labAdminRoutes.js';
+import hospitalRoutes from './routes/hospitalRoutes.js';
+import insuranceCompanyRoutes from './routes/insuranceCompanyRoutes.js';
+import locationRoutes from './routes/locationRoutes.js';
 
 // Initialize database and assign MediVault IDs to any existing accounts before serving requests.
 getJwtSecret();
@@ -88,13 +97,14 @@ app.get('/api/health', (req, res) => {
     status: 'online',
     service: 'MediVault Core RBAC API',
     version: '1.0.0',
-    rolesSupported: ['patient', 'medical_staff', 'insurance_agent', 'admin', 'caregiver_proxy'],
+    rolesSupported: ['patient', 'medical_staff', 'insurance_agent', 'insurer_admin', 'pharmacy_manager', 'pharmacy_chain_admin', 'lab_manager', 'lab_chain_admin', 'hospital_admin', 'admin', 'caregiver_proxy'],
     timestamp: new Date().toISOString(),
   });
 });
 
 // Mount Core & Role-Based Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/locations', locationRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/records', recordRoutes);
@@ -103,6 +113,7 @@ app.use('/api/audit-logs', auditRoutes);
 app.use('/api/proxy', proxyRoutes);
 app.use('/api/claims', claimRoutes);
 app.use('/api/medical-staff', medicalStaffRoutes);
+app.use('/api/nursing-operations', nursingOperationsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/clinical-access', clinicalAccessRoutes);
 app.use('/api/policies', policyRoutes);
@@ -110,6 +121,13 @@ app.use('/api/insurance', insurancePolicyPlanRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/medication-reminders', medicationReminderRoutes);
+app.use('/api/pharmacy', pharmacyRoutes);
+app.use('/api/pharmacy-organizations', pharmacyOrganizationRoutes);
+app.use('/api/admin/pharmacy-organizations', pharmacyAdminRoutes);
+app.use('/api/labs', labOrganizationRoutes);
+app.use('/api/hospitals', hospitalRoutes);
+app.use('/api/insurance-companies', insuranceCompanyRoutes);
+app.use('/api/admin/labs', labAdminRoutes);
 
 // Error Handling
 app.use(notFound);

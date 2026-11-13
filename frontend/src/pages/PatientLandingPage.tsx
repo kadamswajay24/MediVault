@@ -111,7 +111,6 @@ export const PatientLandingPage: React.FC = () => (
           </p>
         </section>
       </section>
-
     </div>
   </main>
 );

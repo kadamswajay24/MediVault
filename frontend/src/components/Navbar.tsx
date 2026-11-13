@@ -23,6 +23,7 @@ import {
   KeyRound,
   ChevronDown,
   CalendarDays,
+  Building2,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { useTheme } from '../context/useTheme';
@@ -41,13 +42,25 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
   const isRegistrationPage = location.pathname.endsWith('/register');
   const isLoginPage = location.pathname.endsWith('/login');
   const isPortalHome = location.pathname === '/';
-  const guestPortal = location.pathname.startsWith('/clinical/')
+  const guestPortal = location.pathname.startsWith('/lab/')
+    ? {
+        signInPath: '/lab/login',
+        signInLabel: 'Laboratory Sign In',
+        secondary: isRegistrationPage ? null : { path: '/lab/register', label: 'Register laboratory' },
+      }
+    : location.pathname.startsWith('/clinical/')
     ? {
         signInPath: '/clinical/login',
         signInLabel: 'Clinical Sign In',
         secondary: isRegistrationPage ? null : { path: '/clinical/register', label: 'Apply' },
       }
-    : location.pathname.startsWith('/insurance/')
+    : location.pathname.startsWith('/pharmacy/')
+      ? {
+          signInPath: '/pharmacy/login',
+          signInLabel: 'Pharmacy Sign In',
+          secondary: isRegistrationPage ? null : { path: '/pharmacy/register', label: 'Register pharmacy' },
+        }
+      : location.pathname.startsWith('/insurance/')
       ? {
           signInPath: '/insurance/login',
           signInLabel: 'Insurance Sign In',
@@ -79,18 +92,80 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
         return {
           primary: [
             { name: 'Claims Queue', path: '/claims', icon: FileCheck2 },
-            { name: 'Marketplace Plans', path: '/insurance/marketplace', icon: ShieldCheck },
             { name: 'Audit Trail', path: '/audit-logs', icon: History },
+            { name: 'My Profile', path: '/profile', icon: User },
+          ],
+          groups: [],
+        };
+      case 'insurer_admin':
+        return {
+          primary: [
+            { name: 'Company workspace', path: '/insurance/company/admin', icon: Users },
+            { name: 'Claims Queue', path: '/claims', icon: FileCheck2 },
+            { name: 'Marketplace Plans', path: '/insurance/company/admin#plans', icon: ShieldCheck },
+            { name: 'Audit Trail', path: '/audit-logs', icon: History },
+            { name: 'My Profile', path: '/profile', icon: User },
+          ],
+          groups: [],
+        };
+      case 'pharmacy_manager':
+      case 'pharmacy_chain_admin':
+        return {
+          primary: [
+            { name: 'Organization', path: '/pharmacy/manager', icon: Building2 },
+            { name: 'Audit Trail', path: '/audit-logs', icon: History },
+            { name: 'My Profile', path: '/profile', icon: User },
+          ],
+          groups: [],
+        };
+      case 'lab_manager':
+      case 'lab_chain_admin':
+        return {
+          primary: [
+            { name: 'Laboratory', path: '/lab/manager', icon: Building2 },
+            { name: 'Audit Trail', path: '/audit-logs', icon: History },
+            { name: 'My Profile', path: '/profile', icon: User },
           ],
           groups: [],
         };
       case 'medical_staff':
+        if (user.medicalStaffDetails?.professionalType === 'lab_technologist') {
+          return {
+            primary: [
+              { name: 'Laboratory', path: '/lab/workspace', icon: Building2 },
+              { name: 'Audit Trail', path: '/audit-logs', icon: History },
+              { name: 'My Profile', path: '/profile', icon: User },
+            ],
+            groups: [],
+          };
+        }
+        if (user.medicalStaffDetails?.professionalType === 'pharmacist') {
+          return {
+            primary: [
+              { name: 'Pharmacy', path: '/pharmacy', icon: Pill },
+              { name: 'Audit Trail', path: '/audit-logs', icon: History },
+              { name: 'My Profile', path: '/profile', icon: User },
+            ],
+            groups: [],
+          };
+        }
+        if (user.medicalStaffDetails?.professionalType === 'nurse' || user.medicalStaffDetails?.specialization?.toLowerCase() === 'nursing') {
+          return {
+            primary: [
+              { name: 'Nursing care', path: '/medical-staff', icon: Heart },
+              { name: 'Audit Trail', path: '/audit-logs', icon: History },
+              { name: 'My Profile', path: '/profile', icon: User },
+            ],
+            groups: [],
+          };
+        }
         return {
           primary: [
             { name: 'Clinical Consultations', path: '/medical-staff', icon: Stethoscope },
             { name: 'Appointments', path: '/medical-staff/appointments', icon: CalendarDays },
             { name: 'Patient Access', path: '/access-requests', icon: KeyRound },
             { name: 'Audit Trail', path: '/audit-logs', icon: History },
+            { name: 'My Profile', path: '/profile', icon: User },
           ],
           groups: [],
         };
@@ -98,11 +173,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
         return {
           primary: [
             { name: 'Governance', path: '/admin', icon: Shield },
+            { name: 'Hospitals', path: '/hospital/admin', icon: Building2 },
             { name: 'Access Requests', path: '/access-requests', icon: KeyRound },
             { name: 'Audit Trail', path: '/audit-logs', icon: History },
+            { name: 'My Profile', path: '/profile', icon: User },
           ],
           groups: [],
         };
+      case 'hospital_admin':
+        return { primary: [{ name: 'Hospital', path: '/hospital/admin', icon: Building2 }, { name: 'Audit Trail', path: '/audit-logs', icon: History }, { name: 'My Profile', path: '/profile', icon: User }], groups: [] };
       case 'patient':
       default:
         return {
@@ -116,6 +195,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
               items: [
                 { name: 'Medical Records', path: '/records', icon: FileText },
                 { name: 'Prescriptions', path: '/prescriptions', icon: Pill },
+                { name: 'Pharmacy sharing', path: '/pharmacy', icon: ShieldCheck },
+                { name: 'Laboratory services', path: '/labs', icon: Building2 },
                 { name: 'Health Profile', path: '/profile', icon: User },
               ],
             },
@@ -134,7 +215,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
                 { name: 'Appointments', path: '/appointments', icon: CalendarDays },
                 { name: 'Caregivers', path: '/caregivers', icon: Users },
                 { name: 'Access Approvals', path: '/access-requests', icon: KeyRound },
-                { name: 'Audit Trail', path: '/audit-logs', icon: History },
+                { name: 'Vault activity', path: '/audit-logs', icon: History },
               ],
             },
           ],
@@ -146,12 +227,18 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
   const primaryNavItems = navItems.primary;
   const navGroups = navItems.groups;
 
-  const getRoleBadge = (role?: string) => {
+  const getRoleBadge = (role?: string, professionalType?: string) => {
     switch (role) {
       case 'admin':
         return { label: 'Admin', color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20' };
+      case 'hospital_admin':
+        return { label: 'Hospital Admin', color: 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20' };
       case 'medical_staff':
-        return { label: 'Clinician', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20' };
+        return professionalType === 'pharmacist'
+          ? { label: 'Pharmacist', color: 'bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/20' }
+          : { label: 'Clinician', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20' };
+      case 'pharmacy_manager':
+        return { label: 'Pharmacy manager', color: 'bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/20' };
       case 'insurance_agent':
         return { label: 'Adjuster', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' };
       case 'patient':
@@ -160,7 +247,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
     }
   };
 
-  const roleBadge = getRoleBadge(user?.role);
+  const roleBadge = getRoleBadge(user?.role, user?.medicalStaffDetails?.professionalType);
 
   return (
     <header className="app-header sticky top-0 z-40 w-full border-b backdrop-blur-md">
@@ -192,10 +279,18 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenUpload }) => {
                 ? '/'
                 : user?.role === 'admin'
                 ? '/admin'
+                : user?.role === 'hospital_admin'
+                ? '/hospital/admin'
                 : user?.role === 'insurance_agent'
-                ? '/insurance/marketplace'
+                ? '/claims'
+                : user?.role === 'insurer_admin'
+                ? '/insurance/company/admin'
                 : user?.role === 'medical_staff'
-                ? '/medical-staff'
+                ? user.medicalStaffDetails?.professionalType === 'pharmacist'
+                  ? '/pharmacy'
+                  : '/medical-staff'
+                : user?.role === 'pharmacy_manager'
+                ? '/pharmacy/manager'
                 : '/dashboard'
             }
             className="flex items-center gap-2 group"

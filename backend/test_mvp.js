@@ -17,8 +17,8 @@ async function runTests() {
   if (healthData.status !== 'online') throw new Error('Health check failed');
   console.log('✓ Health check passed\n');
 
-  // 2. Public registration restrictions and staff approval
-  console.log('[TEST 2] Verifying staff approval and administrator registration restrictions...');
+  // 2. Public registration restrictions and staff application validation
+  console.log('[TEST 2] Verifying administrator registration restrictions and staff application validation...');
   const roleRegistrationRes = await fetch(`${BASE_URL}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -33,36 +33,26 @@ async function runTests() {
     throw new Error('Public administrator registration should be rejected');
   }
 
-  const pendingStaffEmail = `staff_${Date.now()}@medivault.io`;
-  const pendingStaffRes = await fetch(`${BASE_URL}/auth/register`, {
+  const incompleteStaffRes = await fetch(`${BASE_URL}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: 'Pending Medical Staff',
-      email: pendingStaffEmail,
+      email: `staff_${Date.now()}@medivault.io`,
       password: 'Password@2026',
       role: 'medical_staff',
       phone: '+91 9876543214',
     }),
   });
-  const pendingStaffData = await pendingStaffRes.json();
+  const incompleteStaffData = await incompleteStaffRes.json();
   if (
-    pendingStaffRes.status !== 202 ||
-    !pendingStaffData.pendingApproval ||
-    pendingStaffData.token
+    incompleteStaffRes.status !== 400 ||
+    !/license number, expiry date, and credential document/i.test(incompleteStaffData.message || '') ||
+    incompleteStaffData.token
   ) {
-    throw new Error('Medical staff registration should wait for administrator approval');
+    throw new Error('Incomplete medical staff applications must be rejected before account creation');
   }
-
-  const pendingLoginRes = await fetch(`${BASE_URL}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: pendingStaffEmail, password: 'Password@2026' }),
-  });
-  if (pendingLoginRes.status !== 403) {
-    throw new Error('Pending staff must not be able to sign in');
-  }
-  console.log('✓ Staff approval gate and administrator registration restriction passed\n');
+  console.log('✓ Administrator registration restriction and staff application validation passed\n');
 
   // 3. User 1 Registration
   const missingPhoneRes = await fetch(`${BASE_URL}/auth/register`, {
