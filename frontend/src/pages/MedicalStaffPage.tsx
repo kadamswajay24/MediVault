@@ -44,6 +44,8 @@ import type {
   User as UserType,
 } from '../types';
 import type { ClinicalAccessRequest } from '../services/api';
+import { NursingWorkspace } from '../components/NursingWorkspace';
+import { PhysicianLabOrderForm } from '../components/PhysicianLabOrderForm';
 
 
 const DOSAGE_OPTIONS = ['1 tab', '1 tablet', '1 capsule', '2 tablets', '5 mL', '10 mL', '1 puff', '1 drop'];
@@ -79,7 +81,7 @@ type PrescriptionDraft = PrescriptionItem & {
   instructionsIsCustom?: boolean;
 };
 
-export const MedicalStaffPage: React.FC = () => {
+const PhysicianWorkspace: React.FC = () => {
   const { user } = useAuth();
   const isDoctor = user?.role === 'medical_staff';
   const medicationOptions = getSpecialtyMedications(user?.medicalStaffDetails?.specialization);
@@ -933,6 +935,7 @@ export const MedicalStaffPage: React.FC = () => {
                     Open patient file
                   </Link>
                 )}
+                {patientOverview && isDoctor && <PhysicianLabOrderForm patient={selectedPatient} />}
                 {patientOverview && (
                   <div className="flex max-w-sm flex-col gap-2">
                   <button
@@ -1123,6 +1126,34 @@ export const MedicalStaffPage: React.FC = () => {
                     )}
                   </section>
                 </div>
+
+                <section className="mt-4 rounded-xl border border-teal-200 bg-teal-50/60 p-4 dark:border-teal-900 dark:bg-teal-950/20">
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Nursing entries for this appointment</h4>
+                  <p className="mt-1 text-xs text-slate-500">Appointment-scoped observations and notes from the assigned nurse.</p>
+                  {patientOverview.nursingEntries.length ? (
+                    <div className="mt-3 space-y-3">
+                      {patientOverview.nursingEntries.map((entry) => (
+                        <article key={entry._id} className="border-t border-teal-200 pt-3 text-xs dark:border-teal-900">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <strong>{entry.entryType === 'observation' ? 'Observation' : 'Nursing note'}</strong>
+                            <time className="text-slate-500">{new Date(entry.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })}</time>
+                          </div>
+                          {entry.note && <p className="mt-1 whitespace-pre-wrap text-slate-600 dark:text-slate-400">{entry.note}</p>}
+                          {entry.vitals && Object.keys(entry.vitals).length > 0 && (
+                            <p className="mt-1 text-slate-600 dark:text-slate-400">
+                              {Object.entries(entry.vitals).map(([key, value]) => `${key}: ${value}`).join(' · ')}
+                            </p>
+                          )}
+                          <p className="mt-1 text-slate-500">
+                            Recorded by {typeof entry.nurse === 'object' ? entry.nurse.name : 'nurse'}
+                          </p>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-xs text-slate-500">No nursing entries have been recorded for the active appointment.</p>
+                  )}
+                </section>
 
                 <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -1949,4 +1980,11 @@ export const MedicalStaffPage: React.FC = () => {
       />
     </div>
   );
+};
+
+export const MedicalStaffPage: React.FC = () => {
+  const { user } = useAuth();
+  const type = user?.medicalStaffDetails?.professionalType || (user?.medicalStaffDetails?.specialization?.toLowerCase() === 'nursing' ? 'nurse' : 'physician');
+  if (type === 'nurse') return <NursingWorkspace />;
+  return <PhysicianWorkspace />;
 };

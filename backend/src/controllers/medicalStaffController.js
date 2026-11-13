@@ -4,6 +4,8 @@ import User from '../models/User.js';
 import HealthProfile from '../models/HealthProfile.js';
 import MedicalRecord from '../models/MedicalRecord.js';
 import ClinicalAccessRequest from '../models/ClinicalAccessRequest.js';
+import Appointment from '../models/Appointment.js';
+import NursingEntry from '../models/NursingEntry.js';
 import { createAuditLog } from '../services/auditService.js';
 import {
   generateLocalSummary,
@@ -32,13 +34,37 @@ const getDuplicatePrescriptionItem = (items = []) => {
 };
 
 const requireActiveClinicalAccess = async (staffId, patientId) => {
+  // 1. Explicit clinical access grant approved by patient
   const grant = await ClinicalAccessRequest.findOne({
     patient: patientId,
     medicalStaff: staffId,
     status: 'approved',
     expiresAt: { $gt: new Date() },
   });
-  return grant;
+  if (grant) return grant;
+
+  // 2. Doctor appointment window (opens 30 mins before slot, closes 30 mins after slot ends)
+  const now = new Date();
+  const appointment = await Appointment.findOne({
+    doctor: staffId,
+    patient: patientId,
+    status: 'confirmed',
+    startsAt: { $lte: new Date(now.getTime() + 30 * 60_000) },
+    endsAt: { $gte: new Date(now.getTime() - 30 * 60_000) },
+  });
+  if (appointment) {
+    return {
+      _id: appointment._id,
+      patient: patientId,
+      medicalStaff: staffId,
+      status: 'approved',
+      reason: 'appointment_consultation',
+      isAppointmentAccess: true,
+      appointmentId: appointment._id,
+    };
+  }
+
+  return null;
 };
 
 export const searchMedicineCatalog = async (req, res, next) => {
@@ -370,7 +396,18 @@ export const getPatientClinicalOverview = async (req, res, next) => {
       });
     }
 
-    const [profile, records, notes] = await Promise.all([
+    const now = new Date();
+    const nursingAppointment = await Appointment.findOne({
+      doctor: req.user._id,
+      patient: patientId,
+      assignedNurse: { $ne: null },
+      nursingAccessConsent: true,
+      nursingAccessRevokedAt: null,
+      status: 'confirmed',
+      startsAt: { $lte: new Date(now.getTime() + 30 * 60_000) },
+      endsAt: { $gt: new Date(now.getTime() - 30 * 60_000) },
+    }).select('_id');
+    const [profile, records, notes, nursingEntries] = await Promise.all([
       HealthProfile.findOne({ user: patientId }),
       MedicalRecord.find({ user: patientId })
         .sort({ recordDate: -1 })
@@ -380,6 +417,12 @@ export const getPatientClinicalOverview = async (req, res, next) => {
       MedicalNote.find({ patient: patientId, deletedAt: null })
         .populate('doctor', 'name mediVaultId medicalStaffDetails')
         .sort({ createdAt: -1 }),
+      nursingAppointment
+        ? NursingEntry.find({ appointment: nursingAppointment._id, patient: patientId })
+          .populate('nurse', 'name')
+          .sort({ createdAt: -1 })
+          .limit(100)
+        : [],
     ]);
 
     // Audit view
@@ -399,6 +442,7 @@ export const getPatientClinicalOverview = async (req, res, next) => {
       profile: profile || null,
       records,
       notes,
+      nursingEntries,
     });
   } catch (error) {
     next(error);
