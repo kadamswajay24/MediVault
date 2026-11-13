@@ -1,14 +1,34 @@
 const formatINR = (value) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(value);
-import InsuranceClaim, { CLAIM_STATUSES, ADJUDICATED_STATUSES } from '../models/InsuranceClaim.js';
+import mongoose from 'mongoose';
+import InsuranceClaim, { CLAIM_STATUSES, CLAIM_TYPES, ADJUDICATED_STATUSES } from '../models/InsuranceClaim.js';
 import MedicalRecord from '../models/MedicalRecord.js';
+import PolicyEnrollment from '../models/PolicyEnrollment.js';
+import InsuranceCompany from '../models/InsuranceCompany.js';
+import Hospital from '../models/Hospital.js';
 import { createAuditLog } from '../services/auditService.js';
 import { readFile, sendFile } from '../services/fileStorageService.js';
+import { escapeRegex } from '../utils/regexSearch.js';
 
 // Helper to generate human-readable unique claim ID
 const generateClaimNumber = () => {
   const timestamp = Date.now().toString().slice(-6);
   const random = Math.floor(1000 + Math.random() * 9000);
   return `CLM-${new Date().getFullYear()}-${timestamp}${random}`;
+};
+
+const agentCanAccessClaim = (agent, claim) => {
+  return Boolean(agent.insuranceCompany && claim.insuranceCompanyId && String(agent.insuranceCompany) === String(claim.insuranceCompanyId) && claim.hospital && agent.insuranceAgentHospitals?.some((hospitalId) => String(hospitalId) === String(claim.hospital)));
+};
+const companyAdminCanAccessClaim = (admin, claim) => Boolean(admin.insuranceCompany && claim.insuranceCompanyId && String(admin.insuranceCompany) === String(claim.insuranceCompanyId));
+const parsePositiveAmount = (value) => {
+  if (typeof value !== 'number' && (typeof value !== 'string' || !/^\d+(?:\.\d{1,2})?$/.test(value.trim()))) return Number.NaN;
+  const amount = Number(value);
+  return Number.isFinite(amount) && Math.abs(amount * 100 - Math.round(amount * 100)) < 1e-7 ? amount : Number.NaN;
+};
+const parseClaimDate = (value) => {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? null : date;
 };
 
 // @desc    Submit a new insurance claim with attached records
@@ -18,38 +38,52 @@ export const submitClaim = async (req, res, next) => {
   try {
     const {
       policyNumber,
-      insuranceCompany,
+      hospitalId,
       claimType,
       claimAmount,
       records = [],
       patientNotes,
-      hospitalName,
       admissionDate,
       dischargeDate,
     } = req.body;
 
     const patientId = req.effectivePatientId || req.user._id;
 
-    if (!policyNumber || !policyNumber.trim()) {
+    if (typeof policyNumber !== 'string' || !policyNumber.trim()) {
       return res.status(400).json({
         success: false,
         message: 'Policy number is required.',
       });
     }
 
-    if (!insuranceCompany || !insuranceCompany.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Insurance company name is required.',
-      });
+    const policy = await PolicyEnrollment.findOne({ patient: patientId, policyNumber: policyNumber.trim(), status: 'demo_active' });
+    if (!policy?.insuranceCompany) return res.status(400).json({ success: false, message: 'Select an active policy enrollment before filing a claim.' });
+    const company = await InsuranceCompany.findOne({ _id: policy.insuranceCompany, isActive: true, 'verification.status': 'verified', 'verification.expiresAt': { $gt: new Date() } });
+    if (!company) return res.status(400).json({ success: false, message: 'The insurer for this policy is not currently active.' });
+    let hospital = null;
+    if (hospitalId) {
+      if (!mongoose.Types.ObjectId.isValid(hospitalId)) return res.status(400).json({ success: false, message: 'Select an active hospital from the directory.' });
+      hospital = await Hospital.findOne({ _id: hospitalId, isActive: true }).select('_id name');
+      if (!hospital) return res.status(400).json({ success: false, message: 'The selected hospital is not currently available.' });
     }
 
-    const numericAmount = parseFloat(claimAmount);
-    if (isNaN(numericAmount) || numericAmount <= 0) {
+    const numericAmount = parsePositiveAmount(claimAmount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > Number.MAX_SAFE_INTEGER) {
       return res.status(400).json({
         success: false,
         message: 'A valid positive claim amount is required.',
       });
+    }
+
+    if (!Array.isArray(records) || records.length > 20 || records.some((id) => !mongoose.Types.ObjectId.isValid(id)) || new Set(records.map(String)).size !== records.length) {
+      return res.status(400).json({ success: false, message: 'Choose up to 20 distinct valid medical records.' });
+    }
+    if (!CLAIM_TYPES.includes(claimType || 'Hospitalization')) return res.status(400).json({ success: false, message: 'Select a valid claim type.' });
+    if (typeof patientNotes !== 'undefined' && (typeof patientNotes !== 'string' || patientNotes.length > 1000)) return res.status(400).json({ success: false, message: 'Claim notes must be 1,000 characters or fewer.' });
+    const parsedAdmissionDate = admissionDate ? parseClaimDate(admissionDate) : null;
+    const parsedDischargeDate = dischargeDate ? parseClaimDate(dischargeDate) : null;
+    if ((admissionDate && !parsedAdmissionDate) || (dischargeDate && !parsedDischargeDate) || (parsedAdmissionDate && parsedDischargeDate && parsedDischargeDate < parsedAdmissionDate)) {
+      return res.status(400).json({ success: false, message: 'Enter valid admission and discharge dates, with discharge on or after admission.' });
     }
 
     // Verify attached records belong to this patient
@@ -73,7 +107,8 @@ export const submitClaim = async (req, res, next) => {
       patient: patientId,
       claimNumber,
       policyNumber: policyNumber.trim(),
-      insuranceCompany: insuranceCompany.trim(),
+      insuranceCompany: company.name,
+      insuranceCompanyId: company._id,
       claimType: claimType || 'Hospitalization',
       claimAmount: numericAmount,
       approvedAmount: 0,
@@ -81,9 +116,10 @@ export const submitClaim = async (req, res, next) => {
       history: [{ status: 'Submitted', note: 'Claim submitted', actor: req.user._id }],
       records,
       patientNotes: patientNotes ? patientNotes.trim() : '',
-      hospitalName: hospitalName ? hospitalName.trim() : '',
-      admissionDate: admissionDate ? new Date(admissionDate) : undefined,
-      dischargeDate: dischargeDate ? new Date(dischargeDate) : undefined,
+      hospital: hospital?._id || null,
+      hospitalName: hospital?.name || '',
+      admissionDate: parsedAdmissionDate || undefined,
+      dischargeDate: parsedDischargeDate || undefined,
     });
 
     // Audit log
@@ -91,7 +127,7 @@ export const submitClaim = async (req, res, next) => {
       userId: patientId,
       performedBy: req.user._id,
       action: 'CLAIM_SUBMITTED',
-      details: `Insurance claim ${claimNumber} submitted to ${insuranceCompany} for amount ${new Intl.NumberFormat('en-IN', {
+      details: `Insurance claim ${claimNumber} submitted to ${company.name} for amount ${new Intl.NumberFormat('en-IN', {
         style: 'currency',
         currency: 'INR',
       }).format(numericAmount)}`,
@@ -122,18 +158,16 @@ export const getClaims = async (req, res, next) => {
       // Patient or caregiver viewing dependent
       query.patient = req.effectivePatientId || req.user._id;
     } else if (req.user.role === 'insurance_agent') {
-      // Agent sees claims for their company (or all if company not set)
-      if (req.user.insuranceDetails?.companyName) {
-        query.insuranceCompany = {
-          $regex: new RegExp(`^${req.user.insuranceDetails.companyName.trim()}$`, 'i'),
-        };
-      } else if (insuranceCompany) {
-        query.insuranceCompany = { $regex: new RegExp(insuranceCompany.trim(), 'i') };
-      }
+      if (!req.user.insuranceCompany || !req.user.insuranceAgentHospitals?.length) return res.status(403).json({ success: false, message: 'Your insurer and hospital assignments are required to access claims.' });
+      query.insuranceCompanyId = req.user.insuranceCompany;
+      query.hospital = { $in: req.user.insuranceAgentHospitals || [] };
+    } else if (req.user.role === 'insurer_admin') {
+      if (!req.user.insuranceCompany) return res.status(403).json({ success: false, message: 'Your insurer assignment is required to access claims.' });
+      query.insuranceCompanyId = req.user.insuranceCompany;
     } else if (req.user.role === 'admin') {
       // Admin can filter by company
       if (insuranceCompany) {
-        query.insuranceCompany = { $regex: new RegExp(insuranceCompany.trim(), 'i') };
+        query.insuranceCompany = { $regex: escapeRegex(String(insuranceCompany).trim()), $options: 'i' };
       }
     }
 
@@ -142,7 +176,7 @@ export const getClaims = async (req, res, next) => {
     }
 
     if (search && search.trim()) {
-      const sanitized = search.trim();
+      const sanitized = escapeRegex(search.trim());
       query.$or = [
         { claimNumber: { $regex: sanitized, $options: 'i' } },
         { policyNumber: { $regex: sanitized, $options: 'i' } },
@@ -189,9 +223,14 @@ export const getClaimById = async (req, res, next) => {
       req.proxyDelegation &&
       req.proxyDelegation.patient._id.toString() === claim.patient._id.toString();
     const isAgent = req.user.role === 'insurance_agent';
+    const isCompanyAdmin = req.user.role === 'insurer_admin';
     const isAdmin = req.user.role === 'admin';
 
-    if (!isPatient && !isProxy && !isAgent && !isAdmin) {
+    if ((isAgent && !agentCanAccessClaim(req.user, claim)) || (isCompanyAdmin && !companyAdminCanAccessClaim(req.user, claim))) {
+      return res.status(404).json({ success: false, message: 'Insurance claim not found.' });
+    }
+
+    if (!isPatient && !isProxy && !isAgent && !isCompanyAdmin && !isAdmin) {
       return res.status(403).json({
         success: false,
         message: 'Unauthorized access. You do not have permission to view this claim.',
@@ -220,6 +259,11 @@ export const reviewClaim = async (req, res, next) => {
         message: `Valid status is required: ${CLAIM_STATUSES.join(', ')}`,
       });
     }
+    if (approvedAmount !== undefined) {
+      const numericApproved = parsePositiveAmount(approvedAmount);
+      if (!Number.isFinite(numericApproved) || numericApproved < 0 || numericApproved > Number.MAX_SAFE_INTEGER) return res.status(400).json({ success: false, message: 'Enter a valid non-negative payout amount with up to two decimal places.' });
+    }
+    if (agentRemarks !== undefined && (typeof agentRemarks !== 'string' || agentRemarks.length > 1000)) return res.status(400).json({ success: false, message: 'Adjuster remarks must be 1,000 characters or fewer.' });
 
     const claim = await InsuranceClaim.findById(req.params.id).populate('patient', 'name email mediVaultId');
     if (!claim) {
@@ -228,6 +272,11 @@ export const reviewClaim = async (req, res, next) => {
         message: 'Insurance claim not found.',
       });
     }
+
+    if ((req.user.role === 'insurance_agent' && !agentCanAccessClaim(req.user, claim)) || (req.user.role === 'insurer_admin' && !companyAdminCanAccessClaim(req.user, claim))) {
+      return res.status(404).json({ success: false, message: 'Insurance claim not found.' });
+    }
+    if (approvedAmount !== undefined && Number(approvedAmount) > claim.claimAmount) return res.status(400).json({ success: false, message: 'Approved payout cannot exceed the original claim amount.' });
 
     // Block re-adjudication of already-finalized claims — use supplementClaim instead
     if (ADJUDICATED_STATUSES.includes(claim.status)) {
@@ -244,10 +293,7 @@ export const reviewClaim = async (req, res, next) => {
     claim.reviewedAt = new Date();
 
     if (approvedAmount !== undefined) {
-      const numericApproved = parseFloat(approvedAmount);
-      if (!isNaN(numericApproved) && numericApproved >= 0) {
-        claim.approvedAmount = numericApproved;
-      }
+      claim.approvedAmount = Number(approvedAmount);
     } else if (status === 'Approved' && claim.approvedAmount === 0) {
       claim.approvedAmount = claim.claimAmount;
     }
@@ -283,13 +329,14 @@ export const supplementClaim = async (req, res, next) => {
   try {
     const { additionalAmount, reason } = req.body;
 
-    const numericAdditional = parseFloat(additionalAmount);
-    if (isNaN(numericAdditional) || numericAdditional <= 0) {
+    const numericAdditional = parsePositiveAmount(additionalAmount);
+    if (!Number.isFinite(numericAdditional) || numericAdditional <= 0) {
       return res.status(400).json({
         success: false,
         message: 'A valid positive additional amount is required for a supplemental payment.',
       });
     }
+    if (reason !== undefined && (typeof reason !== 'string' || reason.length > 1000)) return res.status(400).json({ success: false, message: 'Payment reason must be 1,000 characters or fewer.' });
 
     const claim = await InsuranceClaim.findById(req.params.id).populate('patient', 'name email mediVaultId');
     if (!claim) {
@@ -297,6 +344,10 @@ export const supplementClaim = async (req, res, next) => {
         success: false,
         message: 'Insurance claim not found.',
       });
+    }
+
+    if ((req.user.role === 'insurance_agent' && !agentCanAccessClaim(req.user, claim)) || (req.user.role === 'insurer_admin' && !companyAdminCanAccessClaim(req.user, claim))) {
+      return res.status(404).json({ success: false, message: 'Insurance claim not found.' });
     }
 
     // Supplement is only valid on already-adjudicated claims
@@ -369,8 +420,7 @@ export const downloadClaimRecord = async (req, res, next) => {
       });
     }
 
-    const company = req.user.insuranceDetails?.companyName?.trim().toLowerCase();
-    if (req.user.role !== 'insurance_agent' || !company || company !== claim.insuranceCompany?.trim().toLowerCase()) {
+    if ((req.user.role === 'insurance_agent' && !agentCanAccessClaim(req.user, claim)) || (req.user.role === 'insurer_admin' && !companyAdminCanAccessClaim(req.user, claim))) {
       return res.status(403).json({ success: false, message: 'You cannot access documents for this insurance company.' });
     }
 

@@ -7,8 +7,13 @@ import ProxyDelegation from '../models/ProxyDelegation.js';
 import { createAuditLog } from '../services/auditService.js';
 import { generateCompanyAgentId } from '../services/agentIdService.js';
 import { readFile, sendFile } from '../services/fileStorageService.js';
+import { escapeRegex } from '../utils/regexSearch.js';
 
 const isValidUserId = (id) => mongoose.Types.ObjectId.isValid(id);
+
+// Insurance agents linked to an insurance company are managed by that company's admins.
+// Legacy agents without a company stay under platform-admin management so they are never orphaned.
+const isCompanyManagedAgent = (user) => user?.role === 'insurance_agent' && Boolean(user.insuranceCompany);
 
 // @desc    Get all users across all roles (Admin only)
 // @route   GET /api/admin/users
@@ -27,12 +32,23 @@ export const getUsers = async (req, res, next) => {
     }
 
     if (search && search.trim()) {
-      const sanitized = search.trim();
+      const sanitized = escapeRegex(search.trim());
       query.$or = [
         { name: { $regex: sanitized, $options: 'i' } },
         { email: { $regex: sanitized, $options: 'i' } },
       ];
     }
+
+    // Hospital-assigned physician and nurse applications belong to their hospital admin.
+    query.$nor = [
+      { role: 'insurer_admin', insuranceCompany: { $ne: null } },
+      { role: 'insurance_agent', insuranceCompany: { $ne: null } },
+      {
+        role: 'medical_staff',
+        'medicalStaffDetails.professionalType': { $in: ['physician', 'nurse'] },
+        'medicalStaffDetails.hospital': { $ne: null },
+      },
+    ];
 
     const users = await User.find(query)
       .select('-password')
@@ -59,7 +75,7 @@ export const getUsers = async (req, res, next) => {
 export const updateUserRole = async (req, res, next) => {
   try {
     const { role, medicalStaffDetails, insuranceDetails } = req.body;
-    const validRoles = ['patient', 'medical_staff', 'insurance_agent', 'admin'];
+    const validRoles = ['patient', 'medical_staff', 'hospital_admin', 'admin'];
 
     if (!role || !validRoles.includes(role)) {
       return res.status(400).json({
@@ -80,6 +96,10 @@ export const updateUserRole = async (req, res, next) => {
       });
     }
 
+    if (user.role === 'insurer_admin' || isCompanyManagedAgent(user)) {
+      return res.status(403).json({ success: false, message: 'Insurer users are managed by an administrator of their company.' });
+    }
+
     if (
       role === 'insurance_agent' &&
       (!insuranceDetails || typeof insuranceDetails.companyName !== 'string' ||
@@ -92,7 +112,8 @@ export const updateUserRole = async (req, res, next) => {
     }
 
     const oldRole = user.role;
-    if (['medical_staff', 'insurance_agent'].includes(role) && oldRole !== role) {
+    const oldInsuranceCompany = user.insuranceDetails?.companyName || '';
+    if (['medical_staff', 'insurance_agent', 'pharmacy_manager'].includes(role) && oldRole !== role) {
       return res.status(400).json({ success: false, message: 'Changing a user into a staff role requires a new application with credentials through the appropriate staff registration portal.' });
     }
     user.role = role;
@@ -105,9 +126,9 @@ export const updateUserRole = async (req, res, next) => {
       const credentialChanged = role === 'medical_staff' &&
         user.medicalStaffDetails?.licenseNumber !== (medicalStaffDetails.licenseNumber || '');
       user.medicalStaffDetails = {
+        ...(user.medicalStaffDetails?.toObject?.() || {}),
         licenseNumber: medicalStaffDetails.licenseNumber || '',
         specialization: medicalStaffDetails.specialization || '',
-        hospitalAffiliation: medicalStaffDetails.hospitalAffiliation || '',
       };
       if (credentialChanged) {
         user.credentialVerification.status = 'needs_changes';
@@ -119,8 +140,11 @@ export const updateUserRole = async (req, res, next) => {
 
     if (insuranceDetails && typeof insuranceDetails === 'object') {
       const companyName = String(insuranceDetails.companyName || '').trim();
+      const licenseNumber = insuranceDetails.licenseNumber === undefined
+        ? user.insuranceDetails?.licenseNumber || ''
+        : String(insuranceDetails.licenseNumber).trim();
       const credentialChanged = role === 'insurance_agent' &&
-        (user.insuranceDetails?.licenseNumber !== (insuranceDetails.licenseNumber || '') ||
+        (user.insuranceDetails?.licenseNumber !== licenseNumber ||
           user.insuranceDetails?.companyName?.trim().toLowerCase() !== companyName.toLowerCase());
       const companyChanged =
         user.insuranceDetails?.companyName?.trim().toLowerCase() !== companyName.toLowerCase();
@@ -133,7 +157,7 @@ export const updateUserRole = async (req, res, next) => {
       user.insuranceDetails = {
         companyName,
         agentId,
-        licenseNumber: insuranceDetails.licenseNumber || '',
+        licenseNumber,
       };
       if (credentialChanged) {
         user.credentialVerification.status = 'needs_changes';
@@ -146,11 +170,14 @@ export const updateUserRole = async (req, res, next) => {
     await user.save();
 
     // Audit log
+    const insurerChanged = oldRole === 'insurance_agent' && role === 'insurance_agent' &&
+      oldInsuranceCompany.trim().toLowerCase() !==
+        (user.insuranceDetails?.companyName || '').trim().toLowerCase();
     await createAuditLog({
       userId: user._id,
       performedBy: req.user._id,
       action: 'ADMIN_USER_UPDATED',
-      details: `Admin (${req.user.name}) updated role of user ${user.name} from [${oldRole}] to [${role}]`,
+      details: `Admin (${req.user.name}) updated role of user ${user.name} from [${oldRole}] to [${role}]${insurerChanged ? `; insurer changed from [${oldInsuranceCompany || 'unassigned'}] to [${user.insuranceDetails.companyName}]` : ''}`,
       resourceId: user._id,
       resourceType: 'User',
       req,
@@ -196,6 +223,10 @@ export const toggleUserStatus = async (req, res, next) => {
         success: false,
         message: 'User account not found.',
       });
+    }
+
+    if (user.role === 'insurer_admin' || isCompanyManagedAgent(user)) {
+      return res.status(403).json({ success: false, message: 'Insurer users are managed by an administrator of their company.' });
     }
 
     // Prevent deactivating own account
@@ -259,6 +290,16 @@ export const approveUser = async (req, res, next) => {
         message: 'Only staff accounts can be approved through this action.',
       });
     }
+    if (user.role === 'medical_staff' && ['physician', 'nurse'].includes(user.medicalStaffDetails?.professionalType) && user.medicalStaffDetails?.hospital) {
+      return res.status(403).json({ success: false, message: 'Hospital staff applications must be approved by an administrator of their hospital.' });
+    }
+    if (isCompanyManagedAgent(user)) return res.status(403).json({ success: false, message: 'Insurance agents must be approved by an administrator of their company.' });
+    if (user.role === 'pharmacy_manager' || user.role === 'lab_manager') {
+      return res.status(409).json({
+        success: false,
+        message: 'Organization manager accounts are activated only after their organization is verified.',
+      });
+    }
 
     if (user.approvalStatus !== 'pending') {
       return res.status(409).json({
@@ -272,6 +313,20 @@ export const approveUser = async (req, res, next) => {
       return res.status(409).json({
         success: false,
         message: 'Verify a current, unexpired staff credential document before approving the account.',
+      });
+    }
+    if (user.role === 'medical_staff' && user.medicalStaffDetails?.professionalType === 'pharmacist' &&
+        user.pharmacyMembershipStatus !== 'approved') {
+      return res.status(409).json({
+        success: false,
+        message: 'The pharmacy organization manager must approve pharmacist membership before the account can be activated.',
+      });
+    }
+    if (user.role === 'medical_staff' && user.medicalStaffDetails?.professionalType === 'lab_technologist' &&
+        user.labMembershipStatus !== 'approved') {
+      return res.status(409).json({
+        success: false,
+        message: 'The laboratory manager must approve laboratory staff membership before the account can be activated.',
       });
     }
 
@@ -314,6 +369,10 @@ export const reviewUserCredential = async (req, res, next) => {
     if (decision !== 'verified' && !String(reviewNote).trim()) return res.status(400).json({ success: false, message: 'Add a note when sending back or rejecting credential documents.' });
     const user = await User.findById(req.params.id);
     if (!user || !['medical_staff', 'insurance_agent'].includes(user.role)) return res.status(404).json({ success: false, message: 'Staff account not found.' });
+    if (user.role === 'medical_staff' && ['physician', 'nurse'].includes(user.medicalStaffDetails?.professionalType) && user.medicalStaffDetails?.hospital) {
+      return res.status(403).json({ success: false, message: 'Hospital staff credentials must be reviewed by an administrator of their hospital.' });
+    }
+    if (isCompanyManagedAgent(user)) return res.status(403).json({ success: false, message: 'Insurance agent credentials must be reviewed by an administrator of their company.' });
     if (!user.credentialVerification?.documentStorageFileId) return res.status(404).json({ success: false, message: 'No credential document is available for review.' });
     if (decision === 'verified' && user.credentialVerification.status !== 'pending') {
       return res.status(409).json({ success: false, message: 'The applicant must resubmit the requested changes before these credentials can be verified.' });
@@ -355,10 +414,14 @@ export const reviewUserCredential = async (req, res, next) => {
 export const downloadUserCredential = async (req, res, next) => {
   try {
     if (!isValidUserId(req.params.id)) return res.status(400).json({ success: false, message: 'A valid user ID is required.' });
-    const user = await User.findById(req.params.id).select('role name credentialVerification');
+    const user = await User.findById(req.params.id).select('role name insuranceCompany medicalStaffDetails.professionalType medicalStaffDetails.hospital credentialVerification');
     if (!user || !['medical_staff', 'insurance_agent'].includes(user.role) || !user.credentialVerification?.documentStorageFileId) {
       return res.status(404).json({ success: false, message: 'Credential document not found.' });
     }
+    if (user.role === 'medical_staff' && ['physician', 'nurse'].includes(user.medicalStaffDetails?.professionalType) && user.medicalStaffDetails?.hospital) {
+      return res.status(403).json({ success: false, message: 'Hospital staff credentials are available only to their hospital administrator.' });
+    }
+    if (isCompanyManagedAgent(user)) return res.status(403).json({ success: false, message: 'Insurance agent credentials are available only to an administrator of their company.' });
     const file = {
       storageFileId: user.credentialVerification.documentStorageFileId,
       fileName: user.credentialVerification.documentFileName || 'credential-document',

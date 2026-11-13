@@ -6,7 +6,10 @@ import HealthProfile from '../models/HealthProfile.js';
 import User from '../models/User.js';
 import ProxyDelegation from '../models/ProxyDelegation.js';
 import ClinicalAccessRequest from '../models/ClinicalAccessRequest.js';
+import Appointment from '../models/Appointment.js';
 import { createAuditLog } from '../services/auditService.js';
+import { professionalTypeFor } from '../middleware/authMiddleware.js';
+import { escapeRegex } from '../utils/regexSearch.js';
 import {
   extractDocumentText,
   inspectPatientIdentity,
@@ -19,15 +22,29 @@ const canAccessRecord = async (user, record, action = 'read') => {
   // 1. Direct owner
   if (record.user.toString() === user._id.toString()) return true;
 
-  // Medical staff require a current grant for each patient's records.
+  // Medical staff require a current grant or an active appointment consultation window.
   if (user.role === 'medical_staff') {
     if (action !== 'read') return false;
-    return Boolean(await ClinicalAccessRequest.findOne({
+    // Clinical record access is limited to physicians; other staff types never qualify.
+    if (professionalTypeFor(user) !== 'physician') return false;
+    const hasGrant = Boolean(await ClinicalAccessRequest.findOne({
       patient: record.user,
       medicalStaff: user._id,
       status: 'approved',
       expiresAt: { $gt: new Date() },
     }));
+    if (hasGrant) return true;
+
+    // Doctor appointment consultation window (30 mins before slot, 30 mins after slot ends)
+    const now = new Date();
+    const hasAppointment = Boolean(await Appointment.findOne({
+      doctor: user._id,
+      patient: record.user,
+      status: 'confirmed',
+      startsAt: { $lte: new Date(now.getTime() + 30 * 60_000) },
+      endsAt: { $gte: new Date(now.getTime() - 30 * 60_000) },
+    }));
+    return hasAppointment;
   }
 
   // Resolve permission from the record owner, independently of client context.
@@ -180,7 +197,7 @@ export const getRecords = async (req, res, next) => {
     }
 
     if (search && search.trim()) {
-      const sanitizedSearch = search.trim();
+      const sanitizedSearch = escapeRegex(search.trim());
       query.$or = [
         { title: { $regex: sanitizedSearch, $options: 'i' } },
         { description: { $regex: sanitizedSearch, $options: 'i' } },
@@ -210,6 +227,8 @@ export const getRecords = async (req, res, next) => {
 // @route   GET /api/records/:id
 // @access  Private
 export const getRecordById = async (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+
   try {
     const record = await MedicalRecord.findById(req.params.id);
 
@@ -244,6 +263,35 @@ export const getRecordById = async (req, res, next) => {
       success: true,
       record,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Recheck access to a medical record without returning its contents
+// @route   GET /api/records/:id/access
+// @access  Private
+export const checkRecordAccess = async (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+
+  try {
+    const record = await MedicalRecord.findById(req.params.id);
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: 'Medical record not found.',
+      });
+    }
+
+    const hasAccess = await canAccessRecord(req.user, record);
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access to this medical record is no longer available.',
+      });
+    }
+
+    return res.status(204).end();
   } catch (error) {
     next(error);
   }
@@ -306,6 +354,8 @@ export const summarizeRecord = async (req, res, next) => {
 // @route   GET /api/records/:id/download
 // @access  Private
 export const downloadRecord = async (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+
   try {
     const record = await MedicalRecord.findById(req.params.id);
 
