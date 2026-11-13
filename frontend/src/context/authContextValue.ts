@@ -27,6 +27,33 @@ export interface AuthContextType {
     insuranceDetails?: InsuranceDetails;
     credentialDocument?: File;
     credentialExpiresAt?: string;
+    patientAddress?: { address: string; city: string; district: string; state: string; postalCode: string; postOffice: string };
+    pharmacyOrganizationDetails?: {
+      name: string;
+      organizationType: 'hospital' | 'independent_pharmacy' | 'franchise';
+      hospitalId?: string;
+      registrationNumber: string;
+      address: string;
+      city: string;
+      district?: string;
+      state: string;
+      postalCode: string;
+      postOffice?: string;
+      openingHours: string;
+    };
+    labOrganizationDetails?: {
+      name: string;
+      organizationType: 'independent_lab' | 'hospital_lab' | 'franchise';
+      hospitalId?: string;
+      hospitalName?: string;
+      registrationNumber: string;
+      address: string;
+      city: string;
+      district?: string;
+      state: string;
+      postalCode: string;
+      postOffice?: string;
+    };
   }) => Promise<AuthResponse>;
   logout: () => void;
   updateUserContext: (user: User) => void;

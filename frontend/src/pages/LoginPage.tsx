@@ -10,7 +10,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
-import { roleForPortal, type AuthPortal } from '../utils/authSession';
+import { userMatchesPortal, type AuthPortal } from '../utils/authSession';
 
 const portalDetails: Record<AuthPortal, {
   title: string;
@@ -36,9 +36,30 @@ const portalDetails: Record<AuthPortal, {
   insurance: {
     title: 'Insurance Portal',
     heading: 'Sign in to the insurance workspace',
-    description: 'Sign in to track your application. Insurance tools unlock after credential verification and administrator approval.',
+    description: 'Sign in to track your application. Insurance agent access unlocks after credential verification and approval by your insurer.',
     home: '/claims',
     submitLabel: 'Sign in to Insurance Portal',
+  },
+  insurance_admin: {
+    title: 'Insurance Company Administration',
+    heading: 'Sign in to your company workspace',
+    description: 'Manage agent applications for your approved insurance company.',
+    home: '/insurance/company/admin',
+    submitLabel: 'Sign in to Company Administration',
+  },
+  pharmacy: {
+    title: 'Pharmacy Organization Portal',
+    heading: 'Sign in to manage your MediVault pharmacy',
+    description: 'Organization tools unlock after MediVault verifies the registration documents.',
+    home: '/pharmacy/manager',
+    submitLabel: 'Sign in to Pharmacy Portal',
+  },
+  lab: {
+    title: 'Laboratory Portal',
+    heading: 'Sign in to the laboratory workspace',
+    description: 'Lab staff access unlocks after laboratory, credential, and membership reviews.',
+    home: '/lab/workspace',
+    submitLabel: 'Sign in to Laboratory Portal',
   },
   admin: {
     title: 'Administrator Portal',
@@ -46,6 +67,13 @@ const portalDetails: Record<AuthPortal, {
     description: 'Governance workspace for system administrators.',
     home: '/admin',
     submitLabel: 'Sign in as administrator',
+  },
+  hospital: {
+    title: 'Hospital Administration Portal',
+    heading: 'Hospital administrator sign in',
+    description: 'Manage the hospitals assigned to your account.',
+    home: '/hospital/admin',
+    submitLabel: 'Sign in to Hospital Administration',
   },
 };
 
@@ -58,25 +86,32 @@ export const LoginPage: React.FC<{ portal: AuthPortal }> = ({ portal }) => {
   const [loading, setLoading] = useState(false);
 
   const { login, logout, loading: authLoading, isAuthenticated, user } = useAuth();
+  const homePath = portal === 'lab' && ['lab_manager', 'lab_chain_admin'].includes(user?.role || '') ? '/lab/manager' : details.home;
   const navigate = useNavigate();
 
   useEffect(() => {
     if (authLoading || !isAuthenticated || !user) return;
-    if (['medical_staff', 'insurance_agent'].includes(user.role) && (
+    if (user.mustChangePassword) {
+      navigate('/change-password', { replace: true });
+      return;
+    }
+    if (['medical_staff', 'insurance_agent', 'pharmacy_manager', 'lab_manager'].includes(user.role) && (
       user.approvalStatus === 'pending' || user.credentialVerification?.status !== 'verified' ||
-      (user.credentialVerification?.expiresAt && new Date(user.credentialVerification.expiresAt) <= new Date())
+      (user.credentialVerification?.expiresAt && new Date(user.credentialVerification.expiresAt) <= new Date()) ||
+      (user.role === 'medical_staff' && user.medicalStaffDetails?.professionalType === 'pharmacist' && user.pharmacyMembershipStatus !== 'approved') ||
+      (user.role === 'medical_staff' && user.medicalStaffDetails?.professionalType === 'lab_technologist' && user.labMembershipStatus !== 'approved')
     )) {
       navigate('/staff-application', { replace: true });
       return;
     }
-    if (user.role === roleForPortal(portal)) {
-      navigate(details.home, { replace: true });
+    if (userMatchesPortal(user, portal)) {
+      navigate(homePath, { replace: true });
       return;
     }
     // Switching portal in the same tab ends the old tab session. Other tabs
     // keep their separate sessionStorage and remain signed in.
     logout();
-  }, [authLoading, details.home, isAuthenticated, logout, navigate, portal, user]);
+  }, [authLoading, homePath, isAuthenticated, logout, navigate, portal, user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,8 +124,12 @@ export const LoginPage: React.FC<{ portal: AuthPortal }> = ({ portal }) => {
     setError(null);
 
     try {
-      await login(email, password, portal);
-      navigate(details.home);
+      const signedInUser = await login(email, password, portal);
+      if (signedInUser.mustChangePassword) {
+        navigate('/change-password', { replace: true });
+        return;
+      }
+      navigate(portal === 'lab' && ['lab_manager', 'lab_chain_admin'].includes(signedInUser.role) ? '/lab/manager' : details.home);
     } catch (err: any) {
       setError(
         err.response?.data?.message || err.message || 'Login failed. Please verify your credentials.'
@@ -205,21 +244,26 @@ export const LoginPage: React.FC<{ portal: AuthPortal }> = ({ portal }) => {
         </div>
 
         <p className="text-center text-sm text-slate-600 dark:text-slate-400">
-          {portal === 'admin' ? (
+          {portal === 'admin' || portal === 'hospital' ? (
             'Administrator accounts are provisioned by the system owner.'
           ) : (
             <>
               {portal === 'patient' ? 'New to MediVault?' : 'Need an account?'}{' '}
               <Link
-                to={portal === 'patient' ? '/patient/register' : portal === 'clinical' ? '/clinical/register' : '/insurance/register'}
+                to={portal === 'patient' ? '/patient/register' : portal === 'clinical' ? '/clinical/register' : portal === 'insurance' ? '/insurance/register' : portal === 'pharmacy' ? '/pharmacy/register' : '/lab/staff/register'}
                 className="font-semibold text-[#914B54] underline-offset-4 hover:underline dark:text-[#DDA6A3]"
               >
                 {portal === 'patient'
                   ? 'Create a patient account'
                   : portal === 'clinical'
                     ? 'Apply for medical staff access'
-                    : 'Apply for insurance access'}
+                    : portal === 'lab'
+                      ? 'Apply to join a laboratory'
+                      : portal === 'pharmacy'
+                        ? 'Register a pharmacy or franchise'
+                        : 'Apply for insurance access'}
               </Link>
+              {portal === 'lab' && <> · <Link to="/lab/register" className="font-semibold text-[#914B54] underline-offset-4 hover:underline dark:text-[#DDA6A3]">Register a laboratory</Link></>}
             </>
           )}
         </p>

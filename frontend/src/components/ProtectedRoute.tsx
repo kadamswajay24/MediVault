@@ -20,10 +20,18 @@ export const ProtectedRoute: React.FC = () => {
     return <Navigate to="/" replace />;
   }
 
-  const isLimitedStaff = Boolean(user && ['medical_staff', 'insurance_agent'].includes(user.role) && (
+  // Backend rejects every workspace call with PASSWORD_CHANGE_REQUIRED until the password is changed,
+  // so force the change page before any role-specific workspace can load.
+  if (user?.mustChangePassword && location.pathname !== '/change-password') {
+    return <Navigate to="/change-password" replace />;
+  }
+
+  const isLimitedStaff = Boolean(user && ['medical_staff', 'insurance_agent', 'pharmacy_manager', 'lab_manager'].includes(user.role) && (
     user.approvalStatus === 'pending' ||
     user.credentialVerification?.status !== 'verified' ||
-    (user.credentialVerification?.expiresAt && new Date(user.credentialVerification.expiresAt) <= new Date())
+    (user.credentialVerification?.expiresAt && new Date(user.credentialVerification.expiresAt) <= new Date()) ||
+    (user.role === 'medical_staff' && user.medicalStaffDetails?.professionalType === 'pharmacist' && user.pharmacyMembershipStatus !== 'approved') ||
+    (user.role === 'medical_staff' && user.medicalStaffDetails?.professionalType === 'lab_technologist' && user.labMembershipStatus !== 'approved')
   ));
   if (isLimitedStaff && location.pathname !== '/staff-application') {
     return <Navigate to="/staff-application" replace />;
@@ -39,5 +47,23 @@ export const RoleRoute: React.FC<{ roles: string[] }> = ({ roles }) => {
     return <Navigate to="/" replace />;
   }
 
+  return <Outlet />;
+};
+
+export const ProfessionalTypeRoute: React.FC<{ types: string[] }> = ({ types }) => {
+  const { user } = useAuth();
+  const professionalType = user?.medicalStaffDetails?.professionalType ||
+    (user?.medicalStaffDetails?.specialization?.toLowerCase() === 'nursing' ? 'nurse' : 'physician');
+  if (!user || user.role !== 'medical_staff' || !types.includes(professionalType)) {
+    return <Navigate to={professionalType === 'pharmacist' ? '/pharmacy' : professionalType === 'lab_technologist' ? '/lab/workspace' : '/medical-staff'} replace />;
+  }
+  return <Outlet />;
+};
+
+export const ClinicalAccessRoute: React.FC = () => {
+  const { user } = useAuth();
+  const professionalType = user?.medicalStaffDetails?.professionalType ||
+    (user?.medicalStaffDetails?.specialization?.toLowerCase() === 'nursing' ? 'nurse' : 'physician');
+  if (user?.role === 'medical_staff' && professionalType !== 'physician') return <Navigate to="/medical-staff" replace />;
   return <Outlet />;
 };

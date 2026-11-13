@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   User,
@@ -9,14 +9,16 @@ import {
   Loader2,
   Stethoscope,
   Phone,
+  Pill,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import type { UserRole } from '../types';
 import { MEDICAL_SPECIALIZATIONS } from '../constants/medicalSpecializations';
-import { HOSPITAL_AFFILIATIONS } from '../constants/hospitalAffiliations';
-import { INSURANCE_COMPANIES } from '../constants/insuranceCompanies';
+import { hospitalAPI, insuranceCompanyAPI, labAPI, pharmacyAPI } from '../services/api';
+import type { LabOrganization, PharmacyOrganization } from '../types';
+import { PostalAddressFields, emptyPostalAddress, type PostalAddress } from '../components/PostalAddressFields';
 
-type RegistrationPortal = 'patient' | 'clinical' | 'insurance';
+type RegistrationPortal = 'patient' | 'clinical' | 'insurance' | 'lab';
 
 export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal }) => {
   const [name, setName] = useState('');
@@ -24,15 +26,18 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [phone, setPhone] = useState('');
+  const [patientAddress, setPatientAddress] = useState<PostalAddress>(emptyPostalAddress);
   const [role, setRole] = useState<UserRole>(
     portal === 'patient' ? 'patient' : portal === 'insurance' ? 'insurance_agent' : 'medical_staff'
   );
-  const [staffType, setStaffType] = useState<'doctor' | 'nurse'>('doctor');
+  const [staffType, setStaffType] = useState<'doctor' | 'nurse' | 'pharmacist' | 'lab_technologist'>(portal === 'lab' ? 'lab_technologist' : 'doctor');
   const isPatientPortal = portal === 'patient';
   const signInPath = portal === 'patient'
     ? '/patient/login'
     : portal === 'insurance'
       ? '/insurance/login'
+      : portal === 'lab'
+        ? '/lab/login'
       : '/clinical/login';
 
   // Role details
@@ -41,10 +46,18 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
   const [credentialDocument, setCredentialDocument] = useState<File | undefined>();
   const [specialization, setSpecialization] = useState('');
   const [customSpecialization, setCustomSpecialization] = useState('');
-  const [hospitalAffiliation, setHospitalAffiliation] = useState('');
-  const [customHospitalAffiliation, setCustomHospitalAffiliation] = useState('');
-  const [companyName, setCompanyName] = useState('');
-  const [customCompanyName, setCustomCompanyName] = useState('');
+  const [selectedHospitalId, setSelectedHospitalId] = useState('');
+  const [hospitalDirectory, setHospitalDirectory] = useState<{ id: string; name: string; city: string; state: string }[]>([]);
+  const [hospitalDirectoryError, setHospitalDirectoryError] = useState<string | null>(null);
+  const [pharmacyOrganizationId, setPharmacyOrganizationId] = useState('');
+  const [pharmacyOrganizations, setPharmacyOrganizations] = useState<PharmacyOrganization[]>([]);
+  const [pharmacyDirectoryError, setPharmacyDirectoryError] = useState<string | null>(null);
+  const [labOrganizationId, setLabOrganizationId] = useState('');
+  const [labOrganizations, setLabOrganizations] = useState<LabOrganization[]>([]);
+  const [labDirectoryError, setLabDirectoryError] = useState<string | null>(null);
+  const [insuranceCompanyId, setInsuranceCompanyId] = useState('');
+  const [insuranceCompanies, setInsuranceCompanies] = useState<{id:string;name:string;city:string;state:string}[]>([]);
+  const [insuranceCompanyError, setInsuranceCompanyError] = useState<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -54,6 +67,25 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
 
   const { register } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (portal === 'clinical') {
+      hospitalAPI.directory()
+        .then((response) => setHospitalDirectory(response.hospitals))
+        .catch(() => setHospitalDirectoryError('The verified hospital directory is temporarily unavailable.'));
+      pharmacyAPI.getDirectory()
+        .then((response) => setPharmacyOrganizations(response.organizations))
+        .catch(() => setPharmacyDirectoryError('The verified pharmacy directory is temporarily unavailable.'));
+    }
+    if (portal === 'insurance') {
+      insuranceCompanyAPI.directory().then((response) => setInsuranceCompanies(response.companies)).catch(() => setInsuranceCompanyError('The enrolled insurer directory is temporarily unavailable.'));
+    }
+    if (portal === 'lab') {
+      labAPI.getDirectory()
+        .then((response) => setLabOrganizations(response.organizations))
+        .catch(() => setLabDirectoryError('The verified laboratory directory is temporarily unavailable.'));
+    }
+  }, [portal]);
 
   const handlePhoneChange = (value: string) => {
     const formattedNumber = value.trim().replace(/[\s()-]/g, '');
@@ -84,13 +116,20 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
       return;
     }
 
-    if (role === 'insurance_agent' && !companyName) {
+    if (role === 'insurance_agent' && !insuranceCompanyId) {
       setError('Select your insurance company.');
       return;
     }
-
-    if (role === 'insurance_agent' && companyName === 'Other' && !customCompanyName.trim()) {
-      setError('Enter the name of your insurance company.');
+    if (role === 'medical_staff' && staffType === 'pharmacist' && !pharmacyOrganizationId) {
+      setError('Select the MediVault-verified hospital or pharmacy you work for.');
+      return;
+    }
+    if (role === 'medical_staff' && staffType === 'lab_technologist' && !labOrganizationId) {
+      setError('Select the MediVault-verified laboratory you work for.');
+      return;
+    }
+    if (role === 'medical_staff' && ['doctor', 'nurse'].includes(staffType) && !selectedHospitalId) {
+      setError('Select a MediVault hospital for your staff application.');
       return;
     }
 
@@ -123,23 +162,24 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
         password,
         role,
         phone: `+91${phone}`,
+        patientAddress: isPatientPortal ? patientAddress : undefined,
         medicalStaffDetails:
           role === 'medical_staff'
             ? {
+              professionalType: staffType === 'nurse' ? 'nurse' : staffType === 'pharmacist' ? 'pharmacist' : staffType === 'lab_technologist' ? 'lab_technologist' : 'physician',
+              pharmacyOrganizationId: staffType === 'pharmacist' ? pharmacyOrganizationId : undefined,
+              labOrganizationId: staffType === 'lab_technologist' ? labOrganizationId : undefined,
+                hospitalId: ['doctor', 'nurse'].includes(staffType) ? selectedHospitalId : undefined,
                 licenseNumber,
                 specialization:
                   specialization === 'Other' ? customSpecialization.trim() : specialization,
-                hospitalAffiliation:
-                  hospitalAffiliation === 'Other'
-                    ? customHospitalAffiliation.trim()
-                    : hospitalAffiliation,
               }
             : undefined,
         insuranceDetails:
           role === 'insurance_agent'
             ? {
-                companyName:
-                  companyName === 'Other' ? customCompanyName.trim() : companyName,
+                companyName: insuranceCompanies.find((company) => company.id === insuranceCompanyId)?.name || '',
+                insuranceCompanyId,
                 licenseNumber,
               }
             : undefined,
@@ -155,7 +195,7 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
       }
 
       if (role === 'insurance_agent') navigate('/claims');
-      else if (role === 'medical_staff') navigate('/medical-staff');
+      else if (role === 'medical_staff') navigate(staffType === 'pharmacist' ? '/pharmacy' : '/medical-staff');
       else navigate('/dashboard');
     } catch (err: any) {
       setError(
@@ -175,12 +215,16 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
               ? 'Create your account'
               : portal === 'clinical'
                 ? 'Apply for medical staff access'
+                : portal === 'lab'
+                  ? 'Apply to join a laboratory'
                 : 'Apply for insurance access'}
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400">
             {isPatientPortal
               ? 'Enter your details to get started.'
-              : 'Applications are reviewed by an administrator before access is granted.'}
+              : portal === 'lab'
+                ? 'Your laboratory and credentials must be reviewed, then your laboratory manager approves your membership.'
+                : 'Applications are reviewed by an administrator before access is granted.'}
           </p>
         </div>
 
@@ -226,13 +270,13 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
                 Medical staff role
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => {
                     setRole('medical_staff');
                     setStaffType('doctor');
-                    if (specialization === 'Nursing') setSpecialization('');
+                    if (specialization === 'Nursing' || specialization === 'Pharmacy') setSpecialization('');
                   }}
                   className={`p-2.5 rounded-lg border text-left text-xs transition-all ${
                     role === 'medical_staff' && staffType === 'doctor'
@@ -262,7 +306,23 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
                   <div>Nurse</div>
                   <div className="text-[10px] text-slate-400 font-normal">Nursing staff</div>
                 </button>
-
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRole('medical_staff');
+                    setStaffType('pharmacist');
+                    setSpecialization('Pharmacy');
+                  }}
+                  className={`p-2.5 rounded-lg border text-left text-xs transition-all ${
+                    role === 'medical_staff' && staffType === 'pharmacist'
+                      ? 'border-teal-600 bg-teal-50 dark:bg-teal-950/30 text-teal-900 dark:text-teal-200 font-bold'
+                      : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  <Pill className="w-4 h-4 mb-1 text-teal-600" />
+                  <div>Pharmacist</div>
+                  <div className="text-[10px] text-slate-400 font-normal">Pharmacy staff</div>
+                </button>
               </div>
             </div>
             )}
@@ -331,21 +391,30 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
               </div>
             </div>
 
+            {isPatientPortal && <section className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+              <div><h2 className="text-sm font-semibold">Home address</h2><p className="mt-1 text-xs text-slate-500">Optional. Add it now or update it later in your health profile.</p></div>
+              <PostalAddressFields value={patientAddress} onChange={setPatientAddress} required={false} />
+            </section>}
+
             {/* Medical Staff Specific Fields */}
             {role === 'medical_staff' && (
               <div className="p-3 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 space-y-2.5">
                 <span className="text-[11px] font-bold uppercase text-blue-600 dark:text-blue-400 block">
-                  Clinician Credentials
+                  {staffType === 'pharmacist' ? 'Pharmacy Credentials' : staffType === 'lab_technologist' ? 'Laboratory Credentials' : 'Clinician Credentials'}
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                   <input
                     type="text"
-                    placeholder="Medical License # (e.g. MCI-MH-992)"
+                    placeholder={staffType === 'pharmacist' ? 'Pharmacy registration / license #' : staffType === 'lab_technologist' ? 'Laboratory professional registration / license #' : 'Medical License # (e.g. MCI-MH-992)'}
                     value={licenseNumber}
                     onChange={(e) => setLicenseNumber(e.target.value)}
                     className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded"
                   />
-                  <select
+                  {staffType !== 'doctor' ? (
+                    <div className="flex items-center rounded border bg-slate-50 px-2.5 py-1.5 text-slate-600 dark:bg-slate-900 dark:text-slate-300" aria-label={staffType === 'nurse' ? 'Nursing specialization' : 'Pharmacy scope'}>
+                      {staffType === 'nurse' ? 'Nursing' : staffType === 'pharmacist' ? 'Pharmacy' : 'Laboratory'}
+                    </div>
+                  ) : <select
                     aria-label="Medical specialization"
                     value={specialization}
                     onChange={(e) => setSpecialization(e.target.value)}
@@ -356,7 +425,7 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
                       <option key={option} value={option}>{option}</option>
                     ))}
                     <option value="Other">Other</option>
-                  </select>
+                  </select>}
                 </div>
                 {specialization === 'Other' && (
                   <input
@@ -367,26 +436,46 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
                     className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded text-xs"
                   />
                 )}
-                <select
-                  aria-label="Hospital or clinic affiliation"
-                  value={hospitalAffiliation}
-                  onChange={(e) => setHospitalAffiliation(e.target.value)}
-                  className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded text-xs"
-                >
-                  <option value="">Select hospital / clinic</option>
-                  {HOSPITAL_AFFILIATIONS.map((hospital) => (
-                    <option key={hospital} value={hospital}>{hospital}</option>
-                  ))}
-                  <option value="Other">Other</option>
-                </select>
-                {hospitalAffiliation === 'Other' && (
-                  <input
-                    type="text"
-                    placeholder="Enter hospital / clinic name"
-                    value={customHospitalAffiliation}
-                    onChange={(e) => setCustomHospitalAffiliation(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded text-xs"
-                  />
+                {['doctor', 'nurse'].includes(staffType) && (
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    MediVault hospital *
+                    <select required value={selectedHospitalId} onChange={(event) => setSelectedHospitalId(event.target.value)} className="mt-1 w-full rounded border bg-white px-2.5 py-2 text-sm dark:bg-slate-900">
+                      <option value="">Select a hospital</option>
+                      {hospitalDirectory.map((hospital) => <option key={hospital.id} value={hospital.id}>{hospital.name} · {hospital.city}, {hospital.state}</option>)}
+                    </select>
+                    {hospitalDirectoryError && <span role="alert" className="mt-1 block text-rose-600">{hospitalDirectoryError}</span>}
+                    {!hospitalDirectoryError && hospitalDirectory.length === 0 && <span className="mt-1 block font-normal text-slate-500">No administrator-created hospitals are currently available.</span>}
+                  </label>
+                )}
+                {staffType === 'pharmacist' && (
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    MediVault-verified hospital / pharmacy *
+                    <select required value={pharmacyOrganizationId} onChange={(event) => setPharmacyOrganizationId(event.target.value)} className="mt-1 w-full rounded border bg-white px-2.5 py-2 text-sm dark:bg-slate-900">
+                      <option value="">Select an organization</option>
+                      {pharmacyOrganizations.map((organization) => (
+                        <option key={organization.id} value={organization.id}>
+                          {organization.name} · {organization.organizationType === 'hospital' ? 'Hospital' : 'Independent pharmacy'} · {organization.city}
+                        </option>
+                      ))}
+                    </select>
+                    {pharmacyDirectoryError && <span role="alert" className="mt-1 block text-rose-600">{pharmacyDirectoryError}</span>}
+                    {!pharmacyDirectoryError && pharmacyOrganizations.length === 0 && <span className="mt-1 block font-normal text-slate-500">No verified organizations are currently accepting applications.</span>}
+                  </label>
+                )}
+                {staffType === 'lab_technologist' && (
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    MediVault-verified laboratory *
+                    <select required value={labOrganizationId} onChange={(event) => setLabOrganizationId(event.target.value)} className="mt-1 w-full rounded border bg-white px-2.5 py-2 text-sm dark:bg-slate-900">
+                      <option value="">Select a laboratory</option>
+                      {labOrganizations.map((organization) => (
+                        <option key={organization.id} value={organization.id}>
+                          {organization.name} · {organization.organizationType === 'hospital_lab' ? `Hospital lab${organization.hospitalName ? ` · ${organization.hospitalName}` : ''}` : 'Independent lab'} · {organization.city}
+                        </option>
+                      ))}
+                    </select>
+                    {labDirectoryError && <span role="alert" className="mt-1 block text-rose-600">{labDirectoryError}</span>}
+                    {!labDirectoryError && labOrganizations.length === 0 && <span className="mt-1 block font-normal text-slate-500">No verified laboratories are currently accepting applications.</span>}
+                  </label>
                 )}
               </div>
             )}
@@ -400,28 +489,19 @@ export const RegisterPage: React.FC<{ portal: RegistrationPortal }> = ({ portal 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                   <select
                     required
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
+                    value={insuranceCompanyId}
+                    onChange={(e) => setInsuranceCompanyId(e.target.value)}
                     aria-label="Insurance company"
                     className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded text-slate-700 dark:text-slate-300"
                   >
-                    <option value="">Select insurance company</option>
-                    {INSURANCE_COMPANIES.map((company) => (
-                      <option key={company} value={company}>{company}</option>
+                    <option value="">Select an enrolled insurance company</option>
+                    {insuranceCompanies.map((company) => (
+                      <option key={company.id} value={company.id}>{company.name}</option>
                     ))}
-                    <option value="Other">Other</option>
                   </select>
-                  {companyName === 'Other' && (
-                    <input
-                      type="text"
-                      required
-                      placeholder="Enter insurance company name"
-                      value={customCompanyName}
-                      onChange={(e) => setCustomCompanyName(e.target.value)}
-                      className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded"
-                    />
-                  )}
+                  {insuranceCompanyError && <span role="alert" className="text-rose-600">{insuranceCompanyError}</span>}
                 </div>
+                {!insuranceCompanyError && !insuranceCompanies.length && <p className="text-xs text-slate-500">No approved insurers are accepting agent applications. <Link className="font-semibold underline" to="/insurance/company/register">Enroll an insurance company</Link></p>}
                 <p className="text-[10px] text-slate-500 dark:text-slate-400">
                   MediVault will generate a company-specific agent ID for you.
                 </p>

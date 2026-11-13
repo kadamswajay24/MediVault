@@ -8,7 +8,7 @@ import {
   clearLegacySharedAuth,
   clearTabAuthSession,
   portalForRole,
-  roleForPortal,
+  userMatchesPortal,
   type AuthPortal,
 } from '../utils/authSession';
 
@@ -56,7 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const data = await authAPI.getMe();
           if (data.success && data.user) {
             const portal = sessionStorage.getItem(AUTH_SESSION_KEYS.portal);
-            if (portal && data.user.role !== roleForPortal(portal as AuthPortal)) {
+            if (portal && !userMatchesPortal(data.user, portal as AuthPortal)) {
               throw new Error('Portal session role mismatch.');
             }
             setUser(data.user);
@@ -78,7 +78,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password: string, portal: AuthPortal) => {
     const data = await authAPI.login({ email, password }, portal);
     if (data.token && data.user) {
-      if (data.user.role !== roleForPortal(portal)) {
+      if (!userMatchesPortal(data.user, portal)) {
         throw new Error('Unable to sign in. Check your details and try again.');
       }
       try {
@@ -108,10 +108,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     insuranceDetails?: InsuranceDetails;
     credentialDocument?: File;
     credentialExpiresAt?: string;
+    patientAddress?: { address: string; city: string; district: string; state: string; postalCode: string; postOffice: string };
+    pharmacyOrganizationDetails?: {
+      name: string;
+      organizationType: 'hospital' | 'independent_pharmacy' | 'franchise';
+      hospitalId?: string;
+      registrationNumber: string;
+      address: string;
+      city: string;
+      district?: string;
+      state: string;
+      postalCode: string;
+      postOffice?: string;
+      openingHours: string;
+    };
+    labOrganizationDetails?: {
+      name: string;
+      organizationType: 'independent_lab' | 'hospital_lab' | 'franchise';
+      hospitalId?: string;
+      hospitalName?: string;
+      registrationNumber: string;
+      address: string;
+      city: string;
+      district?: string;
+      state: string;
+      postalCode: string;
+      postOffice?: string;
+    };
   }) => {
     const data = await authAPI.register(registerData);
     if (data.token && data.user) {
-      const portal = portalForRole(data.user.role);
+      const portal = data.user.role === 'medical_staff' && data.user.medicalStaffDetails?.professionalType === 'lab_technologist'
+        ? 'lab'
+        : portalForRole(data.user.role);
       sessionStorage.setItem(AUTH_SESSION_KEYS.portal, portal);
       sessionStorage.setItem(AUTH_SESSION_KEYS.token, data.token);
       sessionStorage.setItem(AUTH_SESSION_KEYS.user, JSON.stringify(data.user));
