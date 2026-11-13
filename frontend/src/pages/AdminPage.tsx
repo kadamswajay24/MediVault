@@ -9,9 +9,9 @@ import {
 import { adminAPI } from '../services/api';
 import type { User, UserRole, AdminStatsResponse, AuditLog } from '../types';
 import { MEDICAL_SPECIALIZATIONS } from '../constants/medicalSpecializations';
-import { HOSPITAL_AFFILIATIONS } from '../constants/hospitalAffiliations';
-import { INSURANCE_COMPANIES } from '../constants/insuranceCompanies';
-import { PolicyPlanManager } from '../components/AdminPolicyPlans';
+import { PharmacyOrganizationReviewPanel } from '../components/PharmacyOrganizationReviewPanel';
+import { LabOrganizationReviewPanel } from '../components/LabOrganizationReviewPanel';
+import { InsuranceCompanyReviewPanel } from '../components/InsuranceCompanyReviewPanel';
 
 export const AdminPage: React.FC = () => {
   const [stats, setStats] = useState<AdminStatsResponse['stats'] | null>(null);
@@ -20,7 +20,7 @@ export const AdminPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   // Filters
-  const [activeTab, setActiveTab] = useState<'users' | 'policies' | 'audit'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'pharmacies' | 'labs' | 'audit' | 'insurers'>('users');
   const [roleFilter, setRoleFilter] = useState('All');
   const [userSearch, setUserSearch] = useState('');
 
@@ -30,10 +30,6 @@ export const AdminPage: React.FC = () => {
   const [licenseNumber, setLicenseNumber] = useState('');
   const [specialization, setSpecialization] = useState('');
   const [customSpecialization, setCustomSpecialization] = useState('');
-  const [hospitalAffiliation, setHospitalAffiliation] = useState('');
-  const [customHospitalAffiliation, setCustomHospitalAffiliation] = useState('');
-  const [companyName, setCompanyName] = useState('');
-  const [customCompanyName, setCustomCompanyName] = useState('');
   const [updatingRole, setUpdatingRole] = useState(false);
   const [approvingUserId, setApprovingUserId] = useState<string | null>(null);
   const [statusChangeUser, setStatusChangeUser] = useState<User | null>(null);
@@ -164,16 +160,6 @@ export const AdminPage: React.FC = () => {
     setCustomSpecialization(
       existingSpecialization && !isStandardSpecialization ? existingSpecialization : ''
     );
-    const existingHospital = u.medicalStaffDetails?.hospitalAffiliation || '';
-    const isKnownHospital = HOSPITAL_AFFILIATIONS.includes(
-      existingHospital as (typeof HOSPITAL_AFFILIATIONS)[number]
-    );
-    setHospitalAffiliation(existingHospital && !isKnownHospital ? 'Other' : existingHospital);
-    setCustomHospitalAffiliation(existingHospital && !isKnownHospital ? existingHospital : '');
-    const existingCompany = u.insuranceDetails?.companyName || '';
-    const isKnownCompany = INSURANCE_COMPANIES.includes(existingCompany);
-    setCompanyName(existingCompany && !isKnownCompany ? 'Other' : existingCompany);
-    setCustomCompanyName(existingCompany && !isKnownCompany ? existingCompany : '');
   };
 
   const handleSaveRole = async (e: React.FormEvent) => {
@@ -188,18 +174,10 @@ export const AdminPage: React.FC = () => {
     try {
       const res = await adminAPI.updateUserRole(editingUser.id, {
         role: targetRole,
-        medicalStaffDetails: {
+        medicalStaffDetails: targetRole === 'medical_staff' ? {
           licenseNumber,
           specialization: specialization === 'Other' ? customSpecialization.trim() : specialization,
-          hospitalAffiliation:
-            hospitalAffiliation === 'Other'
-              ? customHospitalAffiliation.trim()
-              : hospitalAffiliation,
-        },
-        insuranceDetails: {
-          companyName: companyName === 'Other' ? customCompanyName.trim() : companyName,
-          licenseNumber,
-        },
+        } : undefined,
       });
 
       if (res.success) {
@@ -302,14 +280,30 @@ export const AdminPage: React.FC = () => {
           Global Audit Trail
         </button>
         <button
-          onClick={() => setActiveTab('policies')}
+          onClick={() => setActiveTab('pharmacies')}
           className={`pb-3 px-1 text-sm font-semibold transition-colors border-b-2 ${
-            activeTab === 'policies'
+            activeTab === 'pharmacies'
               ? 'border-purple-600 text-purple-600 dark:text-purple-400'
               : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
           }`}
         >
-          Marketplace Plans
+          Pharmacy organizations
+        </button>
+        <button
+          onClick={() => setActiveTab('labs')}
+          className={`pb-3 px-1 text-sm font-semibold transition-colors border-b-2 ${
+            activeTab === 'labs'
+              ? 'border-purple-600 text-purple-600 dark:text-purple-400'
+              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          Laboratory organizations
+        </button>
+        <button
+          onClick={() => setActiveTab('insurers')}
+          className={`pb-3 px-1 text-sm font-semibold transition-colors border-b-2 ${activeTab === 'insurers' ? 'border-purple-600 text-purple-600 dark:text-purple-400' : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+        >
+          Insurer enrollments
         </button>
       </div>
 
@@ -329,7 +323,7 @@ export const AdminPage: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-1.5 overflow-x-auto">
-              {['All', 'patient', 'medical_staff', 'insurance_agent', 'admin'].map((r) => (
+              {['All', 'patient', 'medical_staff', 'pharmacy_manager', 'lab_manager', 'hospital_admin', 'admin'].map((r) => (
                 <button
                   key={r}
                   onClick={() => setRoleFilter(r)}
@@ -470,7 +464,7 @@ export const AdminPage: React.FC = () => {
                               Review credentials
                             </button>
                           )}
-                          {u.approvalStatus === 'pending' && (
+                          {u.approvalStatus === 'pending' && !['pharmacy_manager', 'lab_manager'].includes(u.role) && (
                             <button
                               onClick={() => handleApproveUser(u)}
                               disabled={!u.id || approvingUserId === u.id || (['medical_staff', 'insurance_agent'].includes(u.role) && (u.credentialVerification?.status !== 'verified' || Boolean(u.credentialVerification.expiresAt && new Date(u.credentialVerification.expiresAt) <= new Date())))}
@@ -510,8 +504,12 @@ export const AdminPage: React.FC = () => {
             </div>
           )}
         </div>
-      ) : activeTab === 'policies' ? (
-        <PolicyPlanManager audience="admin" />
+      ) : activeTab === 'pharmacies' ? (
+        <PharmacyOrganizationReviewPanel />
+      ) : activeTab === 'labs' ? (
+        <LabOrganizationReviewPanel />
+      ) : activeTab === 'insurers' ? (
+        <InsuranceCompanyReviewPanel />
       ) : (
         /* Global Compliance Audit Log */
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
@@ -587,7 +585,7 @@ export const AdminPage: React.FC = () => {
                 >
                   <option value="patient">Patient (Vault Owner)</option>
                   <option value="medical_staff">Medical Staff (Doctor / Clinician)</option>
-                  <option value="insurance_agent">Insurance Agent (Claims Adjuster)</option>
+                  <option value="hospital_admin">Hospital Administrator</option>
                   <option value="admin">System Administrator</option>
                 </select>
               </div>
@@ -636,73 +634,6 @@ export const AdminPage: React.FC = () => {
                       />
                     </div>
                   )}
-                  <div>
-                    <label className="block text-[11px] text-slate-600 dark:text-slate-400">Hospital Affiliation</label>
-                    <select
-                      aria-label="Hospital or clinic affiliation"
-                      value={hospitalAffiliation}
-                      onChange={(e) => setHospitalAffiliation(e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded mt-0.5"
-                    >
-                      <option value="">Select hospital / clinic</option>
-                      {HOSPITAL_AFFILIATIONS.map((hospital) => (
-                        <option key={hospital} value={hospital}>{hospital}</option>
-                      ))}
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
-                  {hospitalAffiliation === 'Other' && (
-                    <div>
-                      <label className="block text-[11px] text-slate-600 dark:text-slate-400">
-                        Enter Hospital / Clinic
-                      </label>
-                      <input
-                        type="text"
-                        value={customHospitalAffiliation}
-                        onChange={(e) => setCustomHospitalAffiliation(e.target.value)}
-                        placeholder="Enter hospital / clinic name"
-                        className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded mt-0.5"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {targetRole === 'insurance_agent' && (
-                <div className="space-y-3 p-3 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900">
-                  <span className="text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400">
-                    Insurance Provider Details
-                  </span>
-                  <div>
-                    <label className="block text-[11px] text-slate-600 dark:text-slate-400">Insurance Company Name</label>
-                    <select
-                      value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded mt-0.5"
-                    >
-                      <option value="">Select insurance company</option>
-                      {INSURANCE_COMPANIES.map((company) => (
-                        <option key={company} value={company}>{company}</option>
-                      ))}
-                      <option value="Other">Other</option>
-                    </select>
-                    {companyName === 'Other' && (
-                      <input
-                        type="text"
-                        required
-                        value={customCompanyName}
-                        onChange={(e) => setCustomCompanyName(e.target.value)}
-                        placeholder="Enter insurance company name"
-                        className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border rounded mt-1"
-                      />
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-slate-600 dark:text-slate-400">Portal-generated Agent ID</label>
-                    <p className="mt-1 font-sans text-xs text-slate-700 dark:text-slate-300">
-                      {editingUser?.insuranceDetails?.agentId || 'Generated when company is saved'}
-                    </p>
-                  </div>
                 </div>
               )}
 
@@ -795,6 +726,7 @@ export const AdminPage: React.FC = () => {
           <section role="dialog" aria-modal="true" aria-labelledby="credential-review-title" className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
             <h2 id="credential-review-title" className="text-lg font-bold text-slate-900 dark:text-white">Review staff credentials</h2>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{credentialUser.name} · {credentialUser.role === 'medical_staff' ? credentialUser.medicalStaffDetails?.licenseNumber : credentialUser.insuranceDetails?.licenseNumber}</p>
+            {credentialUser.role === 'medical_staff' && <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">Applicant type: {credentialUser.medicalStaffDetails?.professionalType || 'physician'} · Scope: {credentialUser.medicalStaffDetails?.specialization || 'Not provided'} · Facility: {credentialUser.medicalStaffDetails?.hospitalAffiliation || 'Not provided'}</p>}
             <p className="mt-1 text-xs text-slate-500">Expires: {credentialUser.credentialVerification?.expiresAt ? new Date(credentialUser.credentialVerification.expiresAt).toLocaleDateString('en-IN') : 'Not provided'}</p>
             {credentialUser.credentialVerification?.reviewNote && <p className="mt-3 rounded bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">Previous review: {credentialUser.credentialVerification.reviewNote}</p>}
             <button type="button" onClick={() => void handleViewCredential(credentialUser)} className="mt-4 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Open submitted document</button>
