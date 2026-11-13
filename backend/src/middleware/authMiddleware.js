@@ -3,6 +3,9 @@ import { getJwtSecret } from '../config/auth.js';
 import User from '../models/User.js';
 import ProxyDelegation from '../models/ProxyDelegation.js';
 import ClinicalAccessRequest from '../models/ClinicalAccessRequest.js';
+import Appointment from '../models/Appointment.js';
+import PharmacyOrganization from '../models/PharmacyOrganization.js';
+import LabOrganization from '../models/LabOrganization.js';
 
 export const protectIdentity = async (req, res, next) => {
   let token;
@@ -27,7 +30,7 @@ export const protectIdentity = async (req, res, next) => {
       }
 
       const limitedStaffApplication =
-        ['medical_staff', 'insurance_agent'].includes(user.role) &&
+        ['medical_staff', 'insurance_agent', 'pharmacy_manager', 'lab_manager'].includes(user.role) &&
         user.approvalStatus === 'pending' &&
         user.credentialVerification?.status !== 'rejected';
       if (!user.isActive && !limitedStaffApplication) {
@@ -57,14 +60,18 @@ export const protectIdentity = async (req, res, next) => {
 };
 
 export const protect = async (req, res, next) => {
-  return protectIdentity(req, res, () => {
+  return protectIdentity(req, res, async () => {
+    try {
     const user = req.user;
+    if (user.mustChangePassword) {
+      return res.status(403).json({ success: false, code: 'PASSWORD_CHANGE_REQUIRED', message: 'Change your password before accessing this workspace.' });
+    }
     if (user.approvalStatus === 'pending') {
       return res.status(403).json({ success: false, message: 'Your staff account is awaiting administrator approval.' });
     }
 
     if (
-        ['medical_staff', 'insurance_agent'].includes(user.role) &&
+        ['medical_staff', 'insurance_agent', 'pharmacy_manager', 'lab_manager'].includes(user.role) &&
         (user.credentialVerification?.status !== 'verified' ||
           (user.credentialVerification.expiresAt && user.credentialVerification.expiresAt <= new Date()))
       ) {
@@ -77,7 +84,57 @@ export const protect = async (req, res, next) => {
             : 'Your credential document is awaiting administrator review.',
         });
       }
+    if (['pharmacy_manager', 'pharmacy_chain_admin'].includes(user.role) || (user.role === 'medical_staff' && professionalTypeFor(user) === 'pharmacist')) {
+      const organization = user.role === 'pharmacy_manager'
+        ? await PharmacyOrganization.findOne({ manager: user._id, isActive: true })
+        : user.role === 'pharmacy_chain_admin'
+          ? await PharmacyOrganization.findOne({ _id: user.pharmacyChain, admins: user._id, isActive: true })
+        : await PharmacyOrganization.findOne({ _id: user.pharmacyOrganization, isActive: true });
+      if (!organization || organization.verification.status !== 'verified' ||
+          organization.verification.expiresAt <= new Date()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Your pharmacy organization is not currently MediVault-verified. Contact its manager or MediVault support.',
+        });
+      }
+      if (['pharmacy_manager', 'pharmacy_chain_admin'].includes(user.role)) req.pharmacyOrganization = organization;
+    }
+    if (user.role === 'medical_staff' && professionalTypeFor(user) === 'pharmacist' &&
+        user.pharmacyMembershipStatus !== 'approved') {
+      return res.status(403).json({
+        success: false,
+        message: user.pharmacyMembershipStatus === 'rejected'
+          ? 'Your pharmacy membership was declined. Contact the pharmacy organization manager.'
+          : 'Your pharmacy membership is awaiting organization manager approval.',
+      });
+    }
+    if (['lab_manager', 'lab_chain_admin'].includes(user.role) || (user.role === 'medical_staff' && professionalTypeFor(user) === 'lab_technologist')) {
+      const organization = user.role === 'lab_manager'
+        ? await LabOrganization.findOne({ manager: user._id, isActive: true })
+        : user.role === 'lab_chain_admin'
+          ? await LabOrganization.findOne({ _id: user.labChain, admins: user._id, isActive: true })
+        : await LabOrganization.findOne({ _id: user.labOrganization, isActive: true });
+      if (!organization || organization.verification.status !== 'verified' ||
+          organization.verification.expiresAt <= new Date()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Your laboratory is not currently MediVault-verified. Contact its manager or MediVault support.',
+        });
+      }
+      if (user.role === 'medical_staff' && user.labMembershipStatus !== 'approved') {
+        return res.status(403).json({
+          success: false,
+          message: user.labMembershipStatus === 'rejected'
+            ? 'Your laboratory membership was declined. Contact the laboratory manager.'
+            : 'Your laboratory membership is awaiting organization manager approval.',
+        });
+      }
+      if (['lab_manager', 'lab_chain_admin'].includes(user.role)) req.labOrganization = organization;
+    }
     return next();
+    } catch (error) {
+      return next(error);
+    }
   });
 };
 
@@ -94,6 +151,25 @@ export const authorize = (...roles) => {
     }
     next();
   };
+};
+
+export const professionalTypeFor = (user) => {
+  const type = user?.medicalStaffDetails?.professionalType;
+  if (['physician', 'nurse', 'pharmacist', 'lab_technologist'].includes(type)) return type;
+  // Preserve legacy accounts created before professionalType was stored.
+  return String(user?.medicalStaffDetails?.specialization || '').trim().toLowerCase() === 'nursing'
+    ? 'nurse'
+    : 'physician';
+};
+
+export const authorizeProfessionalTypes = (...types) => (req, res, next) => {
+  if (req.user?.role !== 'medical_staff' || !types.includes(professionalTypeFor(req.user))) {
+    return res.status(403).json({
+      success: false,
+      message: 'This action is not available for your verified professional type.',
+    });
+  }
+  return next();
 };
 
 /**
@@ -119,6 +195,13 @@ export const resolvePatientContext = async (req, res, next) => {
       return next();
     }
 
+    if (req.user.role === 'medical_staff' && professionalTypeFor(req.user) !== 'physician') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only physicians with an active clinical access grant can access general patient records.',
+      });
+    }
+
     const requestedPatient = await User.findOne({
       mediVaultId: String(requestedMediVaultId).trim().toUpperCase(),
       role: 'patient',
@@ -134,7 +217,7 @@ export const resolvePatientContext = async (req, res, next) => {
 
     const requestedPatientId = requestedPatient._id;
 
-    // Medical staff may access only a patient-specific, unexpired approved grant.
+    // Medical staff may access an unexpired approved grant or an active appointment consultation window.
     if (req.user.role === 'medical_staff') {
       const grant = await ClinicalAccessRequest.findOne({
         patient: requestedPatientId,
@@ -142,15 +225,39 @@ export const resolvePatientContext = async (req, res, next) => {
         status: 'approved',
         expiresAt: { $gt: new Date() },
       });
-      if (!grant) {
+      if (grant) {
+        req.effectivePatientId = requestedPatientId;
+        req.isProxyActing = false;
+        req.clinicalAccessGrant = grant;
+        return next();
+      }
+
+      // Check appointment consultation window (30 mins before slot, 30 mins after slot ends)
+      const now = new Date();
+      const appointment = await Appointment.findOne({
+        doctor: req.user._id,
+        patient: requestedPatientId,
+        status: 'confirmed',
+        startsAt: { $lte: new Date(now.getTime() + 30 * 60_000) },
+        endsAt: { $gte: new Date(now.getTime() - 30 * 60_000) },
+      });
+
+      if (!appointment) {
         return res.status(403).json({
           success: false,
-          message: 'No active patient-approved clinical access grant was found.',
+          message: 'No active clinical access grant or confirmed appointment consultation window was found.',
         });
       }
+
       req.effectivePatientId = requestedPatientId;
       req.isProxyActing = false;
-      req.clinicalAccessGrant = grant;
+      req.clinicalAccessGrant = {
+        _id: appointment._id,
+        patient: requestedPatientId,
+        medicalStaff: req.user._id,
+        status: 'approved',
+        isAppointmentAccess: true,
+      };
       return next();
     }
 

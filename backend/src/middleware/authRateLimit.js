@@ -9,7 +9,7 @@ export const clientAddress = (req) => {
   return (forwarded && isIP(forwarded) ? forwarded : req.socket?.remoteAddress) || 'unknown';
 };
 
-export const createAuthRateLimit = ({ action, windowMs, ipLimit, accountLimit }) => async (req, res, next) => {
+export const createAuthRateLimit = ({ action, windowMs, ipLimit, accountLimit, unavailableMessage = 'Sign-in is temporarily unavailable. Please try again later.' }) => async (req, res, next) => {
   try {
     const now = Date.now();
     const window = Math.floor(now / windowMs);
@@ -38,7 +38,7 @@ export const createAuthRateLimit = ({ action, windowMs, ipLimit, accountLimit })
     return next();
   } catch (error) {
     console.error('[Auth rate limit] Storage unavailable:', error.message);
-    return res.status(503).json({ success: false, message: 'Sign-in is temporarily unavailable. Please try again later.' });
+    return res.status(503).json({ success: false, message: unavailableMessage });
   }
 };
 

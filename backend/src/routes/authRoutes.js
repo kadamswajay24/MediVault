@@ -1,5 +1,5 @@
 import express from 'express';
-import { registerUser, loginUser, getMe, resubmitUserCredential } from '../controllers/authController.js';
+import { registerUser, loginUser, getMe, resubmitUserCredential, changePassword } from '../controllers/authController.js';
 import { protect, protectIdentity } from '../middleware/authMiddleware.js';
 
 import { loginRateLimit, registerRateLimit } from '../middleware/authRateLimit.js';
@@ -13,6 +13,7 @@ router.post('/register', registerRateLimit, upload.single('credentialDocument'),
 router.post('/login', loginRateLimit, loginUser);
 router.post('/login/:portal', loginRateLimit, loginUser);
 router.get('/me', protectIdentity, getMe);
+router.post('/password/change', protectIdentity, changePassword);
 router.post('/credentials/resubmit', protectIdentity, registerRateLimit, upload.single('credentialDocument'), validateFileContent, resubmitUserCredential);
 
 export default router;
