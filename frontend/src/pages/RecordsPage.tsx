@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   FileText,
   Search,
@@ -11,6 +11,7 @@ import {
   Loader2,
   Sparkles,
   X,
+  Maximize2,
 } from 'lucide-react';
 import { RECORD_CATEGORIES } from '../types';
 import type { MedicalRecord } from '../types';
@@ -30,6 +31,7 @@ export const RecordsPage: React.FC = () => {
 const RecordsWorkspace: React.FC = () => {
   const { activeDependent } = useAuth();
   const readOnly = activeDependent?.accessLevel === 'read_only';
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialCategory = searchParams.get('category') || 'All';
 
@@ -102,6 +104,10 @@ const RecordsWorkspace: React.FC = () => {
 
   const handleDeleteSuccess = (recordId: string) => {
     setRecords((prev) => prev.filter((r) => r._id !== recordId));
+  };
+
+  const openFullPageViewer = (recordId: string) => {
+    navigate(`/records/${recordId}/view`, { state: { from: '/records' } });
   };
 
   const handleDownload = async (record: MedicalRecord) => {
@@ -276,7 +282,7 @@ const RecordsWorkspace: React.FC = () => {
           {records.map(record => <article key={record._id} className="surface-card record-mobile-card">
             <div className="flex items-start gap-3"><span className="dashboard-shortcut-icon"><FileText /></span><div className="min-w-0"><h2 className="break-words">{record.title}</h2><p className="mt-1 text-sm text-slate-500">{new Date(record.recordDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' })}</p></div></div>
             <span className="records-category-badge rounded-md border px-2 py-1 text-xs">{record.category}</span>
-            <div className="flex flex-wrap gap-2"><button className="button-primary px-4 py-2 text-sm" onClick={() => setSelectedRecord(record)}>View record</button><button className="records-action-button" disabled={downloadingRecordId === record._id} onClick={() => handleDownload(record)}>{downloadingRecordId === record._id ? 'Downloading...' : 'Download'}</button><button className="records-action-button" onClick={() => setSummaryRecord(record)}>AI summary</button></div>
+            <div className="flex flex-wrap gap-2"><button className="button-primary px-4 py-2 text-sm" onClick={() => setSelectedRecord(record)}>View record</button><button className="records-action-button" onClick={() => openFullPageViewer(record._id)}><Maximize2 className="h-4 w-4" aria-hidden="true" />Full page</button><button className="records-action-button" disabled={downloadingRecordId === record._id} onClick={() => handleDownload(record)}>{downloadingRecordId === record._id ? 'Downloading...' : 'Download'}</button><button className="records-action-button" onClick={() => setSummaryRecord(record)}>AI summary</button></div>
           </article>)}
         </div>
         <div className="records-table-wrap surface-card overflow-hidden">
@@ -352,6 +358,15 @@ const RecordsWorkspace: React.FC = () => {
                     >
                       <Eye className="h-4 w-4" aria-hidden="true" />
                       View
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openFullPageViewer(record._id)}
+                      id={`record-full-view-btn-${record._id}`}
+                      className="records-action-button"
+                    >
+                      <Maximize2 className="h-4 w-4" aria-hidden="true" />
+                      Full page
                     </button>
                     <button
                       type="button"

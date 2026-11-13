@@ -57,6 +57,12 @@ export const updateProfile = async (req, res, next) => {
       medicalConditions,
       medications,
       emergencyContact,
+      address,
+      city,
+      district,
+      state,
+      postalCode,
+      postOffice,
     } = req.body;
 
     let profile = await HealthProfile.findOne({ user: targetUserId });
@@ -69,6 +75,12 @@ export const updateProfile = async (req, res, next) => {
     if (dateOfBirth !== undefined) profile.dateOfBirth = dateOfBirth;
     if (gender !== undefined) profile.gender = gender;
     if (bloodGroup !== undefined) profile.bloodGroup = bloodGroup;
+    if (address !== undefined) profile.address = address;
+    if (city !== undefined) profile.city = city;
+    if (district !== undefined) profile.district = district;
+    if (state !== undefined) profile.state = state;
+    if (postalCode !== undefined) profile.postalCode = postalCode;
+    if (postOffice !== undefined) profile.postOffice = postOffice;
 
     // Sanitize array values
     if (Array.isArray(allergies)) {

@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { BellRing, Clock3, Plus, Trash2, X } from 'lucide-react';
-import { medicationReminderAPI, type MedicationReminder } from '../services/api';
+import { BellRing, CheckCircle2, ChevronDown, Clock3, Plus, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
+import {
+  medicationReminderAPI,
+  type MedicationReminder,
+  type MedicationAdherenceItem,
+} from '../services/api';
 import { useAuth } from '../context/useAuth';
 
 const getIndiaDate = () => new Intl.DateTimeFormat('en-CA', {
@@ -28,15 +32,37 @@ export const MedicationReminderCenter: React.FC = () => {
   const [time, setTime] = useState('09:00');
   const [confirmedCurrentUse, setConfirmedCurrentUse] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [dueReminders, setDueReminders] = useState<MedicationReminder[]>([]);
+  const [adherenceData, setAdherenceData] = useState<{
+    date: string;
+    adherenceRate: number;
+    totalScheduled: number;
+    takenCount: number;
+    items: MedicationAdherenceItem[];
+  } | null>(null);
+  const [loggingId, setLoggingId] = useState<string | null>(null);
   const firedSlots = useRef(new Set<string>());
+
+  const loadAdherence = useCallback(async () => {
+    try {
+      const data = await medicationReminderAPI.getTodayAdherence();
+      setAdherenceData(data);
+    } catch {
+      // Non-blocking for adherence
+    }
+  }, []);
 
   const loadReminders = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
-      const response = await medicationReminderAPI.getAll();
-      setReminders(response.reminders);
+      const [remResponse, adhResponse] = await Promise.all([
+        medicationReminderAPI.getAll(),
+        medicationReminderAPI.getTodayAdherence().catch(() => null),
+      ]);
+      setReminders(remResponse.reminders);
+      if (adhResponse) setAdherenceData(adhResponse);
       setError(null);
     } catch (requestError: any) {
       setError(requestError.response?.data?.message || 'Unable to load medicine reminders.');
@@ -49,9 +75,13 @@ export const MedicationReminderCenter: React.FC = () => {
     let active = true;
     const refresh = async () => {
       try {
-        const response = await medicationReminderAPI.getAll();
+        const [remResponse, adhResponse] = await Promise.all([
+          medicationReminderAPI.getAll(),
+          medicationReminderAPI.getTodayAdherence().catch(() => null),
+        ]);
         if (active) {
-          setReminders(response.reminders);
+          setReminders(remResponse.reminders);
+          if (adhResponse) setAdherenceData(adhResponse);
           setError(null);
         }
       } catch (requestError: any) {
@@ -116,11 +146,38 @@ export const MedicationReminderCenter: React.FC = () => {
       await medicationReminderAPI.remove(reminder._id);
       setReminders((current) => current.filter((item) => item._id !== reminder._id));
       setDueReminders((current) => current.filter((item) => item._id !== reminder._id));
+      await loadAdherence();
       setMessage('Reminder removed.');
     } catch (requestError: any) {
       setError(requestError.response?.data?.message || 'Unable to remove this reminder.');
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const handleLogAdherence = async (reminderId: string, status: 'taken' | 'skipped') => {
+    setLoggingId(reminderId);
+    setError(null);
+    try {
+      await medicationReminderAPI.logAdherence({ reminderId, status });
+      await loadAdherence();
+    } catch (requestError: any) {
+      setError(requestError.response?.data?.message || 'Unable to record medication adherence.');
+    } finally {
+      setLoggingId(null);
+    }
+  };
+
+  const handleResetAdherence = async (reminderId: string) => {
+    setLoggingId(reminderId);
+    setError(null);
+    try {
+      await medicationReminderAPI.resetAdherence(reminderId);
+      await loadAdherence();
+    } catch (requestError: any) {
+      setError(requestError.response?.data?.message || 'Unable to reset dose status.');
+    } finally {
+      setLoggingId(null);
     }
   };
 
@@ -144,13 +201,16 @@ export const MedicationReminderCenter: React.FC = () => {
         </div>
       )}
 
-      <section className="surface-card mx-4 mt-4 rounded-xl p-4 sm:mx-6" aria-labelledby="medication-reminder-title">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="medication-reminder-title" className="text-sm font-semibold text-slate-900 dark:text-white">
+      <details className="surface-card mx-4 mt-4 rounded-xl p-4 sm:mx-6" open={isExpanded} onToggle={(event) => setIsExpanded(event.currentTarget.open)}>
+        <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mv-accent)]">
+          <span id="medication-reminder-title" className="text-sm font-semibold text-slate-900 dark:text-white">
             <Clock3 className="mr-2 inline h-4 w-4" />Medicine reminders
-          </h2>
+          </span>
           <span className="text-[11px] text-slate-500">Daily · India Standard Time</span>
-        </div>
+          <span className="text-[11px] text-slate-500">{reminders.length} set</span>
+          <ChevronDown className="medication-reminder-chevron h-4 w-4 text-slate-500" aria-hidden="true" />
+        </summary>
+        <div>
         <p className="mt-1 text-xs text-slate-500">
           Reminders run while MediVault is open. They may not alert you if the app or browser is closed.
         </p>
@@ -194,6 +254,112 @@ export const MedicationReminderCenter: React.FC = () => {
 
         {error && <p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">{error}</p>}
         {message && <p role="status" className="mt-3 text-xs text-emerald-700 dark:text-emerald-300">{message}</p>}
+
+        {/* Today's Dose Checklist & Adherence Tracker */}
+        {reminders.length > 0 && adherenceData && (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 dark:border-slate-800 dark:bg-slate-900/50">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                  Today's Doses ({adherenceData.date})
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Check off doses as you take them to keep track of your daily routine.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                  Adherence:
+                </span>
+                <span
+                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                    adherenceData.adherenceRate === 100
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                      : adherenceData.adherenceRate >= 50
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                      : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                  }`}
+                >
+                  {adherenceData.takenCount}/{adherenceData.totalScheduled} taken ({adherenceData.adherenceRate}%)
+                </span>
+              </div>
+            </div>
+
+            <ul className="mt-3 space-y-2">
+              {adherenceData.items.map((item) => {
+                const isLogging = loggingId === item.reminderId;
+                return (
+                  <li
+                    key={item.reminderId}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200/80 bg-white px-3 py-2 text-xs shadow-xs dark:border-slate-800 dark:bg-slate-950"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-900 dark:text-white">
+                        {item.medicationName}
+                      </p>
+                      <p className="text-[11px] text-slate-500">Scheduled: {item.time} IST</p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {item.status === 'taken' ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 font-medium text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Taken
+                        </span>
+                      ) : item.status === 'skipped' ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                          <XCircle className="h-3.5 w-3.5" /> Skipped
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-md bg-amber-50 px-2 py-1 font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                          Pending
+                        </span>
+                      )}
+
+                      {!readOnly && (
+                        <div className="flex items-center gap-1 border-l border-slate-200 pl-2 dark:border-slate-800">
+                          {item.status !== 'taken' && (
+                            <button
+                              type="button"
+                              disabled={isLogging}
+                              onClick={() => void handleLogAdherence(item.reminderId, 'taken')}
+                              className="rounded px-2 py-1 font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+                              title="Mark as taken"
+                            >
+                              Take
+                            </button>
+                          )}
+                          {item.status !== 'skipped' && (
+                            <button
+                              type="button"
+                              disabled={isLogging}
+                              onClick={() => void handleLogAdherence(item.reminderId, 'skipped')}
+                              className="rounded px-2 py-1 text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800"
+                              title="Mark as skipped"
+                            >
+                              Skip
+                            </button>
+                          )}
+                          {item.status !== 'pending' && (
+                            <button
+                              type="button"
+                              disabled={isLogging}
+                              onClick={() => void handleResetAdherence(item.reminderId)}
+                              className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                              title="Reset dose status"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
         <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
           <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-200">Your daily reminders</h3>
           {loading ? <p className="mt-2 text-xs text-slate-500">Loading reminders…</p> : reminders.length === 0 ? (
@@ -213,7 +379,8 @@ export const MedicationReminderCenter: React.FC = () => {
           )}
         </div>
         <p className="mt-2 text-[10px] text-slate-500">MediVault does not decide whether a medicine is appropriate or confirm that a dose was taken. Follow your prescription and ask your clinician or pharmacist about changes.</p>
-      </section>
+        </div>
+      </details>
     </>
   );
 };

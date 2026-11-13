@@ -71,7 +71,7 @@ export const PatientClinicalFilePage: React.FC = () => {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-slate-500">
         <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
-        <p className="text-sm">Loading approved patient file...</p>
+        <p className="text-sm">Loading authorized patient file...</p>
       </div>
     );
   }
@@ -94,7 +94,7 @@ export const PatientClinicalFilePage: React.FC = () => {
             {error || 'The patient file could not be loaded.'}
           </p>
           <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
-            Patient details are shown only while an active, patient-approved access grant is in place.
+            Patient details are shown only while an active patient-approved grant or confirmed appointment access window is in place.
             Ask the patient to approve or renew your access, then try again.
           </p>
           <button
@@ -110,7 +110,7 @@ export const PatientClinicalFilePage: React.FC = () => {
     );
   }
 
-  const { patient, profile, records, notes } = overview;
+  const { patient, profile, records, notes, nursingEntries } = overview;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
@@ -136,7 +136,7 @@ export const PatientClinicalFilePage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
             <ShieldCheck className="h-4 w-4" />
-            Patient-approved clinical file
+            Authorized clinical file
           </div>
           <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{patient.name}</h1>
           <p className="mt-1 font-sans text-xs text-slate-500">{patient.mediVaultId}</p>
@@ -154,6 +154,9 @@ export const PatientClinicalFilePage: React.FC = () => {
           </a>
           <a href="#clinical-notes" className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">
             Clinical notes ({notes.length})
+          </a>
+          <a href="#nursing-entries" className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+            Nursing entries ({nursingEntries.length})
           </a>
         </div>
       </header>
@@ -260,6 +263,38 @@ export const PatientClinicalFilePage: React.FC = () => {
           </div>
         ) : (
           <div className="surface-card p-5 text-sm text-slate-500">No medical records have been added to this patient file.</div>
+        )}
+      </section>
+
+      <section id="nursing-entries" className="scroll-mt-24 space-y-4">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">Nursing entries for this appointment</h2>
+          <p className="text-xs text-slate-500">Appointment-scoped observations and notes from the assigned nurse.</p>
+        </div>
+        {nursingEntries.length ? (
+          <div className="space-y-3">
+            {nursingEntries.map((entry) => (
+              <article key={entry._id} className="surface-card p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                    {entry.entryType === 'observation' ? 'Observation' : 'Nursing note'}
+                  </h3>
+                  <time className="text-xs text-slate-500">{formatDate(entry.createdAt)}</time>
+                </div>
+                {entry.note && <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-400">{entry.note}</p>}
+                {entry.vitals && Object.keys(entry.vitals).length > 0 && (
+                  <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                    {Object.entries(entry.vitals).map(([key, value]) => `${key}: ${value}`).join(' · ')}
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-slate-500">
+                  Recorded by {typeof entry.nurse === 'object' ? entry.nurse.name : 'nurse'}
+                </p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="surface-card p-5 text-sm text-slate-500">No nursing entries have been recorded for this appointment.</div>
         )}
       </section>
 

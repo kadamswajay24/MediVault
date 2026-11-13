@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../context/useAuth';
 import { profileAPI } from '../services/api';
 import type { HealthProfile } from '../types';
+import { PostalAddressFields, emptyPostalAddress, type PostalAddress } from '../components/PostalAddressFields';
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'];
 const GENDERS = ['Male', 'Female', 'Other', 'Prefer not to say'];
@@ -26,6 +27,7 @@ export const ProfilePage: React.FC = () => {
 
   // Form states
   const [fullName, setFullName] = useState('');
+  const [address, setAddress] = useState<PostalAddress>(emptyPostalAddress);
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [gender, setGender] = useState('');
   const [bloodGroup, setBloodGroup] = useState('Unknown');
@@ -44,6 +46,10 @@ export const ProfilePage: React.FC = () => {
   const [medicationInput, setMedicationInput] = useState('');
 
   useEffect(() => {
+    if (user?.role !== 'patient') {
+      setLoading(false);
+      return;
+    }
     const fetchProfile = async () => {
       try {
         setLoading(true);
@@ -51,6 +57,7 @@ export const ProfilePage: React.FC = () => {
         if (res.success && res.profile) {
           const p = res.profile;
           setFullName(p.fullName || user?.name || '');
+          setAddress({ address: p.address || '', city: p.city || '', district: p.district || '', state: p.state || '', postalCode: p.postalCode || '', postOffice: p.postOffice || '' });
           setDateOfBirth(p.dateOfBirth || '');
           setGender(p.gender || '');
           setBloodGroup(p.bloodGroup || 'Unknown');
@@ -71,6 +78,62 @@ export const ProfilePage: React.FC = () => {
 
     fetchProfile();
   }, [user]);
+
+  if (user && user.role !== 'patient') {
+    const roleLabel = user.role === 'medical_staff'
+      ? user.medicalStaffDetails?.professionalType === 'pharmacist'
+        ? 'Pharmacist'
+        : user.medicalStaffDetails?.professionalType === 'nurse' || user.medicalStaffDetails?.specialization?.toLowerCase() === 'nursing'
+          ? 'Nurse'
+          : 'Physician'
+      : user.role === 'insurance_agent' ? 'Insurance agent'
+        : user.role === 'pharmacy_manager' ? 'Pharmacy manager'
+          : 'Administrator';
+    const credentialStatus = user.credentialVerification?.status;
+    return (
+      <div className="mx-auto max-w-4xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+        <header>
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-teal-500/20 bg-teal-500/10 px-3 py-1 text-xs font-semibold text-teal-700 dark:text-teal-300"><ShieldCheck className="h-3.5 w-3.5" />Private account details</div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">My Profile</h1>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Your account and stakeholder details.</p>
+        </header>
+        <section className="surface-card space-y-4 p-5">
+          <h2 className="border-b border-slate-200 pb-3 font-semibold dark:border-slate-800">Account</h2>
+          <dl className="grid gap-4 sm:grid-cols-2">
+            <div><dt className="text-xs text-slate-500">Full name</dt><dd className="mt-1 text-sm font-medium">{user.name}</dd></div>
+            <div><dt className="text-xs text-slate-500">Email</dt><dd className="mt-1 text-sm font-medium">{user.email}</dd></div>
+            <div><dt className="text-xs text-slate-500">Phone</dt><dd className="mt-1 text-sm font-medium">{user.phone || 'Not provided'}</dd></div>
+            <div><dt className="text-xs text-slate-500">MediVault ID</dt><dd className="mt-1 font-mono text-sm font-medium">{user.mediVaultId}</dd></div>
+            <div><dt className="text-xs text-slate-500">Stakeholder</dt><dd className="mt-1 text-sm font-medium">{roleLabel}</dd></div>
+            {user.role !== 'admin' && <div><dt className="text-xs text-slate-500">Account approval</dt><dd className="mt-1 text-sm font-medium">{user.approvalStatus === 'approved' ? 'Approved' : 'Pending review'}</dd></div>}
+          </dl>
+        </section>
+        {user.role === 'medical_staff' && <section className="surface-card space-y-4 p-5">
+          <h2 className="border-b border-slate-200 pb-3 font-semibold dark:border-slate-800">Professional details</h2>
+          <dl className="grid gap-4 sm:grid-cols-2">
+            <div><dt className="text-xs text-slate-500">Professional type</dt><dd className="mt-1 text-sm font-medium">{roleLabel}</dd></div>
+            <div><dt className="text-xs text-slate-500">Specialty / scope</dt><dd className="mt-1 text-sm font-medium">{user.medicalStaffDetails?.specialization || (roleLabel === 'Nurse' ? 'Nursing' : 'Not provided')}</dd></div>
+            <div><dt className="text-xs text-slate-500">{roleLabel === 'Pharmacist' ? 'Pharmacy / facility affiliation' : 'Hospital affiliation'}</dt><dd className="mt-1 text-sm font-medium">{user.medicalStaffDetails?.hospitalAffiliation || 'Not provided'}</dd></div>
+            <div><dt className="text-xs text-slate-500">License / registration number</dt><dd className="mt-1 text-sm font-medium">{user.medicalStaffDetails?.licenseNumber || 'Not provided'}</dd></div>
+            <div><dt className="text-xs text-slate-500">Registration authority</dt><dd className="mt-1 text-sm font-medium">{user.medicalStaffDetails?.registrationAuthority || 'Not provided'}</dd></div>
+            <div><dt className="text-xs text-slate-500">Registration state</dt><dd className="mt-1 text-sm font-medium">{user.medicalStaffDetails?.registrationState || 'Not provided'}</dd></div>
+            <div><dt className="text-xs text-slate-500">Credential review</dt><dd className="mt-1 text-sm font-medium">{credentialStatus ? credentialStatus.replace('_', ' ') : 'Not submitted'}</dd></div>
+            <div><dt className="text-xs text-slate-500">Credential expiry</dt><dd className="mt-1 text-sm font-medium">{user.credentialVerification?.expiresAt ? new Date(user.credentialVerification.expiresAt).toLocaleDateString('en-IN') : 'Not provided'}</dd></div>
+          </dl>
+          {user.credentialVerification?.reviewNote && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">Credential review: {user.credentialVerification.reviewNote}</p>}
+        </section>}
+        {user.role === 'insurance_agent' && <section className="surface-card space-y-4 p-5">
+          <h2 className="border-b border-slate-200 pb-3 font-semibold dark:border-slate-800">Insurance details</h2>
+          <dl className="grid gap-4 sm:grid-cols-2">
+            <div><dt className="text-xs text-slate-500">Insurance company</dt><dd className="mt-1 text-sm font-medium">{user.insuranceDetails?.companyName || 'Not provided'}</dd></div>
+            <div><dt className="text-xs text-slate-500">Agent ID</dt><dd className="mt-1 font-mono text-sm font-medium">{user.insuranceDetails?.agentId || 'Not provided'}</dd></div>
+            <div><dt className="text-xs text-slate-500">License number</dt><dd className="mt-1 text-sm font-medium">{user.insuranceDetails?.licenseNumber || 'Not provided'}</dd></div>
+            <div><dt className="text-xs text-slate-500">Credential review</dt><dd className="mt-1 text-sm font-medium">{credentialStatus ? credentialStatus.replace('_', ' ') : 'Not submitted'}</dd></div>
+          </dl>
+        </section>}
+      </div>
+    );
+  }
 
   const handleAddAllergy = () => {
     if (allergyInput.trim() && !allergies.includes(allergyInput.trim())) {
@@ -121,6 +184,7 @@ export const ProfilePage: React.FC = () => {
     try {
       const payload: Partial<HealthProfile> = {
         fullName: fullName.trim(),
+        ...address,
         dateOfBirth,
         gender,
         bloodGroup,
@@ -259,6 +323,11 @@ export const ProfilePage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        <section className="bg-white/85 dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-6 space-y-4 shadow-sm">
+          <div><h2 className="text-base font-bold text-slate-900 dark:text-white">Home address</h2><p className="mt-1 text-xs text-slate-500">Look up an Indian PIN code to fill the postal area, then review or edit the details.</p></div>
+          <PostalAddressFields value={address} onChange={setAddress} required={false} />
+        </section>
 
         {/* Section 2: Clinical Details (Allergies, Conditions, Medications) */}
         <div className="bg-white/85 dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-6 space-y-6 backdrop-blur-md shadow-sm transition-colors duration-200">

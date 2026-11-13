@@ -3,6 +3,7 @@ import {
   uploadRecord,
   getRecords,
   getRecordById,
+  checkRecordAccess,
   summarizeRecord,
   downloadRecord,
   deleteRecord,
@@ -23,6 +24,7 @@ router.route('/:id')
   .get(getRecordById)
   .delete(deleteRecord);
 
+router.get('/:id/access', checkRecordAccess);
 router.get('/:id/summary', summarizeRecord);
 router.get('/:id/download', downloadRecord);
 

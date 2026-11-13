@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import {
   X,
   Download,
   Trash2,
   Calendar,
   FileText,
+  Maximize2,
 } from 'lucide-react';
 import type { MedicalRecord } from '../types';
 import { recordAPI } from '../services/api';
@@ -25,6 +27,7 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
   onClose,
   onDeleteSuccess,
 }) => {
+  const location = useLocation();
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,12 +41,49 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
 
     let active = true;
     let objectUrl: string | null = null;
+    let accessTimer: number | null = null;
+    let checkingAccess = false;
+
+    const clearPreview = () => {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        objectUrl = null;
+      }
+      setPreview(null);
+      setPreviewError({
+        recordId,
+        message:
+          'Access could not be confirmed, so this preview was cleared. Reopen the record if you still have access.',
+      });
+    };
+
+    const checkAccess = async () => {
+      if (checkingAccess) return;
+      checkingAccess = true;
+      try {
+        await recordAPI.checkRecordAccess(recordId);
+      } catch {
+        if (!active) return;
+        if (accessTimer !== null) window.clearInterval(accessTimer);
+        accessTimer = null;
+        clearPreview();
+      } finally {
+        checkingAccess = false;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void checkAccess();
+    };
+
     recordAPI
       .getRecordFile(recordId)
       .then((file) => {
         if (!active) return;
         objectUrl = URL.createObjectURL(file);
         setPreview({ recordId, url: objectUrl });
+        accessTimer = window.setInterval(checkAccess, 10_000);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
       })
       .catch((requestError: any) => {
         if (active) {
@@ -56,6 +96,8 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
 
     return () => {
       active = false;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (accessTimer !== null) window.clearInterval(accessTimer);
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [recordId, isOpen]);
@@ -284,6 +326,14 @@ export const RecordViewerModal: React.FC<RecordViewerModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2.5">
+            <Link
+              to={`/records/${record._id}/view`}
+              state={{ from: location.pathname }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+              Full-page viewer
+            </Link>
             <a
               href={previewUrl || '#'}
               download={record.fileName}

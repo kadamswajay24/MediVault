@@ -18,6 +18,12 @@ const healthProfileSchema = new mongoose.Schema(
       type: String, // Stored as ISO date string (YYYY-MM-DD) for consistency
       default: '',
     },
+    address: { type: String, trim: true, maxlength: 300, default: '' },
+    city: { type: String, trim: true, maxlength: 100, default: '' },
+    district: { type: String, trim: true, maxlength: 100, default: '' },
+    state: { type: String, trim: true, maxlength: 100, default: '' },
+    postalCode: { type: String, trim: true, match: [/^$|^[1-9][0-9]{5}$/, 'PIN code must contain six digits.'], default: '' },
+    postOffice: { type: String, trim: true, maxlength: 150, default: '' },
     gender: {
       type: String,
       enum: ['Male', 'Female', 'Other', 'Prefer not to say', ''],

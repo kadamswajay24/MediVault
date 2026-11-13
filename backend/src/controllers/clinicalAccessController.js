@@ -4,6 +4,7 @@ import ClinicalAccessRequest, {
 import ProxyDelegation from '../models/ProxyDelegation.js';
 import User from '../models/User.js';
 import { createAuditLog } from '../services/auditService.js';
+import { professionalTypeFor } from '../middleware/authMiddleware.js';
 
 const populateRequest = (query) =>
   query
@@ -29,7 +30,7 @@ export const searchPatientsForClinicalAccess = async (req, res, next) => {
 
 export const createClinicalAccessRequest = async (req, res, next) => {
   try {
-    if (req.user.role !== 'medical_staff') {
+    if (req.user.role !== 'medical_staff' || professionalTypeFor(req.user) !== 'physician') {
       return res.status(403).json({
         success: false,
         message: 'Only approved medical staff can request clinical access.',
@@ -147,6 +148,9 @@ export const getClinicalAccessRequests = async (req, res, next) => {
     let query;
 
     if (req.user.role === 'medical_staff') {
+      if (professionalTypeFor(req.user) !== 'physician') {
+        return res.status(403).json({ success: false, message: 'Nursing access is managed through patient-approved appointments.' });
+      }
       query = { medicalStaff: req.user._id };
     } else if (req.user.role === 'patient') {
       const delegations = await ProxyDelegation.find({

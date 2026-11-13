@@ -4,7 +4,7 @@ import NotificationRead from '../models/NotificationRead.js';
 import { protect, authorize, resolvePatientContext } from '../middleware/authMiddleware.js';
 const router = express.Router();
 const destinations = {
-  APPOINTMENT_BOOKED: '/appointments', APPOINTMENT_REVIEWED: '/appointments', APPOINTMENT_CANCELLED: '/appointments',
+  APPOINTMENT_BOOKED: '/appointments', APPOINTMENT_BOOKED_BY_STAFF: '/appointments', APPOINTMENT_REVIEWED: '/appointments', APPOINTMENT_CANCELLED: '/appointments',
   CLAIM_SUBMITTED: '/claims', CLAIM_REVIEWED: '/claims',
   ACCESS_REQUESTED: '/access-requests', ACCESS_REQUEST_DECIDED: '/access-requests', ACCESS_REVOKED: '/access-requests',
   CLINICAL_NOTE_ADDED: '/prescriptions', CLINICAL_NOTE_UPDATED: '/prescriptions',
